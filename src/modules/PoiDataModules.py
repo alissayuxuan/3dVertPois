@@ -6,7 +6,9 @@ from typing import TypeVar
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-from BIDS import BIDS_Global_info
+#from BIDS import BIDS_Global_info
+from tptbox import BIDS_Global_info
+
 from pqdm.processes import pqdm
 from torch.utils.data import DataLoader
 

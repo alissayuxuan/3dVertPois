@@ -9,8 +9,12 @@ from typing import Callable
 
 import numpy as np
 import pandas as pd
-from BIDS import NII, POI, BIDS_Global_info
-from BIDS.bids_files import Subject_Container
+
+from TPTBox import NII, BIDS_Global_info #, POI
+from TPTBox.core.poi import POI
+from TPTBox import Subject_Container
+#from BIDS import NII, POI, BIDS_Global_info
+#from BIDS.bids_files import Subject_Container
 from pqdm.processes import pqdm
 
 
@@ -64,16 +68,31 @@ def get_implants_poi(container) -> POI:
 
 
 def get_gruber_poi(container) -> POI:
+    print(f"\nPOI for container: {container}")
     poi_query = container.new_query(flatten=True)
     poi_query.filter_format("poi")
     #poi_query.filter("source", "gruber")
+    #print(f"Query candidates: {poi_query.candidates}")
+
+    if not poi_query.candidates:
+        print("ERROR: No POI candidates found!")
+        return None
     
     poi_candidate = poi_query.candidates[0]
+    print(f"Loading POI from: {poi_candidate}")
 
-    poi = poi_candidate.open_ctd()
-    return poi
+    try:
+        poi = POI.load(poi_candidate.file["json"])
+        #print("Loaded POI with keys:", list(poi.keys()))
+        return poi
+    except Exception as e:
+        print(f"Error loading POI: {str(e)}")
+        return None
+    #poi = poi_candidate.open_ctd()
+    #("gruber_poi: ", poi)
+    #return poi
 
-
+"""
 def get_gruber_registration_poi(container):
     poi_query = container.new_query(flatten=True)
     poi_query.filter_format("poi")
@@ -114,38 +133,53 @@ def get_gruber_registration_poi(container):
     )
 
     return new_poi
-
+"""
 
 def get_ct(container) -> NII:
+    print("get_ct")
     ct_query = container.new_query(flatten=True)
     ct_query.filter_format("ct")
     ct_query.filter_filetype("nii.gz")  # only nifti files
     ct_candidate = ct_query.candidates[0]
 
-    ct = ct_candidate.open_nii()
-    return ct
+    try:
+        ct = ct_candidate.open_nii()
+        return ct
+    except Exception as e:
+        print(f"Error opening CT: {str(e)}")
+        return None
 
 
 def get_subreg(container) -> NII:
+    print("get_subreg")
     subreg_query = container.new_query(flatten=True)
     subreg_query.filter_format("msk")
     subreg_query.filter_filetype("nii.gz")  # only nifti files
     subreg_query.filter("seg", "subreg")
     subreg_candidate = subreg_query.candidates[0]
 
-    subreg = subreg_candidate.open_nii()
-    return subreg
-
+    try:
+        subreg = subreg_candidate.open_nii()
+        return subreg
+    except Exception as e:
+        print(f"Error opening subreg: {str(e)}")
+        return None
+    
 
 def get_vertseg(container) -> NII:
+    print("get_vertseg")
     vertseg_query = container.new_query(flatten=True)
     vertseg_query.filter_format("msk")
     vertseg_query.filter_filetype("nii.gz")  # only nifti files
     vertseg_query.filter("seg", "vert")
     vertseg_candidate = vertseg_query.candidates[0]
 
-    vertseg = vertseg_candidate.open_nii()
-    return vertseg
+    try:
+        vertseg = vertseg_candidate.open_nii()
+        return vertseg
+    except Exception as e:
+        print(f"Error opening vertseg: {str(e)}")
+        return None
 
 
 def get_files(
@@ -200,66 +234,101 @@ def process_container(
     save_path: PathLike,
     rescale_zoom: tuple | None,
     get_files_fn: Callable[[Subject_Container], tuple[POI, NII, NII, NII]],
-    exclusion_dict: dict #Alissa
+    exclusion_dict: dict | None = None, #Alissa
 ):
     poi, ct, subreg, vertseg = get_files_fn(container)
 
-    # Add this temporarily to your process_container function
-    #print("subject: ", subject)
-    #print(" POI:", list(poi))  
-    #print("POI object type:", type(poi))
+    print("container: ", container)
+    print("poi", poi)
+    print("ct", ct)
+    print("subreg", subreg)
+    print("vertseg", vertseg)
 
     # TODO:remove unwanted pois
-    subject_key = f"sub-{subject}"
+    if exclusion_dict is not None:
+        subject_key = f"sub-{subject}"
     
-    #print("\n\n\npoi_original\n", list(poi))
-    #print("length npoi_original\n", len(list(poi)))
+        #print("\n\n\npoi_original\n", list(poi))
+        #print("length npoi_original\n", len(list(poi)))
 
-    if subject_key in exclusion_dict:
-        sub_exclusion_set = set(exclusion_dict[subject_key])
+        #TODO: anstatt list(poi) vllt filter_poi() von oben verwenden... (nochmal anschauen!!)
+        if subject_key in exclusion_dict:
+            sub_exclusion_set = set(exclusion_dict[subject_key])
 
-        poi = [item for item in list(poi) if item not in sub_exclusion_set]
+            poi = [item for item in list(poi) if item not in sub_exclusion_set]
 
-    ct.reorient_(("L", "A", "S"))
-    subreg.reorient_(("L", "A", "S"))
-    vertseg.reorient_(("L", "A", "S"))
-    poi.reorient_centroids_to_(ct)
+    try:
+        ct.reorient_(("L", "A", "S"))
+        subreg.reorient_(("L", "A", "S"))
+        vertseg.reorient_(("L", "A", "S"))
+        #poi.reorient_centroids_to(ct)
+        poi.reorient_(axcodes_to=ct.orientation, _shape=ct.shape) # the same as above? no reorient_centroids_to found in TPTBox
+        
+    except Exception as e:
+        print(f"Error reorienting: {str(e)}")
 
-    vertebrae = {key[0] for key in poi.keys()}
-    vertseg_arr = vertseg.get_array()
 
+    
+    vertebrae = {key[0] for key in poi.keys()} 
+    print("vertebrae: ", vertebrae)
+    vertseg_arr = vertseg.get_array() 
+    print("Shape:", vertseg_arr.shape)
+    print("Unique values:", np.unique(vertseg_arr))
     summary = []
-    for vert in vertebrae:
-        if vert in vertseg_arr:
-            x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(
-                vertseg_arr, vert
-            )
+    for vert in vertebrae: #loops through each vertebra ID (extracted from POI keys)
+        if vert in vertseg_arr: #vertebra in vertebral segmentation mask?
+
+            try:
+                x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(
+                    vertseg_arr, vert
+                )
+            except Exception as e:
+                print(f"Error getting bounding box for vertebra {vert}: {str(e)}")
+                return
+            
+            #defines output paths for cropped files
             ct_path = os.path.join(save_path, subject, str(vert), "ct.nii.gz")
             subreg_path = os.path.join(save_path, subject, str(vert), "subreg.nii.gz")
             vertseg_path = os.path.join(save_path, subject, str(vert), "vertseg.nii.gz")
             poi_path = os.path.join(save_path, subject, str(vert), "poi.json")
 
+            #create directories if they do not exist
             if not os.path.exists(os.path.join(save_path, subject, str(vert))):
                 os.makedirs(os.path.join(save_path, subject, str(vert)))
 
-            ct_cropped = ct.apply_crop_slice(
-                ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-            )
-            subreg_cropped = subreg.apply_crop_slice(
-                ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-            )
-            vertseg_cropped = vertseg.apply_crop_slice(
-                ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-            )
-            poi_cropped = poi.crop_centroids(
-                o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-            )
-
+            try:
+                ct_cropped = ct.apply_crop(
+                    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+                )
+                subreg_cropped = subreg.apply_crop(
+                    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+                )
+                vertseg_cropped = vertseg.apply_crop(
+                    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+                )
+                poi_cropped = poi.apply_crop(
+                    o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+                )
+            except Exception as e:
+                print(f"Error cropping data for vertebra {vert}: {str(e)}")
+                return
+            # Check if the cropped data is empty
             if rescale_zoom:
+                print("ct_cropped shape: ", ct_cropped.shape)
+                print("subreg_cropped shape: ", subreg_cropped.shape)
+                print("vertseg_cropped shape: ", vertseg_cropped.shape)
+                print("poi_cropped shape: ", poi_cropped.shape)
+
                 ct_cropped.rescale_(rescale_zoom)
                 subreg_cropped.rescale_(rescale_zoom)
                 vertseg_cropped.rescale_(rescale_zoom)
                 poi_cropped.rescale_(rescale_zoom)
+
+                print("ct_cropped shape after rescale: ", ct_cropped.shape)
+                print("subreg_cropped shape after rescale: ", subreg_cropped.shape)
+                print("vertseg_cropped shape after rescale: ", vertseg_cropped.shape)
+                print("poi_cropped shape after rescale: ", poi_cropped.shape)
+
 
             ct_cropped.save(ct_path, verbose=False)
             subreg_cropped.save(subreg_path, verbose=False)
@@ -301,19 +370,24 @@ def process_container(
 def prepare_data(
     bids_surgery_info: BIDS_Global_info,
     save_path: str,
-    exclusion_path: str, # Alissa
     get_files_fn: callable,
+    exclusion_path: str |None = None, # Alissa
     rescale_zoom: tuple | None = None,
     n_workers: int = 8,
 ):
     master = []
-    exclusion_dict=load_exclusion_dict(exclusion_path) #Alissa
+    #TODOOOO
+    exclusion_dict = (
+        load_exclusion_dict(exclusion_path) 
+        if exclusion_path is not None 
+        else None
+    )
     partial_process_container = partial(
         process_container,
         save_path=save_path,
         rescale_zoom=rescale_zoom,
         get_files_fn=get_files_fn,
-        exclusion_dict=exclusion_dict, #Alissa
+        exclusion_dict=exclusion_dict,  # Pass None if not provided
     )
 
     for subject, container in bids_surgery_info.enumerate_subjects():
@@ -324,8 +398,8 @@ def prepare_data(
         partial_process_container,
         n_jobs=n_workers,
         argument_type="args",
-        #exception_behaviour="immediate",
-        exception_behaviour="continue"
+        exception_behaviour="immediate",
+        #exception_behaviour="continue"
     )
     master = [item for sublist in master for item in sublist]
     master_df = pd.DataFrame(master)
@@ -386,6 +460,9 @@ if __name__ == "__main__":
     bids_gloabl_info = BIDS_Global_info(
         datasets=[args.data_path], parents=["rawdata", args.derivatives_name]
     )
+
+    print("\n\nbids_gloabl_info: ", bids_gloabl_info)
+
 
     if args.dataset_type == "Gruber":
         get_data_files = partial(
