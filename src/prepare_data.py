@@ -24,7 +24,6 @@ def load_exclusion_dict(excel_path):
         return {}
     
     df = pd.read_excel(excel_path)
-    #print("df: \n", df)
 
     exclude_dict = {}
 
@@ -43,18 +42,31 @@ def load_exclusion_dict(excel_path):
                 if subject not in exclude_dict:
                     exclude_dict[subject] = []
                 exclude_dict[subject].append((label, poi_id))
-            
+    
     return exclude_dict
 
-def filter_poi(poi, subject, vertebra, exclude_dict):
-    """Filter POI in-place based on exclusion rules"""
-    if subject not in exclude_dict:
-        return poi
-    if vertebra not in exclude_dict[subject]:
-        return poi
+
+
+def filter_poi(poi_object: POI, subject_id: str, exclude_dict: dict[str, list[tuple[int, int]]]) -> POI:
+    """Filter POIs by removing excluded ones for the given subject.
     
-    excluded_types = exclude_dict[subject][vertebra]
-    return {k: v for k, v in poi.items() if k[1] not in excluded_types}
+    Args:
+        poi_object: POI object to filter
+        subject_id: Current subject ID
+        exclude_dict: Dictionary of {subject_id: [pois_to_exclude]}
+        
+    Returns:
+        Filtered POI object
+    """
+    if not isinstance(poi_object, POI):
+        raise TypeError(f"Expected POI object, got {type(poi_object)}")
+    
+    pois_to_exclude = exclude_dict.get(subject_id, [])
+    print(f"excluding pois length: {len(pois_to_exclude)}")
+    if pois_to_exclude:
+        poi_object = poi_object.remove(*pois_to_exclude) 
+        
+    return poi_object
 
 
 def get_implants_poi(container) -> POI:
@@ -68,7 +80,6 @@ def get_implants_poi(container) -> POI:
 
 
 def get_gruber_poi(container) -> POI:
-    print(f"\nPOI for container: {container}")
     poi_query = container.new_query(flatten=True)
     poi_query.filter_format("poi")
     #poi_query.filter("source", "gruber")
@@ -238,54 +249,33 @@ def process_container(
 ):
     poi, ct, subreg, vertseg = get_files_fn(container)
 
-    print("container: ", container)
-    print("poi", poi)
-    print("ct", ct)
-    print("subreg", subreg)
-    print("vertseg", vertseg)
 
-    # TODO:remove unwanted pois
+    #if exclusion is specified, exlcude unwanted POIs
+    print("poi orginal length: ", len(poi))
     if exclusion_dict is not None:
-        subject_key = f"sub-{subject}"
-    
-        #print("\n\n\npoi_original\n", list(poi))
-        #print("length npoi_original\n", len(list(poi)))
-
-        #TODO: anstatt list(poi) vllt filter_poi() von oben verwenden... (nochmal anschauen!!)
-        if subject_key in exclusion_dict:
-            sub_exclusion_set = set(exclusion_dict[subject_key])
-
-            poi = [item for item in list(poi) if item not in sub_exclusion_set]
-
-    try:
-        ct.reorient_(("L", "A", "S"))
-        subreg.reorient_(("L", "A", "S"))
-        vertseg.reorient_(("L", "A", "S"))
-        #poi.reorient_centroids_to(ct)
-        poi.reorient_(axcodes_to=ct.orientation, _shape=ct.shape) # the same as above? no reorient_centroids_to found in TPTBox
-        
-    except Exception as e:
-        print(f"Error reorienting: {str(e)}")
-
+        poi = filter_poi(poi, f"sub-{subject}", exclusion_dict)
+    print("poi (exlcuded) length: ", len(poi))
 
     
+    return
+    #reorient data to same orientation
+    ct.reorient_(("L", "A", "S"))
+    subreg.reorient_(("L", "A", "S"))
+    vertseg.reorient_(("L", "A", "S"))
+    #poi.reorient_centroids_to(ct)
+    poi.reorient_(axcodes_to=ct.orientation, _shape=ct.shape) # the same as above? no reorient_centroids_to found in TPTBox
+
+    return
     vertebrae = {key[0] for key in poi.keys()} 
-    print("vertebrae: ", vertebrae)
     vertseg_arr = vertseg.get_array() 
-    print("Shape:", vertseg_arr.shape)
-    print("Unique values:", np.unique(vertseg_arr))
     summary = []
     for vert in vertebrae: #loops through each vertebra ID (extracted from POI keys)
-        if vert in vertseg_arr: #vertebra in vertebral segmentation mask?
-
-            try:
-                x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(
-                    vertseg_arr, vert
-                )
-            except Exception as e:
-                print(f"Error getting bounding box for vertebra {vert}: {str(e)}")
-                return
+        if vert in vertseg_arr: #vertebra in vertebras found in segmentation mask
             
+            x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(
+                vertseg_arr, vert
+            )
+
             #defines output paths for cropped files
             ct_path = os.path.join(save_path, subject, str(vert), "ct.nii.gz")
             subreg_path = os.path.join(save_path, subject, str(vert), "subreg.nii.gz")
@@ -296,39 +286,26 @@ def process_container(
             if not os.path.exists(os.path.join(save_path, subject, str(vert))):
                 os.makedirs(os.path.join(save_path, subject, str(vert)))
 
-            try:
-                ct_cropped = ct.apply_crop(
-                    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-                )
-                subreg_cropped = subreg.apply_crop(
-                    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-                )
-                vertseg_cropped = vertseg.apply_crop(
-                    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-                )
-                poi_cropped = poi.apply_crop(
-                    o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-                )
-            except Exception as e:
-                print(f"Error cropping data for vertebra {vert}: {str(e)}")
-                return
-            # Check if the cropped data is empty
+            
+            ct_cropped = ct.apply_crop(
+                ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+            )
+            subreg_cropped = subreg.apply_crop(
+                ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+            )
+            vertseg_cropped = vertseg.apply_crop(
+                ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+            )
+            poi_cropped = poi.apply_crop(
+                o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+            )
+            
             if rescale_zoom:
-                print("ct_cropped shape: ", ct_cropped.shape)
-                print("subreg_cropped shape: ", subreg_cropped.shape)
-                print("vertseg_cropped shape: ", vertseg_cropped.shape)
-                print("poi_cropped shape: ", poi_cropped.shape)
 
                 ct_cropped.rescale_(rescale_zoom)
                 subreg_cropped.rescale_(rescale_zoom)
                 vertseg_cropped.rescale_(rescale_zoom)
                 poi_cropped.rescale_(rescale_zoom)
-
-                print("ct_cropped shape after rescale: ", ct_cropped.shape)
-                print("subreg_cropped shape after rescale: ", subreg_cropped.shape)
-                print("vertseg_cropped shape after rescale: ", vertseg_cropped.shape)
-                print("poi_cropped shape after rescale: ", poi_cropped.shape)
-
 
             ct_cropped.save(ct_path, verbose=False)
             subreg_cropped.save(subreg_path, verbose=False)
@@ -376,12 +353,12 @@ def prepare_data(
     n_workers: int = 8,
 ):
     master = []
-    #TODOOOO
     exclusion_dict = (
         load_exclusion_dict(exclusion_path) 
         if exclusion_path is not None 
         else None
     )
+
     partial_process_container = partial(
         process_container,
         save_path=save_path,
@@ -491,7 +468,3 @@ if __name__ == "__main__":
         rescale_zoom=None if args.no_rescale else (1, 1, 1),
         n_workers=args.n_workers,
     )
-    
-    #exclusion_dict=load_exclusion_dict(excel_path=args.exclude_path)
-    #print(exclusion_dict)
-    #print("\nsubject 47:\n",exclusion_dict['sub-WS-47'])
