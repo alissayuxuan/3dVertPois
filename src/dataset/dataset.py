@@ -2,7 +2,9 @@ import ast
 import os
 
 import torch
-from BIDS import NII, POI
+#from BIDS import NII, POI
+from TPTBox import NII
+from TPTBox.core.poi import POI
 from torch.utils.data import Dataset
 
 from transforms.transforms import Compose, LandMarksRandHorizontalFlip # was src.transforms.transforms

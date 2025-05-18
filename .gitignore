@@ -116,9 +116,8 @@ bids/*
 
 # ignore big data
 src/dataset/dataset-folder/*
-src/dataset/cutouts/*
-src/dataset/cutouts_exclude/*
-
+src/dataset/dataset-folder_test/*
+src/dataset/cutout-folder/*
 src/experiment_logs/*
 src/experiment_logs_exclude/*
 

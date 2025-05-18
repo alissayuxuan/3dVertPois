@@ -4,8 +4,11 @@ from typing import Callable
 
 import numpy as np
 import torch
-from BIDS import NII, POI
-from BIDS.bids_files import Subject_Container
+#from BIDS import NII, POI
+#from BIDS.bids_files import Subject_Container
+from TPTBox import NII, Subject_Container
+from TPTBox.core.poi import POI
+
 from numpy import ndarray
 from scipy.ndimage import center_of_mass, shift
 from skimage.morphology import binary_erosion
@@ -360,7 +363,9 @@ def get_implants_poi(container) -> POI:
     poi_query.filter("desc", "local")
     poi_candidate = poi_query.candidates[0]
 
-    poi = poi_candidate.open_ctd()
+    #poi = poi_candidate.open_ctd()
+    poi = POI.load(poi_candidate.file["json"])
+
     return poi
 
 
@@ -370,7 +375,9 @@ def get_gruber_poi(container) -> POI:
     poi_query.filter("source", "gruber")
     poi_candidate = poi_query.candidates[0]
 
-    poi = poi_candidate.open_ctd()
+    #poi = poi_candidate.open_ctd()
+    poi = POI.load(poi_candidate.file["json"])
+
     return poi
 
 
@@ -504,7 +511,9 @@ def process_container(
     ct.reorient_(("L", "A", "S"))
     subreg.reorient_(("L", "A", "S"))
     vertseg.reorient_(("L", "A", "S"))
-    poi.reorient_centroids_to_(ct)
+    #poi.reorient_centroids_to_(ct)
+    poi.reorient_(axcodes_to=ct.orientation, _shape=ct.shape) # the same as above? no reorient_centroids_to found in TPTBox
+
 
     vertebrae = set([key[0] for key in poi.keys()])
     vertseg_arr = vertseg.get_array()
@@ -524,16 +533,16 @@ def process_container(
             if not os.path.exists(os.path.join(save_path, subject, str(vert))):
                 os.makedirs(os.path.join(save_path, subject, str(vert)))
 
-            ct_cropped = ct.apply_crop_slice(
+            ct_cropped = ct.apply_crop(#_slice(
                 ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
             )
-            subreg_cropped = subreg.apply_crop_slice(
+            subreg_cropped = subreg.apply_crop(#_slice(
                 ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
             )
-            vertseg_cropped = vertseg.apply_crop_slice(
+            vertseg_cropped = vertseg.apply_crop(#_slice(
                 ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
             )
-            poi_cropped = poi.crop_centroids(
+            poi_cropped = poi.apply_crop(#crop_centroids(
                 o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
             )
             # poi_det.crop_centroids(o_shift = (slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))).save(poi_det_path)

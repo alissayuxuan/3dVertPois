@@ -5,7 +5,9 @@ import os
 import numpy as np
 import pandas as pd
 import torch
-from BIDS import POI
+#from BIDS import POI
+from TPTBox.core.poi import POI
+
 
 from modules.PoiModule import PoiPredictionModule
 from src.modules.PoiDataModules import JointDataModule, POIDataModule

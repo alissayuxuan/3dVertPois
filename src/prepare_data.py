@@ -257,7 +257,6 @@ def process_container(
     print("poi (exlcuded) length: ", len(poi))
 
     
-    return
     #reorient data to same orientation
     ct.reorient_(("L", "A", "S"))
     subreg.reorient_(("L", "A", "S"))
@@ -265,7 +264,7 @@ def process_container(
     #poi.reorient_centroids_to(ct)
     poi.reorient_(axcodes_to=ct.orientation, _shape=ct.shape) # the same as above? no reorient_centroids_to found in TPTBox
 
-    return
+
     vertebrae = {key[0] for key in poi.keys()} 
     vertseg_arr = vertseg.get_array() 
     summary = []

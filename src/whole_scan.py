@@ -18,7 +18,9 @@ import os
 
 import pandas as pd
 import torch
-from BIDS import NII, POI, BIDS_Global_info
+#from BIDS import NII, POI, BIDS_Global_info
+from TPTBox import NII, BIDS_Global_info
+from TPTBox.core.poi import POI
 from torch.utils.data import Dataset
 
 import eval as ev
@@ -238,11 +240,11 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
         subreg_path = os.path.join(temp_dir, subject, f"vert_{vert}-subreg.nii.gz")
         vert_path = os.path.join(temp_dir, subject, f"vert_{vert}-vertseg.nii.gz")
 
-        subreg_cropped = subreg_msk.apply_crop_slice(
+        subreg_cropped = subreg_msk.apply_crop(#_slice(
             ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
         )
 
-        vert_cropped = vert_msk.apply_crop_slice(
+        vert_cropped = vert_msk.apply_crop(#_slice(
             ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
         )
 

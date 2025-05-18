@@ -1,7 +1,9 @@
 import nibabel as nib
 import numpy as np
 import torch
-from BIDS import NII, POI
+#from BIDS import NII, POI
+from TPTBox import NII
+from TPTBox.core.poi import POI
 
 
 def np_to_bids_nii(array: np.ndarray) -> NII:
