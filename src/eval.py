@@ -1,3 +1,10 @@
+#Alissa
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent)) # Add project root to Python path
+
+
 import argparse
 import json
 import os
@@ -8,6 +15,7 @@ import torch
 #from BIDS import POI
 from TPTBox.core.poi import POI
 
+import shutil  # For file operations
 
 from modules.PoiModule import PoiPredictionModule
 from src.modules.PoiDataModules import JointDataModule, POIDataModule
@@ -121,6 +129,8 @@ def create_prediction_poi_files(
         offset_batch = batch["offset"]
         poi_path_batch = batch["poi_path"]
 
+        loss_mask_batch = batch["loss_mask"] #Alissa
+
         # Detach all tensors
         vertebra_batch = vertebra_batch.detach().cpu().numpy()
         refined_preds_batch = refined_preds_batch.detach().cpu().numpy()
@@ -131,16 +141,27 @@ def create_prediction_poi_files(
         target_indices_batch = target_indices_batch.detach().cpu().numpy()
         offset_batch = offset_batch.detach().cpu().numpy()
 
+        loss_mask_batch = loss_mask_batch.detach().cpu().numpy() #Alissa
+
         pred_batch = refined_preds_projected_batch if project else refined_preds_batch
 
-        for sub, vert, preds, indices, poi_path, offset in zip(
+        for sub, vert, preds, indices, poi_path, offset, mask in zip( #Alissa: mask
             subject_batch,
             vertebra_batch,
             pred_batch,
             target_indices_batch,
             poi_path_batch,
             offset_batch,
+            loss_mask_batch, #Alissa
         ):
+            
+            #Alissa: Filter nur gültige POIs (mask == True)
+            #mask = loss_mask_batch.astype(bool)
+            print(f"preds.shape: {preds.shape}, mask.shape: {mask.shape}")
+
+            preds = preds[mask]
+            indices = indices[mask]
+
             # Open the old POI file to get the origin and rotation
             ctd = POI.load(poi_path)
             origin = ctd.origin
@@ -574,9 +595,89 @@ if __name__ == "__main__":
         "--joint", action="store_true", help="Whether to use the JointDataModule"
     )
 
-    args = parser.parse_args()
 
-    df = create_prediction_df(
+    args = parser.parse_args()
+    
+
+    os.makedirs(args.save_path, exist_ok=True)
+
+
+    """ Create DataFrame with prediction information """
+    prediction_df = create_prediction_df(
         args.data_module_save_path, args.checkpoint_path, args.split, args.joint
     )
-    df.to_csv(args.save_path, index=False)
+    prediction_df.to_csv(os.path.join(args.save_path, "results.csv"))
+    print("Prediction DataFrame saved")
+
+    """ Compute overall metrics """
+    metrics_df = compute_overall_metrics(prediction_df)
+    metrics_df.to_csv(os.path.join(args.save_path, "overall_metrics.csv"))
+
+    print("Overal metrics saved")
+
+
+    """ Create Prediction files """
+    prediction_files_path = os.path.join(args.save_path, "prediction_files")
+    os.makedirs(prediction_files_path, exist_ok=True)
+
+    # Generate predictions and get paths
+    poi_paths_dict = create_prediction_poi_files(
+        data_module_save_path=args.data_module_save_path,
+        checkpoint_path=args.checkpoint_path,
+        poi_file_ending="_pred.json",
+        split=args.split,
+        joint=args.joint,
+        save_path=prediction_files_path,
+        return_paths=True, 
+        project=True  
+    )
+
+    # Copy ground truth POIs to output directory for comparison
+    for (sub, vert), paths in poi_paths_dict.items():
+        gt_poi = POI.load(paths["gt"])
+        gt_save_path = os.path.join(prediction_files_path, f"{sub}_{vert}_gt.json")
+        gt_poi.save(gt_save_path)
+
+        seg_path = paths["seg_vert"]
+        seg_save_path = os.path.join(prediction_files_path, f"{sub}_{vert}_seg.nii.gz")
+        shutil.copy(seg_path, seg_save_path)
+
+
+    print(f"Saved predictions and ground truths to: {prediction_files_path}")
+
+
+
+
+
+
+
+    """
+     # Create output directory
+    os.makedirs(args.save_path, exist_ok=True)
+
+    # Generate predictions and get paths
+    poi_paths_dict = create_prediction_poi_files(
+        data_module_save_path=args.data_module_save_path,
+        checkpoint_path=args.checkpoint_path,
+        poi_file_ending="_pred.json",
+        split=args.split,
+        joint=args.joint,
+        save_path=args.save_path,
+        return_paths=True,  # Returns dictionary with paths
+        project=True  # Project predictions onto surface
+    )
+
+    # Copy ground truth POIs to output directory for comparison
+    for (sub, vert), paths in poi_paths_dict.items():
+        gt_poi = POI.load(paths["gt"])
+        gt_save_path = os.path.join(args.save_path, f"{sub}_{vert}_gt.json")
+        gt_poi.save(gt_save_path)
+
+        seg_path = paths["seg_vert"]
+        seg_save_path = os.path.join(args.save_path, f"{sub}_{vert}_seg.nii.gz")
+        shutil.copy(seg_path, seg_save_path)
+
+
+    print(f"Saved predictions and ground truths to: {args.save_path}")
+    """
+

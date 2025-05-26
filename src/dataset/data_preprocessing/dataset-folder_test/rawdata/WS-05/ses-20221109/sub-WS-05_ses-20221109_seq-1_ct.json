@@ -1,0 +1,61 @@
+{
+    "SpecificCharacterSet": "ISO_IR 100",
+    "ImageType": "DERIVED/SECONDARY",
+    "SOPClassUID": "1.2.840.10008.5.1.4.1.1.7",
+    "SOPInstanceUID": "1.2.276.0.45.45.2.51.4.84320313.20221109.161306220",
+    "StudyDate": "20221109",
+    "SeriesDate": "20221109",
+    "ContentDate": "20221109",
+    "StudyTime": "151304",
+    "SeriesTime": "151306",
+    "ContentTime": "151306",
+    "AccessionNumber": "1",
+    "Modality": "OT",
+    "ConversionType": "SYN",
+    "ReferringPhysicianName": [
+        {}
+    ],
+    "StudyDescription": "<study description>",
+    "SeriesDescription": "<series description>",
+    "PatientName": [
+        {}
+    ],
+    "PatientBirthDate": "20000101",
+    "SpacingBetweenSlices": 0.9,
+    "SecondaryCaptureDeviceManufacturer": "FEI",
+    "SecondaryCaptureDeviceSoftwareVersions": "Amira",
+    "StudyInstanceUID": "1.2.276.0.45.45.2.51.2.84320313.20221109.161306001",
+    "SeriesInstanceUID": "1.2.276.0.45.45.2.51.3.84320313.20221109.161306002",
+    "InstanceNumber": 217,
+    "ImagePositionPatient": [
+        278.015,
+        230.781,
+        -431.533
+    ],
+    "ImageOrientationPatient": [
+        -0.999989,
+        0.000236734,
+        0.00477038,
+        0.000389249,
+        -0.991409,
+        0.130795
+    ],
+    "SamplesPerPixel": 1,
+    "PhotometricInterpretation": "MONOCHROME2",
+    "Rows": 512,
+    "Columns": 512,
+    "PixelSpacing": [
+        0.974609,
+        0.974609
+    ],
+    "BitsAllocated": 16,
+    "BitsStored": 16,
+    "HighBit": 15,
+    "PixelRepresentation": 1,
+    "WindowCenter": 125.0,
+    "WindowWidth": 250.0,
+    "RescaleIntercept": 0.0,
+    "RescaleSlope": 1.0,
+    "WindowCenterWidthExplanation": "Standard",
+    "Slices": 1428
+}

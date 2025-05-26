@@ -122,8 +122,8 @@ class PoiPredictionModule(pl.LightningModule):
         metrics = self.calculate_metrics(batch, "train")
         batch_size = batch["input"].shape[0]
 
-        self.log("train_loss", loss, on_epoch=True, batch_size=batch_size)
-        self.log_dict(metrics, on_epoch=True, on_step=False, batch_size=batch_size)
+        self.log("train_loss", loss, on_epoch=True, batch_size=batch_size, sync_dist=True) #Alissa: sync_dist=True (due to warning)
+        self.log_dict(metrics, on_epoch=True, on_step=False, batch_size=batch_size, sync_dist=True) #Alissa: sync_dist=True (dur to warning)
 
         return loss
 
@@ -146,12 +146,12 @@ class PoiPredictionModule(pl.LightningModule):
 
         self.val_feature_loss_outputs.append(feature_loss)
 
-        self.log("val_feature_loss", feature_loss, on_epoch=True, batch_size=batch_size)
+        self.log("val_feature_loss", feature_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log(
-            "val_refinement_loss", refinement_loss, on_epoch=True, batch_size=batch_size
+            "val_refinement_loss", refinement_loss, on_epoch=True, batch_size=batch_size, sync_dist=True
         )
-        self.log("val_loss", loss, on_epoch=True, batch_size=batch_size)
-        self.log_dict(metrics, on_epoch=True, on_step=False, batch_size=batch_size)
+        self.log("val_loss", loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log_dict(metrics, on_epoch=True, on_step=False, batch_size=batch_size, sync_dist=True)
 
         return loss
 

@@ -29,7 +29,7 @@ class RefinementModule(pl.LightningModule):
         batch = self(batch)
         loss = self.calculate_loss(batch)
         metrics = self.calculate_metrics(batch, "train")
-        self.log_dict(metrics, on_epch=True)
+        self.log_dict(metrics, on_epch=True, sync_dist=True) # Alissa: sync_dist=True
 
         return loss
 
@@ -37,7 +37,7 @@ class RefinementModule(pl.LightningModule):
         batch = self(batch)
         loss = self.calculate_loss(batch)
         metrics = self.calculate_metrics(batch, "val")
-        self.log_dict(metrics, on_epch=True)
+        self.log_dict(metrics, on_epch=True, sync_dist=True) #Alissa: sync_dist=True
 
         return loss
 

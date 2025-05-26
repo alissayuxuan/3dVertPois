@@ -55,6 +55,9 @@ class SADenseNet(nn.Module):
 
     def forward(self, batch):
         x = batch["input"]
+        # TODO: Alissa: filter pois that should be trained with loss_mask (batch[loss_mask])
+        #print(f"batch - feature_extractor: {batch}")
+
         heatmaps, feature_encodings = self.feature_extractor(
             x
         )  # (batch_size, n_landmarks, *spatial_shape), (batch_size, n_landmarks, feature_l)

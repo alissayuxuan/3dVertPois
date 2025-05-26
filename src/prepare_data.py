@@ -221,6 +221,13 @@ def get_bounding_box(mask, vert, margin=5):
         bounding box.
     """
     indices = np.where(mask == vert)
+
+    print(f"get_bounding_box(), mask.shape: {mask.shape}")
+
+    #debug
+    if len(indices[0]) == 0:
+        raise ValueError(f"Vertebra {vert} not found in the mask.")
+    
     x_min = np.min(indices[0]) - margin
     x_max = np.max(indices[0]) + margin
     y_min = np.min(indices[1]) - margin
@@ -235,6 +242,14 @@ def get_bounding_box(mask, vert, margin=5):
     y_max = min(mask.shape[1], y_max)
     z_min = max(0, z_min)
     z_max = min(mask.shape[2], z_max)
+
+    #debug
+    if x_min >= x_max or y_min >= y_max or z_min >= z_max:
+        raise ValueError(
+            f"Invalid bounding box for vertebra {vert}: "
+            f"x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}, "
+            f"z_min={z_min}, z_max={z_max}"
+        )
 
     return x_min, x_max, y_min, y_max, z_min, z_max
 
@@ -258,12 +273,13 @@ def process_container(
 
     
     #reorient data to same orientation
-    ct.reorient_(("L", "A", "S"))
+    #ct.reorient_(("L", "A", "S"))
     subreg.reorient_(("L", "A", "S"))
     vertseg.reorient_(("L", "A", "S"))
     #poi.reorient_centroids_to(ct)
     poi.reorient_(axcodes_to=ct.orientation, _shape=ct.shape) # the same as above? no reorient_centroids_to found in TPTBox
 
+    print(f"ct shape: {ct.shape}, subreg shape: {subreg.shape}, vertseg shape: {vertseg.shape}, poi shape: {poi.shape}")
 
     vertebrae = {key[0] for key in poi.keys()} 
     vertseg_arr = vertseg.get_array() 
@@ -271,12 +287,16 @@ def process_container(
     for vert in vertebrae: #loops through each vertebra ID (extracted from POI keys)
         if vert in vertseg_arr: #vertebra in vertebras found in segmentation mask
             
-            x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(
-                vertseg_arr, vert
-            )
+            try:
+                x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(
+                    vertseg_arr, vert
+                )
+            except ValueError as e:
+                print(f"Error getting bounding box for vertebra {vert}: {str(e)}")
+                continue
 
             #defines output paths for cropped files
-            ct_path = os.path.join(save_path, subject, str(vert), "ct.nii.gz")
+            #ct_path = os.path.join(save_path, subject, str(vert), "ct.nii.gz")
             subreg_path = os.path.join(save_path, subject, str(vert), "subreg.nii.gz")
             vertseg_path = os.path.join(save_path, subject, str(vert), "vertseg.nii.gz")
             poi_path = os.path.join(save_path, subject, str(vert), "poi.json")
@@ -285,28 +305,35 @@ def process_container(
             if not os.path.exists(os.path.join(save_path, subject, str(vert))):
                 os.makedirs(os.path.join(save_path, subject, str(vert)))
 
-            
-            ct_cropped = ct.apply_crop(
-                ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-            )
-            subreg_cropped = subreg.apply_crop(
-                ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-            )
-            vertseg_cropped = vertseg.apply_crop(
-                ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-            )
-            poi_cropped = poi.apply_crop(
-                o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-            )
+            try:            
+                #ct_cropped = ct.apply_crop(
+                #    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+                #)
+                subreg_cropped = subreg.apply_crop(
+                    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+                )
+                vertseg_cropped = vertseg.apply_crop(
+                    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+                )
+                poi_cropped = poi.apply_crop(
+                    o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+                )
+
+            except Exception as e:
+                print(f"Error processing {subject}: {str(e)}")
+                print(f"Crop dimensions: x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}, z_min={z_min}, z_max={z_max}")
+                print(f"ex_slice: {(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))}")
+                #print(f"ct shape: {ct.shape},\n subreg shape: {subreg.shape},\n vertseg shape: {vertseg.shape}, poi shape: {poi.shape}")
+                raise
             
             if rescale_zoom:
 
-                ct_cropped.rescale_(rescale_zoom)
+                #ct_cropped.rescale_(rescale_zoom)
                 subreg_cropped.rescale_(rescale_zoom)
                 vertseg_cropped.rescale_(rescale_zoom)
                 poi_cropped.rescale_(rescale_zoom)
 
-            ct_cropped.save(ct_path, verbose=False)
+            #ct_cropped.save(ct_path, verbose=False)
             subreg_cropped.save(subreg_path, verbose=False)
             vertseg_cropped.save(vertseg_path, verbose=False)
             poi_cropped.save(poi_path, verbose=False)

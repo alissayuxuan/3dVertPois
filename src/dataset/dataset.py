@@ -100,6 +100,7 @@ class PoiDataset(Dataset):
 
         # Get the ground truth POIs
         poi, missing_pois = get_gt_pois(poi, vertebra, self.poi_indices)
+        #print(f"Missing POIs for subject {subject}, vertebra {vertebra}: {missing_pois}")
 
         poi_indices = torch.tensor(self.poi_indices)
 

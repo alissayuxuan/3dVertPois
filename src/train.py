@@ -97,11 +97,24 @@ def run_experiment(experiment_config):
 
     trainer = pl.Trainer(**trainer_config)
 
+    """
     trainer.fit(
         poi_module,
         train_dataloaders=data_module.train_dataloader(),
         val_dataloaders=data_module.val_dataloader(),
     )
+    """
+
+    print("\n=== Starting Training ===")
+    trainer.fit(
+        poi_module,
+        train_dataloaders=data_module.train_dataloader(),
+        val_dataloaders=data_module.val_dataloader(),
+    )
+    
+    print("\n=== Final Debug Info ===")
+    print(f"Epochs completed: {trainer.current_epoch}")
+    print(f"Max epochs allowed: {trainer.max_epochs}")    
 
 
 if __name__ == "__main__":

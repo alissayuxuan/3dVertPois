@@ -120,6 +120,10 @@ src/dataset/dataset-folder_test/*
 src/dataset/cutout-folder/*
 src/experiment_logs/*
 src/experiment_logs_exclude/*
+src/experiment_evaluation/*
+src/experiment_evaluation_preds_first/*
+src/experiment_evaluation_preds_second/*
+src/experiment_evaluation_df
 
 *.ckpt
 *.nii.gz
