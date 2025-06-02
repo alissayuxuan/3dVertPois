@@ -27,6 +27,7 @@ def create_global_pois(source_path, save_path):
 
 
 
+
 if __name__ == "__main__":
     source_path = "experiments/experiment_evaluation/gruber/surface/excel_excluded_pois/no_freeze/test/version_2_epoch_55/prediction_files"
     save_path =   "experiments/experiment_evaluation/gruber/surface/excel_excluded_pois/no_freeze/test/version_2_epoch_55/global_prediction_files"

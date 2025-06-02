@@ -261,7 +261,7 @@ def process_container(
     rescale_zoom: tuple | None,
     get_files_fn: Callable[[Subject_Container], tuple[POI, NII, NII, NII]],
     exclusion_dict: dict | None = None, #Alissa
-    #include_neighbouring_vertebrae: bool = False,  # Alissa
+    include_neighbouring_vertebrae: bool = False,  # Alissa
 ):
     poi, ct, subreg, vertseg = get_files_fn(container)
 
@@ -279,16 +279,53 @@ def process_container(
     vertebrae = {key[0] for key in poi.keys()} 
     vertseg_arr = vertseg.get_array() 
     summary = []
-    for vert in vertebrae: #loops through each vertebra ID (extracted from POI keys)
-        if vert in vertseg_arr: #vertebra in vertebras found in segmentation mask
+
+    print("process container: included neighbouring vertebrae: ", include_neighbouring_vertebrae)
+
+    #for vert in vertebrae: #loops through each vertebra ID (extracted from POI keys)
+    vertebrae = sorted(vertebrae)
+    for index in range(len(vertebrae)): #loops through each vertebra ID (extracted from POI keys)
+        vert = vertebrae[index]  
+        if vert in vertseg_arr: #vertebra found in segmentation mask
             
-            try:
-                x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(
-                    vertseg_arr, vert
-                )
-            except ValueError as e:
-                print(f"Error getting bounding box for vertebra {vert}: {str(e)}")
-                continue
+            #TODO: muss ich schauen ob die nachbarn in vertseg_arr sind? wenn nicht was dann?
+            if include_neighbouring_vertebrae:
+                vert_neighbours = [vert]
+                if index > 0:
+                    vert_neighbours.insert(0, vertebrae[index - 1])
+                if index < len(vertebrae) - 1:
+                    vert_neighbours.append(vertebrae[index + 1])
+                
+                print(f"Vertebra {vert} neighbours: {vert_neighbours}")
+
+                # Initialize bounding box limits
+                x_min, x_max = np.inf, -np.inf
+                y_min, y_max = np.inf, -np.inf
+                z_min, z_max = np.inf, -np.inf    
+
+                for v in vert_neighbours:
+                    try:
+                        bounds = get_bounding_box(vertseg_arr, v)
+                    except ValueError as e:
+                        print(f"Error getting bounding box for vertebra {v}: {str(e)}")
+                        continue
+                    
+                    x_min = min(x_min, bounds[0])
+                    x_max = max(x_max, bounds[1])
+                    y_min = min(y_min, bounds[2])
+                    y_max = max(y_max, bounds[3])
+                    z_min = min(z_min, bounds[4])
+                    z_max = max(z_max, bounds[5])
+               
+
+            else:
+                try:
+                    x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(
+                        vertseg_arr, vert
+                    )
+                except ValueError as e:
+                    print(f"Error getting bounding box for vertebra {vert}: {str(e)}")
+                    continue
 
             #defines output paths for cropped files
             #ct_path = os.path.join(save_path, subject, str(vert), "ct.nii.gz")
@@ -390,13 +427,15 @@ def prepare_data(
         else None
     )
 
+    print("included neighbouring vertebrae: ", include_neighbouring_vertebrae)
+
     partial_process_container = partial(
         process_container,
         save_path=save_path,
         rescale_zoom=rescale_zoom,
         get_files_fn=get_files_fn,
         exclusion_dict=exclusion_dict,  # Pass None if not provided
-        #include_neighbouring_vertebrae=include_neighbouring_vertebrae,  # Alissa
+        include_neighbouring_vertebrae=include_neighbouring_vertebrae,  # Alissa
     )
 
     for subject, container in bids_surgery_info.enumerate_subjects():
@@ -462,15 +501,15 @@ if __name__ == "__main__":
         default=None
     )
 
-    """
+    
     parser.add_argument(
         '--include_neighbouring_vertebrae',
         action="store_true",
         help='Whether to include neighbouring vertebrae in the bounding box extraction',
         #default=False
     )
-    """
     
+
     args = parser.parse_args()
     print(args.derivatives_name)
 
@@ -508,5 +547,5 @@ if __name__ == "__main__":
         get_files_fn=get_data_files,
         rescale_zoom=None if args.no_rescale else (1, 1, 1),
         n_workers=args.n_workers,
-        #include_neighbouring_vertebrae=args.include_neighbouring_vertebrae,
+        include_neighbouring_vertebrae=args.include_neighbouring_vertebrae,
     )
