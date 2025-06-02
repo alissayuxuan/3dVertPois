@@ -22,10 +22,7 @@ def create_global_pois(source_path, save_path):
             target_path = os.path.join(save_path, new_filename)
 
             POI.load(source_path_pred).to_global().save_mrk(target_path)
-
-
-
-
+    
 
 
 if __name__ == "__main__":

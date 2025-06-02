@@ -288,6 +288,14 @@ class GruberDataset(PoiDataset):
                 else (
                     [
                         81,
+                        82, #
+                        83,
+                        84,
+                        85,
+                        86,
+                        87,
+                        88,
+                        89, #
                         101,
                         102,
                         103,
@@ -324,6 +332,14 @@ class GruberDataset(PoiDataset):
                     if include_com
                     else [
                         81,
+                        82, #
+                        83, 
+                        84,
+                        85,
+                        86,
+                        87,
+                        88,
+                        89, #
                         101,
                         102,
                         103,

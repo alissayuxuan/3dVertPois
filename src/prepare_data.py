@@ -149,7 +149,6 @@ def get_gruber_registration_poi(container):
 """
 
 def get_ct(container) -> NII:
-    print("get_ct")
     ct_query = container.new_query(flatten=True)
     ct_query.filter_format("ct")
     ct_query.filter_filetype("nii.gz")  # only nifti files
@@ -164,7 +163,6 @@ def get_ct(container) -> NII:
 
 
 def get_subreg(container) -> NII:
-    print("get_subreg")
     subreg_query = container.new_query(flatten=True)
     subreg_query.filter_format("msk")
     subreg_query.filter_filetype("nii.gz")  # only nifti files

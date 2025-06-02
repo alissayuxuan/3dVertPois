@@ -28,8 +28,8 @@ from prepare_data import get_bounding_box
 from utils.dataloading_utils import compute_surface, pad_array_to_shape
 from utils.misc import surface_project_coords
 
-dm_path = "/home/daniel/Projects/gruber/surface/all_pois/freeze/SA-DenseNet-PatchTransformer/version_4/data_module_params.json"
-model_path = "/home/daniel/Projects/gruber/surface/all_pois/freeze/SA-DenseNet-PatchTransformer/version_4/checkpoints/sad-pt-epoch=44-fine_mean_distance_val=2.33.ckpt"
+dm_path = "experiments/experiment_logs/gruber/surface/all_pois/no_freeze/SA-DenseNet-PatchTransformer/version_0/data_module_params.json"
+model_path = "experiments/experiment_logs/gruber/surface/all_pois/no_freeze/SA-DenseNet-PatchTransformer/version_0/checkpoints/sad-pt-epoch=43-fine_mean_distance_val=10.55.ckpt"
 
 
 def get_subreg(container):
@@ -59,6 +59,8 @@ def combine_centroids(data_list):
     expected_shape = first_entry["original_shape"]
     expected_zoom = first_entry["original_zoom"]
     expected_orientation = first_entry["original_orientation"]
+    expected_rotation = first_entry["original_rotation"]  # ALISSA
+    expected_origin = first_entry["original_origin"]  # ALISSA
 
     # Initialize a defaultdict for combining centroids
     combined_centroids = {}
@@ -75,6 +77,10 @@ def combine_centroids(data_list):
             entry["original_orientation"] == expected_orientation
         ), "Original orientations do not match."
 
+        """assert (
+            entry["original_rotation"] == expected_rotation
+        ), "Original rotations do not match."""
+
         # Combine the centroids
         for v_idx, p_idx, c in entry["centroids"].items():
             combined_centroids[v_idx, p_idx] = c
@@ -88,6 +94,8 @@ def combine_centroids(data_list):
         orientation=expected_orientation,
         zoom=expected_zoom,
         shape=expected_shape,
+        rotation=expected_rotation,  # ALISSA
+        origin=expected_origin,  # ALISSA
     )
 
     return expected_subject, poi_file
@@ -150,6 +158,7 @@ class GruberInferenceDataset(Dataset):
         original_orientation = row["original_orientation"]
         original_zoom = row["original_zoom"]
         original_shape = row["original_shape"]
+        original_rotation = row["original_rotation"] #ALISSA
         subject = row["subject"]
 
         subreg = NII.load(subreg_path, seg=True)
@@ -167,6 +176,16 @@ class GruberInferenceDataset(Dataset):
 
         # ct = ct * mask
         subreg = subreg * mask
+
+
+        ###        
+        if any(s > t for s, t in zip(subreg.shape, self.input_shape)):
+            print(f"Skipping subject {subject} vertebra {vertebra} (shape {subreg.shape} > {self.input_shape})")
+            return None
+        elif any(s > t for s, t in zip(vertseg.shape, self.input_shape)):
+            print(f"Skipping subject {subject} vertebra {vertebra} (shape {vertseg.shape} > {self.input_shape})")
+            return None
+        ###
 
         subreg, offset = pad_array_to_shape(subreg, self.input_shape)
         vertseg, _ = pad_array_to_shape(vertseg, self.input_shape)
@@ -195,6 +214,8 @@ class GruberInferenceDataset(Dataset):
         data_dict["original_orientation"] = str(original_orientation)
         data_dict["original_zoom"] = original_zoom
         data_dict["original_shape"] = original_shape
+        data_dict["original_rotation"] = original_rotation #ALISSA
+        data_dict["original_origin"] = row["original_origin"]
         data_dict["subject"] = subject
 
         return data_dict
@@ -209,6 +230,12 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
     original_orientation = vert_msk.orientation
     original_zoom = vert_msk.zoom
     original_shape = vert_msk.shape
+    original_rotation = vert_msk.rotation #ALISSA
+    original_origin = vert_msk.origin
+
+    print(f"original orientation: {original_orientation}")
+    print(f"original rotation: {original_rotation}")
+    print(f"original origin: {original_origin}")
 
     # Load data module parameters
     dm_params = json.load(open(dm_path, "r"))
@@ -270,6 +297,8 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
                 "original_orientation": original_orientation,
                 "original_zoom": original_zoom,
                 "original_shape": original_shape,
+                "original_rotation": original_rotation,  # ALISSA
+                "original_origin": original_origin, #ALISSA
             }
         )
 
@@ -297,6 +326,10 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
     partial_centroids = []
 
     for batch in dl:
+        # vertebra skipped bc shape is larger than input_shape
+        if batch is None:
+            continue
+
         batch = {
             k: v.to(model.device) if isinstance(v, torch.Tensor) else v
             for k, v in batch.items()
@@ -312,6 +345,13 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
         vertebra = batch["vertebra"].squeeze().detach().cpu().numpy()
         poi_indices = batch["poi_indices"].squeeze().detach().cpu().numpy()
 
+        original_rotation= batch["original_rotation"][0].detach().cpu().numpy() #ALISSA
+        print(f"original rotation: {original_rotation}")
+
+        print("original_origin =", batch["original_origin"])
+        print("type =", type(batch["original_origin"]))
+        print("shape =", getattr(batch["original_origin"], "shape", "no shape"))
+
         original_orientation = ast.literal_eval(batch["original_orientation"][0])
         original_zoom = (
             batch["original_zoom"][0][0].item(),
@@ -322,6 +362,12 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
             batch["original_shape"][0][0].item(),
             batch["original_shape"][1][0].item(),
             batch["original_shape"][2][0].item(),
+        )
+
+        original_origin = (
+            batch["original_origin"][0][0].item(),
+            batch["original_origin"][1][0].item(),
+            batch["original_origin"][2][0].item(),
         )
 
         subject = batch["subject"][0]
@@ -357,6 +403,8 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
                 "original_shape": original_shape,
                 "original_zoom": original_zoom,
                 "original_orientation": original_orientation,
+                "original_rotation": original_rotation, #ALISSA 
+                "original_origin": original_origin, #ALISSA
                 "centroids": unpadded_refined_preds_ctd.centroids,
             }
         )
@@ -367,15 +415,23 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
 
     pois.save(os.path.join(save_dir, sub, "poi_predicted.json"))
 
+    # Alissa: convert to global and save
+    pois.to_global().save_mrk(os.path.join(save_dir, sub, "poi_predicted_global.json"))
+
+    seg_mask = NII.load(vert_msk_path, seg=True) 
+    seg_mask.save(os.path.join(save_dir, sub, "seg_vert.nii.gz"))
+
     # Clear the temporary directory
     os.system(f"rm -r {temp_dir}")
 
 
 if __name__ == "__main__":
     bgi = BIDS_Global_info(
-        datasets=["/home/daniel/MEGA downloads/dataset-gruber"],
-        parents=["derivatives_seg_new"],
+        datasets=["/home/student/alissa/3dVertPois/src/predictions/dataset-myelom"],
+        parents=["derivatives"],
     )
+
+    save_dir = "predictions/myelom/surface/all_pois/no_freeze/version_0_epoch43"
 
     for sub, container in bgi.enumerate_subjects():
         vert_msk_path = get_vertseg(container)
@@ -386,5 +442,5 @@ if __name__ == "__main__":
             subreg_msk_path,
             model_path,
             dm_path,
-            "/home/daniel/MEGAsync/Uni",
+            save_dir,
         )
