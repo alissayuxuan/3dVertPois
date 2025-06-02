@@ -1,5 +1,5 @@
 {
-    "path": "experiment_logs/gruber/surface/sagittal/no_freeze",
+    "path": "experiments/experiment_logs/gruber/surface/sagittal/no_freeze",
     "name": "SA-DenseNet-PatchTransformer",
     "module_config": {
         "type": "PoiPredictionModule",

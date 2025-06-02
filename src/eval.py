@@ -606,6 +606,8 @@ if __name__ == "__main__":
     prediction_df = create_prediction_df(
         args.data_module_save_path, args.checkpoint_path, args.split, args.joint
     )
+    prediction_df = prediction_df[prediction_df['loss_mask'] == True]
+
     prediction_df.to_csv(os.path.join(args.save_path, "results.csv"))
     print("Prediction DataFrame saved")
 
@@ -635,6 +637,7 @@ if __name__ == "__main__":
     # Copy ground truth POIs to output directory for comparison
     for (sub, vert), paths in poi_paths_dict.items():
         gt_poi = POI.load(paths["gt"])
+        gt_poi = gt_poi.extract_region(vert)  # Extract region for the specific vertebra
         gt_save_path = os.path.join(prediction_files_path, f"{sub}_{vert}_gt.json")
         gt_poi.save(gt_save_path)
 
@@ -644,40 +647,3 @@ if __name__ == "__main__":
 
 
     print(f"Saved predictions and ground truths to: {prediction_files_path}")
-
-
-
-
-
-
-
-    """
-     # Create output directory
-    os.makedirs(args.save_path, exist_ok=True)
-
-    # Generate predictions and get paths
-    poi_paths_dict = create_prediction_poi_files(
-        data_module_save_path=args.data_module_save_path,
-        checkpoint_path=args.checkpoint_path,
-        poi_file_ending="_pred.json",
-        split=args.split,
-        joint=args.joint,
-        save_path=args.save_path,
-        return_paths=True,  # Returns dictionary with paths
-        project=True  # Project predictions onto surface
-    )
-
-    # Copy ground truth POIs to output directory for comparison
-    for (sub, vert), paths in poi_paths_dict.items():
-        gt_poi = POI.load(paths["gt"])
-        gt_save_path = os.path.join(args.save_path, f"{sub}_{vert}_gt.json")
-        gt_poi.save(gt_save_path)
-
-        seg_path = paths["seg_vert"]
-        seg_save_path = os.path.join(args.save_path, f"{sub}_{vert}_seg.nii.gz")
-        shutil.copy(seg_path, seg_save_path)
-
-
-    print(f"Saved predictions and ground truths to: {args.save_path}")
-    """
-

@@ -60,11 +60,13 @@ def filter_poi(poi_object: POI, subject_id: str, exclude_dict: dict[str, list[tu
     """
     if not isinstance(poi_object, POI):
         raise TypeError(f"Expected POI object, got {type(poi_object)}")
-    
+    print(f"pois before exclusion: {len(poi_object.centroids)}")
     pois_to_exclude = exclude_dict.get(subject_id, [])
     print(f"excluding pois length: {len(pois_to_exclude)}")
+    print(f"pois to exclude: \n{pois_to_exclude}")  
     if pois_to_exclude:
         poi_object = poi_object.remove(*pois_to_exclude) 
+    print(f"pois after exclusion: {len(poi_object.centroids)}")
         
     return poi_object
 
@@ -222,8 +224,6 @@ def get_bounding_box(mask, vert, margin=5):
     """
     indices = np.where(mask == vert)
 
-    print(f"get_bounding_box(), mask.shape: {mask.shape}")
-
     #debug
     if len(indices[0]) == 0:
         raise ValueError(f"Vertebra {vert} not found in the mask.")
@@ -261,25 +261,20 @@ def process_container(
     rescale_zoom: tuple | None,
     get_files_fn: Callable[[Subject_Container], tuple[POI, NII, NII, NII]],
     exclusion_dict: dict | None = None, #Alissa
+    #include_neighbouring_vertebrae: bool = False,  # Alissa
 ):
     poi, ct, subreg, vertseg = get_files_fn(container)
 
-
-    #if exclusion is specified, exlcude unwanted POIs
-    print("poi orginal length: ", len(poi))
     if exclusion_dict is not None:
         poi = filter_poi(poi, f"sub-{subject}", exclusion_dict)
-    print("poi (exlcuded) length: ", len(poi))
 
     
     #reorient data to same orientation
     #ct.reorient_(("L", "A", "S"))
     subreg.reorient_(("L", "A", "S"))
     vertseg.reorient_(("L", "A", "S"))
-    #poi.reorient_centroids_to(ct)
-    poi.reorient_(axcodes_to=ct.orientation, _shape=ct.shape) # the same as above? no reorient_centroids_to found in TPTBox
+    poi.reorient_(axcodes_to=ct.orientation, _shape=ct.shape) 
 
-    print(f"ct shape: {ct.shape}, subreg shape: {subreg.shape}, vertseg shape: {vertseg.shape}, poi shape: {poi.shape}")
 
     vertebrae = {key[0] for key in poi.keys()} 
     vertseg_arr = vertseg.get_array() 
@@ -333,9 +328,18 @@ def process_container(
                 vertseg_cropped.rescale_(rescale_zoom)
                 poi_cropped.rescale_(rescale_zoom)
 
+            #ALISSA: CHECK
+            if vert in [11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 24]:
+                if (vert, 101) in poi.centroids:
+                    print(f"subject: {subject}, Centroid ({vert}, 101) vorhanden!")
+                else:
+                    print(f"subject: {subject}, Centroid ({vert}, 101) NICHT vorhanden!")
+
+
             #ct_cropped.save(ct_path, verbose=False)
             subreg_cropped.save(subreg_path, verbose=False)
             vertseg_cropped.save(vertseg_path, verbose=False)
+            #print(f"poi_cropped: \n{poi_cropped.centroids}")
             poi_cropped.save(poi_path, verbose=False)
 
             # Save the slice indices as json to reconstruct the original POI file (there probably is a more BIDS-like approach to this)
@@ -377,6 +381,7 @@ def prepare_data(
     exclusion_path: str |None = None, # Alissa
     rescale_zoom: tuple | None = None,
     n_workers: int = 8,
+    include_neighbouring_vertebrae: bool = False,  # Alissa
 ):
     master = []
     exclusion_dict = (
@@ -391,6 +396,7 @@ def prepare_data(
         rescale_zoom=rescale_zoom,
         get_files_fn=get_files_fn,
         exclusion_dict=exclusion_dict,  # Pass None if not provided
+        #include_neighbouring_vertebrae=include_neighbouring_vertebrae,  # Alissa
     )
 
     for subject, container in bids_surgery_info.enumerate_subjects():
@@ -455,6 +461,15 @@ if __name__ == "__main__":
         help='Path to Excel file marking POIs to exclude',
         default=None
     )
+
+    """
+    parser.add_argument(
+        '--include_neighbouring_vertebrae',
+        action="store_true",
+        help='Whether to include neighbouring vertebrae in the bounding box extraction',
+        #default=False
+    )
+    """
     
     args = parser.parse_args()
     print(args.derivatives_name)
@@ -493,4 +508,5 @@ if __name__ == "__main__":
         get_files_fn=get_data_files,
         rescale_zoom=None if args.no_rescale else (1, 1, 1),
         n_workers=args.n_workers,
+        #include_neighbouring_vertebrae=args.include_neighbouring_vertebrae,
     )

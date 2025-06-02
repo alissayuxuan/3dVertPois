@@ -1,6 +1,6 @@
 {
     "dataset": "Gruber",
-    "master_df": "/home/student/alissa/3dVertPois/src/dataset/cutout-folder/cutouts_tpt_exclude/master_df.csv",
+    "master_df": "/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/cutout-folder/cutouts_exclude/master_df.csv",
     "train_subjects": [
         "WS-17",
         "WS-18",

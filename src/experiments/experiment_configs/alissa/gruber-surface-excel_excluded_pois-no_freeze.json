@@ -1,5 +1,5 @@
 {
-    "path": "experiment_logs/gruber/surface/excel_excluded_pois/no_freeze",
+    "path": "experiments/experiment_logs/gruber/surface/excel_excluded_pois/no_freeze",
     "name": "SA-DenseNet-PatchTransformer",
     "module_config": {
         "type": "PoiPredictionModule",
@@ -90,7 +90,7 @@
     "data_module_config": {
         "type": "GruberDataModule",
         "params": {
-            "master_df": "/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/cutout-folder/cutouts_tpt_exclude/master_df.csv",
+            "master_df": "/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/cutout-folder/cutouts_exclude/master_df.csv",
             "train_subjects": [
                 "WS-17",
                 "WS-18",
