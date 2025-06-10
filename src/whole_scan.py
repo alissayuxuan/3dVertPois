@@ -27,6 +27,8 @@ import eval as ev
 from prepare_data import get_bounding_box
 from utils.dataloading_utils import compute_surface, pad_array_to_shape
 from utils.misc import surface_project_coords
+from torch.utils.data.dataloader import default_collate
+
 
 dm_path = "experiments/experiment_logs/gruber/surface/all_pois/no_freeze/SA-DenseNet-PatchTransformer/version_0/data_module_params.json"
 model_path = "experiments/experiment_logs/gruber/surface/all_pois/no_freeze/SA-DenseNet-PatchTransformer/version_0/checkpoints/sad-pt-epoch=43-fine_mean_distance_val=10.55.ckpt"
@@ -181,7 +183,7 @@ class GruberInferenceDataset(Dataset):
         ###        
         if any(s > t for s, t in zip(subreg.shape, self.input_shape)):
             print(f"Skipping subject {subject} vertebra {vertebra} (shape {subreg.shape} > {self.input_shape})")
-            return None
+            return None        
         elif any(s > t for s, t in zip(vertseg.shape, self.input_shape)):
             print(f"Skipping subject {subject} vertebra {vertebra} (shape {vertseg.shape} > {self.input_shape})")
             return None
@@ -220,6 +222,11 @@ class GruberInferenceDataset(Dataset):
 
         return data_dict
 
+def safe_collate(batch):
+    batch = [b for b in batch if b is not None]
+    if len(batch) == 0:
+        return None  # All items skipped
+    return default_collate(batch)
 
 def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_dir):
     # Load the vert and subreg mask
@@ -233,9 +240,9 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
     original_rotation = vert_msk.rotation #ALISSA
     original_origin = vert_msk.origin
 
-    print(f"original orientation: {original_orientation}")
-    print(f"original rotation: {original_rotation}")
-    print(f"original origin: {original_origin}")
+    #print(f"original orientation: {original_orientation}")
+    #print(f"original rotation: {original_rotation}")
+    #print(f"original origin: {original_origin}")
 
     # Load data module parameters
     dm_params = json.load(open(dm_path, "r"))
@@ -319,7 +326,7 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
         master_df, input_shape=input_shape, include_vert_list=vert_list
     )
 
-    dl = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False)
+    dl = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False,  collate_fn=safe_collate)
 
     model = ev.load_model_from_checkpoint(model_path)
 
@@ -346,11 +353,11 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
         poi_indices = batch["poi_indices"].squeeze().detach().cpu().numpy()
 
         original_rotation= batch["original_rotation"][0].detach().cpu().numpy() #ALISSA
-        print(f"original rotation: {original_rotation}")
+        #print(f"original rotation: {original_rotation}")
 
-        print("original_origin =", batch["original_origin"])
-        print("type =", type(batch["original_origin"]))
-        print("shape =", getattr(batch["original_origin"], "shape", "no shape"))
+        #print("original_origin =", batch["original_origin"])
+        #print("type =", type(batch["original_origin"]))
+        #print("shape =", getattr(batch["original_origin"], "shape", "no shape"))
 
         original_orientation = ast.literal_eval(batch["original_orientation"][0])
         original_zoom = (
@@ -418,8 +425,21 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
     # Alissa: convert to global and save
     pois.to_global().save_mrk(os.path.join(save_dir, sub, "poi_predicted_global.json"))
 
+    print(f"POI - shape: {pois.shape}")
+    print(f"POI - zoom: {pois.zoom}")
+    print(f"POI - orientation: {pois.orientation}")
+    print(f"POI - rotation: {pois.rotation}")  # ALISSA
+    print(f"POI - origin: {pois.origin}")  # ALISSA
+
+
     seg_mask = NII.load(vert_msk_path, seg=True) 
     seg_mask.save(os.path.join(save_dir, sub, "seg_vert.nii.gz"))
+
+    print(f"Seg Mask - shape: {seg_mask.shape}")
+    print(f"Seg Mask - zoom: {seg_mask.zoom}")
+    print(f"Seg Mask - orientation: {seg_mask.orientation}")
+    print(f"Seg Mask - rotation: {seg_mask.rotation}")  # ALISSA
+    print(f"Seg Mask - origin: {seg_mask.origin}")  # ALISSA
 
     # Clear the temporary directory
     os.system(f"rm -r {temp_dir}")

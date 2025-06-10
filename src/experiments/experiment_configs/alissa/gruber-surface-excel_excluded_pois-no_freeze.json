@@ -1,5 +1,5 @@
 {
-    "path": "experiments/experiment_logs/gruber/surface/excel_excluded_pois/no_freeze",
+    "path": "experiments/experiment_logs/gruber/surface/every_poi_excluded_vert/no_freeze",
     "name": "SA-DenseNet-PatchTransformer",
     "module_config": {
         "type": "PoiPredictionModule",
@@ -8,7 +8,7 @@
                 "type": "SADenseNet",
                 "params": {
                     "in_channels": 1,
-                    "n_landmarks": 23,
+                    "n_landmarks": 35,
                     "loss_fn": "WingLoss",
                     "feature_l": 256,
                     "init_features": 64,
@@ -27,7 +27,7 @@
             "refinement_config": {
                 "type": "PatchTransformer",
                 "params": {
-                    "n_landmarks": 23,
+                    "n_landmarks": 35,
                     "n_verts": 22,
                     "patch_size": 16,
                     "poi_feature_l": 256,

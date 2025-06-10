@@ -571,8 +571,25 @@ def compute_vert_wise_metrics(df):
 
     return metrics_df
 
+def filter_high_error_pois(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
+    """
+    Gibt ein neues DataFrame mit subject, vertebra und poi_idx zurück,
+    für die der refined_proj_error größer als thre_hold ist.
+
+    Parameter:
+    df (pd.DataFrame): Eingabedatenframe mit Fehlerwerten.
+    threshold (float): Schwellwert für refined_proj_error.
+
+    Rückgabe:
+    pd.DataFrame: Gefiltertes DataFrame mit den Spalten subject, vertebra und poi_idx.
+    """
+    filtered_df = df[df['refined_proj_error'] > threshold]
+    return filtered_df[['subject', 'vertebra', 'poi_idx', 'refined_proj_error']].reset_index(drop=True)
+
 
 if __name__ == "__main__":
+
+    
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--data_module_save_path",
@@ -614,10 +631,27 @@ if __name__ == "__main__":
     """ Compute overall metrics """
     metrics_df = compute_overall_metrics(prediction_df)
     metrics_df.to_csv(os.path.join(args.save_path, "overall_metrics.csv"))
-
     print("Overal metrics saved")
 
+    """ Compute POI-wise metrics """
 
+    #prediction_df = pd.read_csv("experiments/experiment_evaluation/gruber/surface/excel_excluded_pois/no_freeze/val/version_2_epoch_55/results.csv")
+    #save_path = "experiments/experiment_evaluation/gruber/surface/excel_excluded_pois/no_freeze/val/version_2_epoch_55/"
+    poi_metrics_df = compute_poi_wise_metrics(prediction_df)
+    poi_metrics_df.to_csv(os.path.join(args.save_path, "poi_metrics.csv"))
+    print("POI-wise metrics saved")
+
+    """Compute vertebra-wise metrics """
+    vert_metrics_df = compute_vert_wise_metrics(prediction_df)
+    vert_metrics_df.to_csv(os.path.join(args.save_path, "vertebra_metrics.csv"))
+    print("Vertebra-wise metrics saved")
+
+    """Find Outliers"""
+    outlier_df = filter_high_error_pois(prediction_df, 10)
+    outlier_df.to_csv(os.path.join(args.save_path, "outliers_error_higher_10.csv"))
+    print("Outliers (error > 10) saved")
+
+    
     """ Create Prediction files """
     prediction_files_path = os.path.join(args.save_path, "prediction_files")
     os.makedirs(prediction_files_path, exist_ok=True)
