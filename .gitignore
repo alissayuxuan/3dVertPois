@@ -117,7 +117,7 @@ bids/*
 # ignore big data
 src/dataset/data_preprocessing/*
 src/experiments/*
-src/predictions/*233332
+src/predictions/*
 
 *.ckpt
 *.nii.gz

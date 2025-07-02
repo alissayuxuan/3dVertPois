@@ -79,10 +79,6 @@ class PoiDataset(Dataset):
         vertseg = NII.load(msk_path, seg=True)
         poi = POI.load(poi_path)
 
-        assert (
-            subreg.shape == vertseg.shape
-        ), f"Subreg and vertseg shapes do not match for subject {subject}"
-
         zoom = (1, 1, 1)
 
         # ct.rescale_and_reorient_(
@@ -100,7 +96,7 @@ class PoiDataset(Dataset):
 
         # Get the ground truth POIs
         poi, missing_pois = get_gt_pois(poi, vertebra, self.poi_indices)
-        print(f"Missing POIs for subject {subject}, vertebra {vertebra}: {missing_pois}")
+        #print(f"Missing POIs for subject {subject}, vertebra {vertebra}: {missing_pois}")
 
         poi_indices = torch.tensor(self.poi_indices)
 

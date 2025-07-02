@@ -60,13 +60,16 @@ def filter_poi(poi_object: POI, subject_id: str, exclude_dict: dict[str, list[tu
     """
     if not isinstance(poi_object, POI):
         raise TypeError(f"Expected POI object, got {type(poi_object)}")
-    print(f"pois before exclusion: {len(poi_object.centroids)}")
+    print(f"pois before exclusion: {poi_object.centroids}")
     pois_to_exclude = exclude_dict.get(subject_id, [])
-    print(f"excluding pois length: {len(pois_to_exclude)}")
-    print(f"pois to exclude: \n{pois_to_exclude}")  
+    #print(f"excluding pois length: {len(pois_to_exclude)}")
+    print(f"exclude_dict: {exclude_dict}")
+    print(f"subject_id: {subject_id}")
+    print(f"pois to exclude: \n{pois_to_exclude}") 
+
     if pois_to_exclude:
         poi_object = poi_object.remove(*pois_to_exclude) 
-    print(f"pois after exclusion: {len(poi_object.centroids)}")
+    #print(f"pois after exclusion: {len(poi_object.centroids)}")
         
     return poi_object
 
@@ -271,7 +274,7 @@ def process_container(
     #ct.reorient_(("L", "A", "S"))
     subreg.reorient_(("L", "A", "S"))
     vertseg.reorient_(("L", "A", "S"))
-    poi.reorient_(axcodes_to=ct.orientation, _shape=ct.shape) 
+    poi.reorient_(axcodes_to=vertseg.orientation, _shape=vertseg.shape) 
 
 
     vertebrae = {key[0] for key in poi.keys()} 
@@ -362,14 +365,6 @@ def process_container(
                 subreg_cropped.rescale_(rescale_zoom)
                 vertseg_cropped.rescale_(rescale_zoom)
                 poi_cropped.rescale_(rescale_zoom)
-
-            #ALISSA: CHECK
-            if vert in [11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 24]:
-                if (vert, 101) in poi.centroids:
-                    print(f"subject: {subject}, Centroid ({vert}, 101) vorhanden!")
-                else:
-                    print(f"subject: {subject}, Centroid ({vert}, 101) NICHT vorhanden!")
-
 
             #ct_cropped.save(ct_path, verbose=False)
             subreg_cropped.save(subreg_path, verbose=False)

@@ -30,9 +30,10 @@ from utils.misc import surface_project_coords
 from torch.utils.data.dataloader import default_collate
 
 
-dm_path = "experiments/experiment_logs/gruber/surface/all_pois/no_freeze/SA-DenseNet-PatchTransformer/version_0/data_module_params.json"
-model_path = "experiments/experiment_logs/gruber/surface/all_pois/no_freeze/SA-DenseNet-PatchTransformer/version_0/checkpoints/sad-pt-epoch=43-fine_mean_distance_val=10.55.ckpt"
-
+#dm_path = "experiments/experiment_logs/gruber/surface/all_pois/no_freeze/SA-DenseNet-PatchTransformer/version_0/data_module_params.json"
+dm_path = "experiments/experiment_logs/gruber/surface/every_poi_excluded_vert/no_freeze/SA-DenseNet-PatchTransformer/version_0/data_module_params.json"
+#model_path = "experiments/experiment_logs/gruber/surface/all_pois/no_freeze/SA-DenseNet-PatchTransformer/version_0/checkpoints/sad-pt-epoch=43-fine_mean_distance_val=10.55.ckpt"
+model_path = "experiments/experiment_logs/gruber/surface/every_poi_excluded_vert/no_freeze/SA-DenseNet-PatchTransformer/version_0/checkpoints/sad-pt-epoch=68-fine_mean_distance_val=5.43.ckpt"
 
 def get_subreg(container):
     subreg_query = container.new_query(flatten=True)
@@ -50,6 +51,12 @@ def get_vertseg(container):
     vertseg_query.filter("seg", "vert")
     vertseg_candidate = vertseg_query.candidates[0]
     return str(vertseg_candidate.file["nii.gz"])
+
+def get_poi(container):
+    poi_query = container.new_query(flatten=True)
+    poi_query.filter_format("poi")    
+    poi_candidate = poi_query.candidates[0]
+    return str(poi_candidate.file["json"])
 
 
 def combine_centroids(data_list):
@@ -111,28 +118,48 @@ class GruberInferenceDataset(Dataset):
         include_vert_list,
         poi_indices=[
             81,
+            82, #
+            83, 
+            84,
+            85,
+            86,
+            87,
+            88,
+            89, #
             101,
             102,
             103,
             104,
+            105, #
+            106, #
+            107, #
+            108, #
             109,
             110,
             111,
             112,
+            113, #
+            114, #
+            115, #
+            116, #
             117,
             118,
             119,
             120,
+            121, #
+            122, #
+            123, #
+            124, #
             125,
             127,
-            134,
-            136,
-            141,
-            142,
-            143,
-            144,
-            149,
-            151,
+            #134,
+            #136,
+            #141,
+            #142,
+            #143,
+            #144,
+            #149,
+            #151,
         ],
     ):
         self.master_df = master_df
@@ -228,10 +255,13 @@ def safe_collate(batch):
         return None  # All items skipped
     return default_collate(batch)
 
-def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_dir):
+def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_dir, gt_poi_path = None):
     # Load the vert and subreg mask
     vert_msk = NII.load(vert_msk_path, seg=True)
     subreg_msk = NII.load(subreg_msk_path, seg=True)
+    if gt_poi_path:
+        gt_poi = POI.load(gt_poi_path) # REMOVE WHEN NO GT POI available!
+    
 
     # Save the original orientation and zoom for later
     original_orientation = vert_msk.orientation
@@ -261,6 +291,12 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
     # Bring the masks to standard orientation. Zoom is applied AFTER cutting out the vertebrae
     vert_msk.reorient_(("L", "A", "S"))
     subreg_msk.reorient_(("L", "A", "S"))
+
+    if gt_poi_path:
+        gt_poi.reorient_(axcodes_to=vert_msk.orientation, _shape=vert_msk.shape) 
+        gt_poi.rescale_((1, 1, 1))
+
+
 
     # Load the data array
     vertseg_arr = vert_msk.get_array()
@@ -424,6 +460,7 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
 
     # Alissa: convert to global and save
     pois.to_global().save_mrk(os.path.join(save_dir, sub, "poi_predicted_global.json"))
+    gt_poi.to_global().save_mrk(os.path.join(save_dir, sub, "poi_gt_global.json"))
 
     print(f"POI - shape: {pois.shape}")
     print(f"POI - zoom: {pois.zoom}")
@@ -447,15 +484,16 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
 
 if __name__ == "__main__":
     bgi = BIDS_Global_info(
-        datasets=["/home/student/alissa/3dVertPois/src/predictions/dataset-myelom"],
+        datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder_test"],
         parents=["derivatives"],
     )
 
-    save_dir = "predictions/myelom/surface/all_pois/no_freeze/version_0_epoch43"
+    save_dir = "/home/student/alissa/3dVertPois/src/experiments/experiment_evaluation/poisoned_subjects"
 
     for sub, container in bgi.enumerate_subjects():
         vert_msk_path = get_vertseg(container)
         subreg_msk_path = get_subreg(container)
+        gt_poi_path = get_poi(container)
         predict(
             sub,
             vert_msk_path,
@@ -463,4 +501,6 @@ if __name__ == "__main__":
             model_path,
             dm_path,
             save_dir,
-        )
+            gt_poi_path
+        ) 
+

@@ -14,6 +14,7 @@ import pandas as pd
 import torch
 #from BIDS import POI
 from TPTBox.core.poi import POI
+from TPTBox import NII  # For loading NIfTI files
 
 import shutil  # For file operations
 
@@ -131,6 +132,17 @@ def create_prediction_poi_files(
 
         loss_mask_batch = batch["loss_mask"] #Alissa
 
+        coarse_preds_batch = batch["coarse_preds"]
+
+        subreg = NII.load(batch["subreg_path"][0], seg=True)
+        vertseg = NII.load(batch["msk_path"][0], seg=True)
+
+        match = subreg.assert_affine(vertseg, raise_error=False, verbose=True)
+
+        if not match:
+            print(f"❌ Affine/Metadata stimmt nicht überein bei: \nsubreg: {subreg.affine}, \nvertseg: {vertseg.affine}")
+        
+
         # Detach all tensors
         vertebra_batch = vertebra_batch.detach().cpu().numpy()
         refined_preds_batch = refined_preds_batch.detach().cpu().numpy()
@@ -157,8 +169,6 @@ def create_prediction_poi_files(
             
             #Alissa: Filter nur gültige POIs (mask == True)
             #mask = loss_mask_batch.astype(bool)
-            print(f"preds.shape: {preds.shape}, mask.shape: {mask.shape}")
-
             preds = preds[mask]
             indices = indices[mask]
 
@@ -192,6 +202,8 @@ def create_prediction_poi_files(
                         f"Warning: The save path {ctd_save_path} is the same as the original POI path. The new file will be saved with the ending '_pred.json'"
                     )
                     ctd_save_path = poi_path.replace(".json", "_pred.json")
+                    
+
             else:
                 # Make sure the save path exists
                 os.makedirs(save_path, exist_ok=True)
@@ -200,6 +212,35 @@ def create_prediction_poi_files(
                 )
 
             ctd.save(ctd_save_path, verbose=False)
+            
+            
+
+            # === (1) Speichere globale Prediction-POIs ===
+            if not os.path.exists(ctd_save_path):
+                print(f"⚠️ Prediction file not found: {ctd_save_path}")
+                continue
+            ctd_global_save_path = ctd_save_path.replace("_pred.json", "_pred_global.json")
+            POI.load(ctd_save_path).to_global().save_mrk(ctd_global_save_path)
+
+            # === (2) Speichere GT-POI-Datei ===
+            gt_poi = POI.load(poi_path).extract_region(vert)
+            gt_save_path = ctd_save_path.replace("_pred.json", "_gt.json")
+            gt_poi.save(gt_save_path)
+
+            # === (3) Speichere globale GT-POIs ===
+            gt_global_save_path = gt_save_path.replace("_gt.json", "_gt_global.json")
+            gt_poi.to_global().save_mrk(gt_global_save_path)
+
+            # === (4) Kopiere Segmentationsmaske ===
+            seg_vert_path = poi_path.replace("poi.json", "vertseg.nii.gz")
+            seg_save_path = ctd_save_path.replace("_pred.json", "_seg.nii.gz")
+            if os.path.exists(seg_vert_path):
+                shutil.copy(seg_vert_path, seg_save_path)
+            else:
+                print(f"⚠️ Segmentation file not found: {seg_vert_path}")
+
+
+
 
             if return_paths:
                 poi_paths_dict[sub, vert] = {
@@ -210,7 +251,6 @@ def create_prediction_poi_files(
 
     if return_paths:
         return poi_paths_dict
-
 
 def create_self_training_pois(
     data_module_save_path,
@@ -343,7 +383,6 @@ def create_self_training_pois(
             new_bad_pois["bad_poi_list"].append(bad_poi_indices)
 
     return new_bad_pois
-
 
 def run_predictions(
     data_module_save_path,
@@ -491,7 +530,6 @@ def run_predictions(
 
     return pred_dict
 
-
 def create_prediction_df(
     data_module_save_path,
     checkpoint_path,
@@ -526,7 +564,6 @@ def create_prediction_df(
     df = pd.DataFrame(pred_dict)
     return df
 
-
 def calculate_metrics(errors, threshold=2.0):
     mean_error = np.mean(errors)
     median_error = np.median(errors)
@@ -534,7 +571,6 @@ def calculate_metrics(errors, threshold=2.0):
     accuracy = np.mean(errors < threshold)
     max_error = np.max(errors)
     return mean_error, median_error, mse, accuracy, max_error
-
 
 def compute_overall_metrics(df):
     # Create an empty DataFrame to hold the metrics
@@ -553,7 +589,6 @@ def compute_overall_metrics(df):
 
     return metrics_df
 
-
 def compute_poi_wise_metrics(df):
     # Group by poi_idx and calculate metrics for refined_proj_error
     grouped = df.groupby("poi_idx")["refined_proj_error"]
@@ -562,10 +597,17 @@ def compute_poi_wise_metrics(df):
 
     return metrics_df
 
-
 def compute_vert_wise_metrics(df):
     # Group by vertebra and calculate metrics for refined_proj_error
     grouped = df.groupby("vertebra")["refined_proj_error"]
+    metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
+    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
+
+    return metrics_df
+
+def compute_sub_wise_metrics(df):
+    # Group by vertebra and calculate metrics for refined_proj_error
+    grouped = df.groupby("subject")["refined_proj_error"]
     metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
     metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
 
@@ -618,8 +660,8 @@ if __name__ == "__main__":
 
     os.makedirs(args.save_path, exist_ok=True)
 
-
-    """ Create DataFrame with prediction information """
+    
+    ### Create DataFrame with prediction information 
     prediction_df = create_prediction_df(
         args.data_module_save_path, args.checkpoint_path, args.split, args.joint
     )
@@ -628,12 +670,12 @@ if __name__ == "__main__":
     prediction_df.to_csv(os.path.join(args.save_path, "results.csv"))
     print("Prediction DataFrame saved")
 
-    """ Compute overall metrics """
+    ### Compute overall metrics 
     metrics_df = compute_overall_metrics(prediction_df)
     metrics_df.to_csv(os.path.join(args.save_path, "overall_metrics.csv"))
     print("Overal metrics saved")
 
-    """ Compute POI-wise metrics """
+    ### Compute POI-wise metrics 
 
     #prediction_df = pd.read_csv("experiments/experiment_evaluation/gruber/surface/excel_excluded_pois/no_freeze/val/version_2_epoch_55/results.csv")
     #save_path = "experiments/experiment_evaluation/gruber/surface/excel_excluded_pois/no_freeze/val/version_2_epoch_55/"
@@ -641,18 +683,24 @@ if __name__ == "__main__":
     poi_metrics_df.to_csv(os.path.join(args.save_path, "poi_metrics.csv"))
     print("POI-wise metrics saved")
 
-    """Compute vertebra-wise metrics """
+    ### Compute vertebra-wise metrics 
     vert_metrics_df = compute_vert_wise_metrics(prediction_df)
     vert_metrics_df.to_csv(os.path.join(args.save_path, "vertebra_metrics.csv"))
     print("Vertebra-wise metrics saved")
 
-    """Find Outliers"""
+    ### Compute subject-wise metrics
+    sub_metrics_df = compute_sub_wise_metrics(prediction_df)
+    sub_metrics_df.to_csv(os.path.join(args.save_path, "subject_metrics.csv"))
+    print("Subject-wise metrics saved")
+
+
+    ### Find Outliers
     outlier_df = filter_high_error_pois(prediction_df, 10)
     outlier_df.to_csv(os.path.join(args.save_path, "outliers_error_higher_10.csv"))
     print("Outliers (error > 10) saved")
-
     
-    """ Create Prediction files """
+    
+    ### Create Prediction files 
     prediction_files_path = os.path.join(args.save_path, "prediction_files")
     os.makedirs(prediction_files_path, exist_ok=True)
 
@@ -668,6 +716,7 @@ if __name__ == "__main__":
         project=True  
     )
 
+    """
     # Copy ground truth POIs to output directory for comparison
     for (sub, vert), paths in poi_paths_dict.items():
         gt_poi = POI.load(paths["gt"])
@@ -675,9 +724,13 @@ if __name__ == "__main__":
         gt_save_path = os.path.join(prediction_files_path, f"{sub}_{vert}_gt.json")
         gt_poi.save(gt_save_path)
 
+        # Save global ground truth POI
+        gt_global_save_path = gt_save_path.replace("_gt.json", "_gt_global.json")
+        gt_poi.to_global().save_mrk(gt_global_save_path)
+
         seg_path = paths["seg_vert"]
         seg_save_path = os.path.join(prediction_files_path, f"{sub}_{vert}_seg.nii.gz")
         shutil.copy(seg_path, seg_save_path)
-
+    """
 
     print(f"Saved predictions and ground truths to: {prediction_files_path}")
