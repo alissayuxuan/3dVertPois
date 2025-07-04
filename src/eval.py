@@ -53,6 +53,7 @@ def np_to_ctd(
     shape=(128, 128, 96),
     zoom=(1, 1, 1),
     offset=(0, 0, 0),
+    orientation=None,  # <- Neu: orientation als Argument
 ):
     ctd = {}
     for i, coords in enumerate(t):
@@ -63,14 +64,21 @@ def np_to_ctd(
         elif i < len(idx_list):
             ctd[vertebra, idx_list[i]] = coords
 
+    ###
+    if orientation is None:
+        raise ValueError("You must provide the orientation of the input POI.")
+
     ctd = POI(
         centroids=ctd,
-        orientation=("L", "A", "S"),
+        orientation=orientation,#("L", "A", "S"),
         zoom=zoom,
         shape=shape,
         origin=origin,
         rotation=rotation,
     )
+
+    ctd.reorient_(axcodes_to=("L", "A", "S"), verbose=False).rescale_((1, 1, 1), verbose=False)
+
     return ctd
 
 
@@ -178,6 +186,7 @@ def create_prediction_poi_files(
             rotation = ctd.rotation
             shape = ctd.shape
             zoom = ctd.zoom
+            orientation = ctd.orientation ### Alissa
 
             # Create the new POI file
             ctd = np_to_ctd(
@@ -189,6 +198,7 @@ def create_prediction_poi_files(
                 shape=shape,
                 zoom=zoom,
                 offset=offset,
+                orientation=orientation ### Alissa
             )
 
             if save_in_dir:
@@ -338,6 +348,7 @@ def create_self_training_pois(
             rotation = ctd.rotation
             shape = ctd.shape
             zoom = ctd.zoom
+            orientation = ctd.orientation ### Alissa
 
             # Where the loss mask is false (i.e. a bad gt), we use the predicted POI
             # as the new POI
@@ -361,6 +372,7 @@ def create_self_training_pois(
                 shape=shape,
                 zoom=zoom,
                 offset=offset,
+                orientation=orientation ### Alissa
             )
 
             ctd_save_path = poi_path.replace(

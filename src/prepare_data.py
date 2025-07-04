@@ -73,6 +73,21 @@ def filter_poi(poi_object: POI, subject_id: str, exclude_dict: dict[str, list[tu
         
     return poi_object
 
+def get_bad_poi_list(subject_id: str, vert: int,  exclude_dict: dict[str, list[tuple[int, int]]]) ->list[int]:
+    """
+    Args:
+        subject_id: Subject ID, e.g., 'WS-13'
+        vert_id: Vertebra ID, e.g., 
+        exclude_dict: Dict mapping subject_id -> list of (vert_id, poi_id)
+
+    Returns:
+        A list of global POI IDs
+    """
+    bad_pois = exclude_dict.get(subject_id, [])
+    filtered_pois = [ poi_id for vert_id, poi_id in bad_pois if vert_id == vert ]
+    return filtered_pois
+    
+
 
 def get_implants_poi(container) -> POI:
     poi_query = container.new_query(flatten=True)
@@ -266,8 +281,8 @@ def process_container(
 ):
     poi, ct, subreg, vertseg = get_files_fn(container)
 
-    if exclusion_dict is not None:
-        poi = filter_poi(poi, f"sub-{subject}", exclusion_dict)
+    #if exclusion_dict is not None:
+    #    poi = filter_poi(poi, f"sub-{subject}", exclusion_dict)
 
     
     #reorient data to same orientation
@@ -280,8 +295,6 @@ def process_container(
     vertebrae = {key[0] for key in poi.keys()} 
     vertseg_arr = vertseg.get_array() 
     summary = []
-
-    print("process container: included neighbouring vertebrae: ", include_neighbouring_vertebrae)
 
     #for vert in vertebrae: #loops through each vertebra ID (extracted from POI keys)
     vertebrae = sorted(vertebrae)
@@ -390,13 +403,24 @@ def process_container(
             ) as f:
                 json.dump(slice_indices, f)
 
-            summary.append(
-                {
-                    "subject": subject,
-                    "vertebra": vert,
-                    "file_dir": os.path.join(save_path, subject, str(vert)),
-                }
-            )
+            if exclusion_dict is not None:
+                summary.append(
+                    {
+                        "subject": subject,
+                        "vertebra": vert,
+                        "file_dir": os.path.join(save_path, subject, str(vert)),
+                        "bad_poi_list": get_bad_poi_list(f"sub-{subject}", vert, exclusion_dict)
+                    }
+                )
+            else: 
+                summary.append(
+                    {
+                        "subject": subject,
+                        "vertebra": vert,
+                        "file_dir": os.path.join(save_path, subject, str(vert)),
+                    }
+                )
+            
 
         else:
             print(f"Vertebra {vert} has no segmentation for subject {subject}")
