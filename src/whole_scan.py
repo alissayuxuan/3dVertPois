@@ -30,11 +30,6 @@ from utils.misc import surface_project_coords
 from torch.utils.data.dataloader import default_collate
 
 
-#dm_path = "experiments/experiment_logs/gruber/surface/all_pois/no_freeze/SA-DenseNet-PatchTransformer/version_0/data_module_params.json"
-dm_path = "experiments/experiment_logs/gruber/surface/every_poi_excluded_vert/no_freeze/SA-DenseNet-PatchTransformer/version_0/data_module_params.json"
-#model_path = "experiments/experiment_logs/gruber/surface/all_pois/no_freeze/SA-DenseNet-PatchTransformer/version_0/checkpoints/sad-pt-epoch=43-fine_mean_distance_val=10.55.ckpt"
-model_path = "experiments/experiment_logs/gruber/surface/every_poi_excluded_vert/no_freeze/SA-DenseNet-PatchTransformer/version_0/checkpoints/sad-pt-epoch=68-fine_mean_distance_val=5.43.ckpt"
-
 def get_subreg(container):
     subreg_query = container.new_query(flatten=True)
     subreg_query.filter_format("msk")
@@ -55,6 +50,8 @@ def get_vertseg(container):
 def get_poi(container):
     poi_query = container.new_query(flatten=True)
     poi_query.filter_format("poi")    
+    if not poi_query.candidates:
+        return None
     poi_candidate = poi_query.candidates[0]
     return str(poi_candidate.file["json"])
 
@@ -188,6 +185,11 @@ class GruberInferenceDataset(Dataset):
         original_zoom = row["original_zoom"]
         original_shape = row["original_shape"]
         original_rotation = row["original_rotation"] #ALISSA
+        original_origin = row["original_origin"] 
+        preprocessed_orientation = row["preprocessed_orientation"]
+        preprocessed_zoom = row["preprocessed_zoom"]
+        preprocessed_rotation = row["preprocessed_rotation"]
+        preprocessed_origin = row["preprocessed_origin"] #ALISSA
         subject = row["subject"]
 
         subreg = NII.load(subreg_path, seg=True)
@@ -244,7 +246,11 @@ class GruberInferenceDataset(Dataset):
         data_dict["original_zoom"] = original_zoom
         data_dict["original_shape"] = original_shape
         data_dict["original_rotation"] = original_rotation #ALISSA
-        data_dict["original_origin"] = row["original_origin"]
+        data_dict["original_origin"] = original_origin#row["original_origin"]
+        data_dict["preproccessed_orientation"] = str(preprocessed_orientation)
+        data_dict["preproccessed_zoom"] = preprocessed_zoom
+        data_dict["preproccessed_rotation"] = preprocessed_rotation
+        data_dict["preproccessed_origin"] = preprocessed_origin #ALISSA
         data_dict["subject"] = subject
 
         return data_dict
@@ -258,10 +264,7 @@ def safe_collate(batch):
 def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_dir, gt_poi_path = None):
     # Load the vert and subreg mask
     vert_msk = NII.load(vert_msk_path, seg=True)
-    subreg_msk = NII.load(subreg_msk_path, seg=True)
-    if gt_poi_path:
-        gt_poi = POI.load(gt_poi_path) # REMOVE WHEN NO GT POI available!
-    
+    subreg_msk = NII.load(subreg_msk_path, seg=True)    
 
     # Save the original orientation and zoom for later
     original_orientation = vert_msk.orientation
@@ -269,10 +272,6 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
     original_shape = vert_msk.shape
     original_rotation = vert_msk.rotation #ALISSA
     original_origin = vert_msk.origin
-
-    #print(f"original orientation: {original_orientation}")
-    #print(f"original rotation: {original_rotation}")
-    #print(f"original origin: {original_origin}")
 
     # Load data module parameters
     dm_params = json.load(open(dm_path, "r"))
@@ -291,11 +290,6 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
     # Bring the masks to standard orientation. Zoom is applied AFTER cutting out the vertebrae
     vert_msk.reorient_(("L", "A", "S"))
     subreg_msk.reorient_(("L", "A", "S"))
-
-    if gt_poi_path:
-        gt_poi.reorient_(axcodes_to=vert_msk.orientation, _shape=vert_msk.shape) 
-        gt_poi.rescale_((1, 1, 1))
-
 
 
     # Load the data array
@@ -321,6 +315,14 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
         # Reorient and rescale the cutouts to (1,1,1) mm resolution
         vert_cropped.rescale_((1, 1, 1))
         subreg_cropped.rescale_((1, 1, 1))
+
+        # TODO: origin und rotation rausziehen
+        preprocessed_origin = vert_cropped.origin
+        preprocessed_rotation = vert_cropped.rotation
+        #####ALISSA 040825
+        preprocessed_orientation = vert_cropped.orientation
+        preprocessed_zoom = vert_cropped.zoom
+
         subreg_cropped.save(subreg_path, verbose=False)
         vert_cropped.save(vert_path, verbose=False)
 
@@ -342,6 +344,10 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
                 "original_shape": original_shape,
                 "original_rotation": original_rotation,  # ALISSA
                 "original_origin": original_origin, #ALISSA
+                "preprocessed_orientation": preprocessed_orientation,
+                "preprocessed_zoom": preprocessed_zoom,
+                "preprocessed_rotation": preprocessed_rotation,
+                "preprocessed_origin": preprocessed_origin, #ALISSA
             }
         )
 
@@ -389,17 +395,21 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
         poi_indices = batch["poi_indices"].squeeze().detach().cpu().numpy()
 
         original_rotation= batch["original_rotation"][0].detach().cpu().numpy() #ALISSA
-        #print(f"original rotation: {original_rotation}")
-
-        #print("original_origin =", batch["original_origin"])
-        #print("type =", type(batch["original_origin"]))
-        #print("shape =", getattr(batch["original_origin"], "shape", "no shape"))
+        preproccessed_rotation = batch["preproccessed_rotation"][0].detach().cpu().numpy() #ALISSA
 
         original_orientation = ast.literal_eval(batch["original_orientation"][0])
+        preproccessed_orientation = ast.literal_eval(batch["preproccessed_orientation"][0])
+
         original_zoom = (
             batch["original_zoom"][0][0].item(),
             batch["original_zoom"][1][0].item(),
             batch["original_zoom"][2][0].item(),
+        )
+
+        preproccessed_zoom = (
+            batch["preproccessed_zoom"][0][0].item(),
+            batch["preproccessed_zoom"][1][0].item(),
+            batch["preproccessed_zoom"][2][0].item(),
         )
         original_shape = (
             batch["original_shape"][0][0].item(),
@@ -413,6 +423,12 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
             batch["original_origin"][2][0].item(),
         )
 
+        preproccessed_origin = (
+            batch["preproccessed_origin"][0][0].item(),
+            batch["preproccessed_origin"][1][0].item(),
+            batch["preproccessed_origin"][2][0].item(),
+        )
+        
         subject = batch["subject"][0]
 
         cutout_offset = batch["cutout_offset"].squeeze().detach().cpu().numpy()
@@ -420,17 +436,18 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
         unpadded_refined_preds_ctd = ev.np_to_ctd(
             pred_coords,
             vertebra=vertebra.item(),
-            origin=None,
-            rotation=None,
+            origin=preproccessed_origin,#original_origin, 
+            rotation=preproccessed_rotation,#original_rotation,
             idx_list=poi_indices,
             shape=input_shape,
-            zoom=(1, 1, 1),
+            zoom=preproccessed_zoom,#(1, 1, 1),
             offset=padding_offset,
+            orientation=preproccessed_orientation#("L", "A", "S"),
         )
 
         # Rescale and reorient the predicted landmarks to the original space
         unpadded_refined_preds_ctd.rescale_(original_zoom)
-        unpadded_refined_preds_ctd.reorient_(original_orientation)
+        #unpadded_refined_preds_ctd.reorient_(original_orientation)
 
         # Finally, add the cutout offset to the predicted landmarks
         new_centroids = {}
@@ -439,6 +456,9 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
             new_centroids[(v, p_idx)] = (new_coords[0], new_coords[1], new_coords[2])
 
         unpadded_refined_preds_ctd.centroids = new_centroids
+        # 040825 reorient after adding cutout offset
+        unpadded_refined_preds_ctd.reorient_(original_orientation)
+
 
         partial_centroids.append(
             {
@@ -460,14 +480,25 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
 
     # Alissa: convert to global and save
     pois.to_global().save_mrk(os.path.join(save_dir, sub, "poi_predicted_global.json"))
-    gt_poi.to_global().save_mrk(os.path.join(save_dir, sub, "poi_gt_global.json"))
+    
+    print(f"subject: {sub}")
+    if gt_poi_path:
+        gt_poi = POI.load(gt_poi_path)
+
+        print(f"GT - shape: {gt_poi.shape}")
+        print(f"GT - zoom: {gt_poi.zoom}")
+        print(f"GT - orientation: {gt_poi.orientation}")
+        print(f"GT - rotation: {gt_poi.rotation}")  
+        print(f"GT - origin: {gt_poi.origin}")  
+
+        gt_poi.save(os.path.join(save_dir, sub, "poi_gt.json"))
+        gt_poi.to_global().save_mrk(os.path.join(save_dir, sub, "poi_gt_global.json"))
 
     print(f"POI - shape: {pois.shape}")
     print(f"POI - zoom: {pois.zoom}")
     print(f"POI - orientation: {pois.orientation}")
-    print(f"POI - rotation: {pois.rotation}")  # ALISSA
-    print(f"POI - origin: {pois.origin}")  # ALISSA
-
+    print(f"POI - rotation: {pois.rotation}")  
+    print(f"POI - origin: {pois.origin}")  
 
     seg_mask = NII.load(vert_msk_path, seg=True) 
     seg_mask.save(os.path.join(save_dir, sub, "seg_vert.nii.gz"))
@@ -479,16 +510,31 @@ def predict(subject, vert_msk_path, subreg_msk_path, model_path, dm_path, save_d
     print(f"Seg Mask - origin: {seg_mask.origin}")  # ALISSA
 
     # Clear the temporary directory
-    os.system(f"rm -r {temp_dir}")
+    #os.system(f"rm -r {temp_dir}")
 
 
 if __name__ == "__main__":
+    
+    #bgi = BIDS_Global_info(
+    #    datasets=["/home/student/alissa/3dVertPois/src/predictions/dataset-myelom-small"],
+    #    parents=["derivatives"],
+    #)
+
     bgi = BIDS_Global_info(
-        datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder_test"],
+        datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder-test"],
         parents=["derivatives"],
     )
 
-    save_dir = "/home/student/alissa/3dVertPois/src/experiments/experiment_evaluation/poisoned_subjects"
+    save_dir = "/home/student/alissa/3dVertPois/src/predictions/test"
+    dm_path = "experiments/experiment_logs/all_subjects_test/model_1/SA-DenseNet-PatchTransformer/version_0/data_module_params.json"
+    model_path = "experiments/experiment_logs/all_subjects_test/model_1/SA-DenseNet-PatchTransformer/version_0/checkpoints/sad-pt-epoch=99-fine_mean_distance_val=1.92.ckpt"
+
+    #dm_path_2 = "experiments/experiment_logs/myelom/model_2/SA-DenseNet-PatchTransformer/version_0/data_module_params.json"
+    #model_path_2 = "experiments/experiment_logs/myelom/model_2/SA-DenseNet-PatchTransformer/version_0/checkpoints/sad-pt-epoch=138-fine_mean_distance_val=1.86.ckpt"
+    
+    #dm_path_3 = "experiments/experiment_logs/myelom/model_3/SA-DenseNet-PatchTransformer/version_1/data_module_params.json"
+    #model_path_3 = "experiments/experiment_logs/myelom/model_3/SA-DenseNet-PatchTransformer/version_1/checkpoints/sad-pt-epoch=111-fine_mean_distance_val=1.82.ckpt"
+
 
     for sub, container in bgi.enumerate_subjects():
         vert_msk_path = get_vertseg(container)
@@ -503,4 +549,5 @@ if __name__ == "__main__":
             save_dir,
             gt_poi_path
         ) 
+    
 

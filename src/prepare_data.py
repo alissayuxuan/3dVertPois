@@ -83,6 +83,8 @@ def get_bad_poi_list(subject_id: str, vert: int,  exclude_dict: dict[str, list[t
     Returns:
         A list of global POI IDs
     """
+    if exclude_dict is None:
+        return []
     bad_pois = exclude_dict.get(subject_id, [])
     filtered_pois = [ poi_id for vert_id, poi_id in bad_pois if vert_id == vert ]
     return filtered_pois
@@ -403,23 +405,15 @@ def process_container(
             ) as f:
                 json.dump(slice_indices, f)
 
-            if exclusion_dict is not None:
-                summary.append(
-                    {
-                        "subject": subject,
-                        "vertebra": vert,
-                        "file_dir": os.path.join(save_path, subject, str(vert)),
-                        "bad_poi_list": get_bad_poi_list(f"sub-{subject}", vert, exclusion_dict)
-                    }
-                )
-            else: 
-                summary.append(
-                    {
-                        "subject": subject,
-                        "vertebra": vert,
-                        "file_dir": os.path.join(save_path, subject, str(vert)),
-                    }
-                )
+            
+            summary.append(
+                {
+                    "subject": subject,
+                    "vertebra": vert,
+                    "file_dir": os.path.join(save_path, subject, str(vert)),
+                    "bad_poi_list": get_bad_poi_list(f"sub-{subject}", vert, exclusion_dict)
+                }
+            )
             
 
         else:
@@ -534,8 +528,6 @@ if __name__ == "__main__":
     bids_gloabl_info = BIDS_Global_info(
         datasets=[args.data_path], parents=["rawdata", args.derivatives_name]
     )
-
-    print("\n\nbids_gloabl_info: ", bids_gloabl_info)
 
 
     if args.dataset_type == "Gruber":

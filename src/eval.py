@@ -182,11 +182,30 @@ def create_prediction_poi_files(
 
             # Open the old POI file to get the origin and rotation
             ctd = POI.load(poi_path)
+
+            print(f"subject {sub}, vertebra {vert}")
+
+            print("Origin1:", ctd.origin)
+            print("Rotation1:", ctd.rotation)
+            print("Shape1:", ctd.shape)
+            print("Zoom1:", ctd.zoom)
+            print("Orientation1:", ctd.orientation)
+
+            # TODO: rotate und rescale aufrufen (reorient, rescale)
+            #ctd.rescale_and_reorient_(
+            #    axcodes_to=("L", "A", "S"), voxel_spacing=(1, 1, 1), verbose=False
+            #)
             origin = ctd.origin
             rotation = ctd.rotation
             shape = ctd.shape
             zoom = ctd.zoom
             orientation = ctd.orientation ### Alissa
+
+            #print("Origin2:", origin)
+            #print("Rotation2:", rotation)
+            #print("Shape2:", shape)
+            #print("Zoom2:", zoom)
+            #print("Orientation2:", orientation)
 
             # Create the new POI file
             ctd = np_to_ctd(
