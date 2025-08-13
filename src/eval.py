@@ -172,7 +172,7 @@ def create_prediction_poi_files(
             target_indices_batch,
             poi_path_batch,
             offset_batch,
-            loss_mask_batch, #Alissa
+            loss_mask_batch, #Alissa    
         ):
             
             #Alissa: Filter nur gültige POIs (mask == True)
