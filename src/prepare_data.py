@@ -46,7 +46,7 @@ def load_exclusion_dict(excel_path):
     return exclude_dict
 
 
-
+# benutze ich nicht mehr -> funktion löscht die POIs, aber ich will die einfach im bad_poi_list haben
 def filter_poi(poi_object: POI, subject_id: str, exclude_dict: dict[str, list[tuple[int, int]]]) -> POI:
     """Filter POIs by removing excluded ones for the given subject.
     
@@ -62,14 +62,12 @@ def filter_poi(poi_object: POI, subject_id: str, exclude_dict: dict[str, list[tu
         raise TypeError(f"Expected POI object, got {type(poi_object)}")
     print(f"pois before exclusion: {poi_object.centroids}")
     pois_to_exclude = exclude_dict.get(subject_id, [])
-    #print(f"excluding pois length: {len(pois_to_exclude)}")
     print(f"exclude_dict: {exclude_dict}")
     print(f"subject_id: {subject_id}")
     print(f"pois to exclude: \n{pois_to_exclude}") 
 
     if pois_to_exclude:
         poi_object = poi_object.remove(*pois_to_exclude) 
-    #print(f"pois after exclusion: {len(poi_object.centroids)}")
         
     return poi_object
 
@@ -282,10 +280,6 @@ def process_container(
     include_neighbouring_vertebrae: bool = False,  # Alissa
 ):
     poi, ct, subreg, vertseg = get_files_fn(container)
-
-    #if exclusion_dict is not None:
-    #    poi = filter_poi(poi, f"sub-{subject}", exclusion_dict)
-
     
     #reorient data to same orientation
     #ct.reorient_(("L", "A", "S"))
@@ -298,7 +292,6 @@ def process_container(
     vertseg_arr = vertseg.get_array() 
     summary = []
 
-    #for vert in vertebrae: #loops through each vertebra ID (extracted from POI keys)
     vertebrae = sorted(vertebrae)
     for index in range(len(vertebrae)): #loops through each vertebra ID (extracted from POI keys)
         vert = vertebrae[index]  
@@ -371,7 +364,7 @@ def process_container(
                 print(f"Error processing {subject}: {str(e)}")
                 print(f"Crop dimensions: x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}, z_min={z_min}, z_max={z_max}")
                 print(f"ex_slice: {(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))}")
-                #print(f"ct shape: {ct.shape},\n subreg shape: {subreg.shape},\n vertseg shape: {vertseg.shape}, poi shape: {poi.shape}")
+                print(f"ct shape: {ct.shape},\n subreg shape: {subreg.shape},\n vertseg shape: {vertseg.shape}, poi shape: {poi.shape}")
                 raise
             
             if rescale_zoom:
@@ -384,7 +377,6 @@ def process_container(
             #ct_cropped.save(ct_path, verbose=False)
             subreg_cropped.save(subreg_path, verbose=False)
             vertseg_cropped.save(vertseg_path, verbose=False)
-            #print(f"poi_cropped: \n{poi_cropped.centroids}")
             poi_cropped.save(poi_path, verbose=False)
 
             # Save the slice indices as json to reconstruct the original POI file (there probably is a more BIDS-like approach to this)
@@ -426,10 +418,10 @@ def prepare_data(
     bids_surgery_info: BIDS_Global_info,
     save_path: str,
     get_files_fn: callable,
-    exclusion_path: str |None = None, # Alissa
+    exclusion_path: str |None = None, 
     rescale_zoom: tuple | None = None,
     n_workers: int = 8,
-    include_neighbouring_vertebrae: bool = False,  # Alissa
+    include_neighbouring_vertebrae: bool = False,
 ):
     master = []
     exclusion_dict = (
@@ -438,19 +430,14 @@ def prepare_data(
         else None
     )
 
-    print("included neighbouring vertebrae: ", include_neighbouring_vertebrae)
-
     partial_process_container = partial(
         process_container,
         save_path=save_path,
         rescale_zoom=rescale_zoom,
         get_files_fn=get_files_fn,
         exclusion_dict=exclusion_dict,  # Pass None if not provided
-        include_neighbouring_vertebrae=include_neighbouring_vertebrae,  # Alissa
+        include_neighbouring_vertebrae=include_neighbouring_vertebrae, 
     )
-
-    for subject, container in bids_surgery_info.enumerate_subjects():
-        print(f"Subject: {subject}, Container: {container}")
 
     master = pqdm(
         bids_surgery_info.enumerate_subjects(),
@@ -517,7 +504,6 @@ if __name__ == "__main__":
         '--include_neighbouring_vertebrae',
         action="store_true",
         help='Whether to include neighbouring vertebrae in the bounding box extraction',
-        #default=False
     )
     
 

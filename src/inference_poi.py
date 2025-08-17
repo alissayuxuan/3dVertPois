@@ -88,9 +88,9 @@ def combine_centroids(data_list):
             entry["original_orientation"] == expected_orientation
         ), "Original orientations do not match."
 
-        """assert (
-            entry["original_rotation"] == expected_rotation
-        ), "Original rotations do not match."""
+        assert np.allclose(
+            entry["original_rotation"], expected_rotation, rtol=1e-10
+        ), "Original rotations do not match."
 
         # Combine the centroids
         for v_idx, p_idx, c in entry["centroids"].items():
@@ -178,11 +178,11 @@ class GruberInferenceDataset(Dataset):
         y_min = row["y_min"]
         z_min = row["z_min"]
 
-        #original_orientation = row["original_orientation"]
-        #original_zoom = row["original_zoom"]
-        #original_shape = row["original_shape"]
-        #original_rotation = row["original_rotation"] #ALISSA
-        #original_origin = row["original_origin"] 
+        original_orientation = row["original_orientation"]
+        original_zoom = row["original_zoom"]
+        original_shape = row["original_shape"]
+        original_rotation = row["original_rotation"]
+        original_origin = row["original_origin"] 
 
         preprocessed_orientation = row["preprocessed_orientation"]
         preprocessed_zoom = row["preprocessed_zoom"]
@@ -232,7 +232,7 @@ class GruberInferenceDataset(Dataset):
         # Uses default iterations of 1, must be changed if model was trained with more iterations ("thicker" surface)
         surface = compute_surface(subreg)
 
-        data_dict["input"] = subreg
+        data_dict["input"] = vertseg#subreg
         data_dict["surface"] = surface
         data_dict["vertebra"] = vertebra
         data_dict["padding_offset"] = torch.tensor(offset).float()
@@ -243,11 +243,11 @@ class GruberInferenceDataset(Dataset):
         data_dict["vert_list_idx"] = torch.tensor([self.vert_idx_to_list_idx[vertebra]])
         data_dict["cutout_offset"] = torch.tensor([x_min, y_min, z_min])
 
-        #data_dict["original_orientation"] = str(original_orientation)
-        #data_dict["original_zoom"] = original_zoom
-        #data_dict["original_shape"] = original_shape
-        #data_dict["original_rotation"] = original_rotation #ALISSA
-        #data_dict["original_origin"] = original_origin
+        data_dict["original_orientation"] = str(original_orientation)
+        data_dict["original_zoom"] = original_zoom
+        data_dict["original_shape"] = original_shape
+        data_dict["original_rotation"] = original_rotation #ALISSA
+        data_dict["original_origin"] = original_origin
 
         data_dict["preprocessed_orientation"] = str(preprocessed_orientation)
         data_dict["preprocessed_zoom"] = preprocessed_zoom
@@ -279,7 +279,14 @@ def preprocess_segmentation_masks(
     """
 
     vert_msk = NII.load(vert_msk_path, seg=True)
-    subreg_msk = NII.load(subreg_msk_path, seg=True)    
+    subreg_msk = NII.load(subreg_msk_path, seg=True)   
+
+    # Save original parameters to restore them later
+    original_orientation = vert_msk.orientation
+    original_zoom = vert_msk.zoom
+    original_shape = vert_msk.shape
+    original_rotation = vert_msk.rotation
+    original_origin = vert_msk.origin 
 
     # Create temp directory
     temp_dir = "tmp/"
@@ -346,6 +353,12 @@ def preprocess_segmentation_masks(
                 "preprocessed_rotation": preprocessed_rotation,
                 "preprocessed_origin": preprocessed_origin,
                 "preprocessed_shape": preprocessed_shape,
+
+                "original_orientation": original_orientation,
+                "original_zoom": original_zoom,
+                "original_shape": original_shape,
+                "original_rotation": original_rotation,  
+                "original_origin": original_origin,  
             }
         )
 
@@ -385,6 +398,7 @@ def create_prediction_poi_files(
     # TODO: load checkpoint
     model = ev.load_model_from_checkpoint(model_path)
 
+    partial_centroids = []
     # TODO: predict POIs
     for batch in dl:
 
@@ -433,6 +447,25 @@ def create_prediction_poi_files(
             batch["preprocessed_shape"][1][0].item(),
             batch["preprocessed_shape"][2][0].item(),
         )
+
+        # Get the original parameters
+        original_rotation = batch["original_rotation"][0].detach().cpu().numpy() 
+        original_orientation = ast.literal_eval(batch["original_orientation"][0])
+        original_zoom = (
+            batch["original_zoom"][0][0].item(),
+            batch["original_zoom"][1][0].item(),
+            batch["original_zoom"][2][0].item(),
+        )
+        original_origin = (
+            batch["original_origin"][0][0].item(),
+            batch["original_origin"][1][0].item(),
+            batch["original_origin"][2][0].item(),
+        )
+        original_shape = (
+            batch["original_shape"][0][0].item(),
+            batch["original_shape"][1][0].item(),
+            batch["original_shape"][2][0].item(),
+        )
  
         # get segmentation mask path
         vert_path = batch["vert_path"][0]      
@@ -451,9 +484,10 @@ def create_prediction_poi_files(
             orientation=preprocessed_orientation
         )
 
-        subject_dir = os.path.join(save_dir, str(subject))
+        subject_dir = os.path.join(save_dir, str(subject), "cutouts-preproccessed")
         os.makedirs(subject_dir, exist_ok=True)
 
+        # save POI and Segmentation masks (cutouts)
         ctd_save_path = os.path.join(
             subject_dir, str(subject) + "_" + str(vertebra) + "_pred.json"
         )
@@ -476,6 +510,43 @@ def create_prediction_poi_files(
         else:
             print(f"⚠️ Segmentation file not found: {subreg_path}")
 
+        
+        # TODO: combine centroids (rescale, add cutoutoffset and reorient to original space)
+        unpadded_refined_preds_ctd.rescale_(original_zoom)
+
+        new_centroids = {}
+        for v, p_idx, c in unpadded_refined_preds_ctd.centroids.items():
+            new_coords = c + cutout_offset
+            new_centroids[(v, p_idx)] = (new_coords[0], new_coords[1], new_coords[2])
+
+        unpadded_refined_preds_ctd.centroids = new_centroids
+
+        unpadded_refined_preds_ctd.reorient_(original_orientation)
+
+        partial_centroids.append(
+            {
+                "subject": subject,
+                "original_shape": original_shape,
+                "original_zoom": original_zoom,
+                "original_orientation": original_orientation,
+                "original_rotation": original_rotation, #ALISSA 
+                "original_origin": original_origin, #ALISSA
+                "centroids": unpadded_refined_preds_ctd.centroids,
+            }
+        )
+    
+    sub, pois = combine_centroids(partial_centroids)
+    
+    pois.save(os.path.join(save_dir, sub, "poi_predicted.json"))
+    pois.to_global().save_mrk(os.path.join(save_dir, sub, "poi_predicted_global.json"))
+
+    #vert_msk_path
+    if os.path.exists(vert_msk_path):
+        shutil.copy(vert_msk_path, os.path.join(save_dir, sub, "vertseg.nii.gz"))
+    else:
+        print(f"⚠️ Segmentation file not found: {vert_msk_path}")
+
+
 
 if __name__ == "__main__":
     
@@ -489,7 +560,7 @@ if __name__ == "__main__":
         parents=["derivatives"],
     )
 
-    save_dir = "/home/student/alissa/3dVertPois/src/predictions/test-inference-predictions"
+    save_dir = "/home/student/alissa/3dVertPois/src/predictions/test-inference-vertseg-combined"
     dm_path = "experiments/experiment_logs/all_subjects_test/model_1/SA-DenseNet-PatchTransformer/version_0/data_module_params.json"
     model_path = "experiments/experiment_logs/all_subjects_test/model_1/SA-DenseNet-PatchTransformer/version_0/checkpoints/sad-pt-epoch=99-fine_mean_distance_val=1.92.ckpt"
 

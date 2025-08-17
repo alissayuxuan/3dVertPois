@@ -152,7 +152,7 @@ class PoiDataset(Dataset):
             for bad_poi in bad_poi_list
             if bad_poi.item() in self.poi_indices
         ]
-        print("bad_poi_list: ", bad_poi_list_idx)
+        #print("bad_poi_list: ", bad_poi_list_idx)
         loss_mask[bad_poi_list_idx] = 0
         missing_poi_list_idx = [
             self.poi_idx_to_list_idx[missing_poi.item()] for missing_poi in missing_pois

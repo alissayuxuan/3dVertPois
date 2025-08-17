@@ -118,6 +118,7 @@ bids/*
 src/dataset/data_preprocessing/*
 src/experiments/*
 src/predictions/*
+src/ablation_study/*
 
 *.ckpt
 *.nii.gz
