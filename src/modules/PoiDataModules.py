@@ -36,6 +36,7 @@ class POIDataModule(pl.LightningDataModule):
         train_subjects: list,
         val_subjects: list,
         test_subjects: list,
+        input_data_type: str = "vertseg",
         input_shape: tuple = (128, 128, 96),
         flip_prob: float = 0.5,
         transform_config: dict | None = None,
@@ -53,6 +54,7 @@ class POIDataModule(pl.LightningDataModule):
         self.train_subjects = train_subjects
         self.val_subjects = val_subjects
         self.test_subjects = test_subjects
+        self.input_data_type = input_data_type
         self.input_shape = input_shape
         self.flip_prob = flip_prob
         self.include_com = include_com

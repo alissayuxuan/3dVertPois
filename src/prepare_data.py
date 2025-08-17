@@ -29,15 +29,15 @@ def load_exclusion_dict(excel_path):
 
     for _, row in df.iterrows():
         subject = row['subject']
-        label = int(row['label'])  # Stelle sicher, dass das ein int ist
+        label = int(row['label'])  
 
-        for col in df.columns[2:]:  # Spalten nach 'subject' und 'label'
+        for col in df.columns[2:]:  # columns : 'subject', 'label'
             val = str(row[col]).strip().lower()
             if val == 'x':
                 try:
-                    poi_id = int(col.strip().split()[0])  # z.B. '124 \n(VertBodAntCenR)' → 124
+                    poi_id = int(col.strip().split()[0])  # e.g. '124 \n(VertBodAntCenR)' → 124
                 except ValueError:
-                    continue  # Falls keine ID extrahierbar ist, überspringen
+                    continue  # is no valid POI ID can be extracted
 
                 if subject not in exclude_dict:
                     exclude_dict[subject] = []
@@ -276,8 +276,9 @@ def process_container(
     save_path: PathLike,
     rescale_zoom: tuple | None,
     get_files_fn: Callable[[Subject_Container], tuple[POI, NII, NII, NII]],
-    exclusion_dict: dict | None = None, #Alissa
-    include_neighbouring_vertebrae: bool = False,  # Alissa
+    exclusion_dict: dict | None = None, 
+    compute_surface_mask: bool = False, 
+    include_neighbouring_vertebrae: bool = False,
 ):
     poi, ct, subreg, vertseg = get_files_fn(container)
     
@@ -286,6 +287,15 @@ def process_container(
     subreg.reorient_(("L", "A", "S"))
     vertseg.reorient_(("L", "A", "S"))
     poi.reorient_(axcodes_to=vertseg.orientation, _shape=vertseg.shape) 
+
+    surface_mask = None
+    if compute_surface_mask:
+        print(f"Computing surface mask for subject {subject}")
+        try:
+            surface_mask = vertseg.compute_surface_mask(connectivity=3, dilated_surface=False)
+        except Exception as e:
+            print(f"Error computing surface mask for subject {subject}: {str(e)}")
+            surface_mask = None
 
 
     vertebrae = {key[0] for key in poi.keys()} 
@@ -342,6 +352,10 @@ def process_container(
             vertseg_path = os.path.join(save_path, subject, str(vert), "vertseg.nii.gz")
             poi_path = os.path.join(save_path, subject, str(vert), "poi.json")
 
+            if compute_surface_mask and surface_mask is not None:
+                surface_path = os.path.join(save_path, subject, str(vert), "surface_msk.nii.gz")
+
+
             #create directories if they do not exist
             if not os.path.exists(os.path.join(save_path, subject, str(vert))):
                 os.makedirs(os.path.join(save_path, subject, str(vert)))
@@ -360,6 +374,12 @@ def process_container(
                     o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
                 )
 
+                surface_mask_cropped = None
+                if compute_surface_mask and surface_mask is not None:
+                    surface_mask_cropped = surface_mask.apply_crop(
+                        ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+                    )
+
             except Exception as e:
                 print(f"Error processing {subject}: {str(e)}")
                 print(f"Crop dimensions: x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}, z_min={z_min}, z_max={z_max}")
@@ -374,10 +394,16 @@ def process_container(
                 vertseg_cropped.rescale_(rescale_zoom)
                 poi_cropped.rescale_(rescale_zoom)
 
+                if compute_surface_mask and surface_mask_cropped is not None:
+                    surface_mask_cropped.rescale_(rescale_zoom)
+
             #ct_cropped.save(ct_path, verbose=False)
             subreg_cropped.save(subreg_path, verbose=False)
             vertseg_cropped.save(vertseg_path, verbose=False)
             poi_cropped.save(poi_path, verbose=False)
+
+            if compute_surface_mask and surface_mask_cropped is not None:
+                surface_mask_cropped.save(surface_path, verbose=False)
 
             # Save the slice indices as json to reconstruct the original POI file (there probably is a more BIDS-like approach to this)
             slice_indices = {
@@ -421,6 +447,7 @@ def prepare_data(
     exclusion_path: str |None = None, 
     rescale_zoom: tuple | None = None,
     n_workers: int = 8,
+    compute_surface_mask: bool = False,
     include_neighbouring_vertebrae: bool = False,
 ):
     master = []
@@ -436,6 +463,7 @@ def prepare_data(
         rescale_zoom=rescale_zoom,
         get_files_fn=get_files_fn,
         exclusion_dict=exclusion_dict,  # Pass None if not provided
+        compute_surface_mask=compute_surface_mask,
         include_neighbouring_vertebrae=include_neighbouring_vertebrae, 
     )
 
@@ -499,6 +527,12 @@ if __name__ == "__main__":
         default=None
     )
 
+    parser.add_argument(
+        '--compute_surface_mask',
+        action="store_true",
+        help='Whether to compute the surface mask for the vertebrae',
+    )
+
     
     parser.add_argument(
         '--include_neighbouring_vertebrae',
@@ -542,5 +576,6 @@ if __name__ == "__main__":
         get_files_fn=get_data_files,
         rescale_zoom=None if args.no_rescale else (1, 1, 1),
         n_workers=args.n_workers,
+        compute_surface_mask=args.compute_surface_mask,
         include_neighbouring_vertebrae=args.include_neighbouring_vertebrae,
     )

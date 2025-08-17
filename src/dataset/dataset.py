@@ -18,6 +18,7 @@ class PoiDataset(Dataset):
         poi_indices,
         include_vert_list,
         poi_flip_pairs=None,
+        input_data_type="vertseg",
         input_shape=(128, 128, 96),
         transforms=None,
         flip_prob=0.5,
@@ -30,6 +31,7 @@ class PoiDataset(Dataset):
         if "use_sample" in master_df.columns:
             master_df = master_df[master_df["use_sample"]]
         self.master_df = master_df
+        self.input_data_type = input_data_type
         self.input_shape = input_shape
         self.poi_indices = poi_indices
         self.transform = Compose(transforms) if transforms else None
@@ -123,7 +125,14 @@ class PoiDataset(Dataset):
         subreg = subreg.unsqueeze(0)
         vertseg = vertseg.unsqueeze(0)
 
-        data_dict["input"] = vertseg#subreg
+        if self.input_data_type == "vertseg":  
+            data_dict["input"] = vertseg  
+        elif self.input_data_type == "subreg":   
+            data_dict["input"] = subreg  
+        #elif self.input_data_type == "ct":  
+        #    data_dict["input"] = ct
+
+        #data_dict["input"] = vertseg#subreg
         data_dict["target"] = poi
         data_dict["target_indices"] = poi_indices
 
