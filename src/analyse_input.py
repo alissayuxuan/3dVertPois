@@ -272,9 +272,7 @@ def add_outliers_to_master_df(master_df_path, outlier_paths, save_path=None):
 
     return master_df
 
-
-if __name__ == "__main__":
-    #analyse_original_orientation()
+def run_add_outliers_to_master_df():
     master_df_path = "dataset/data_preprocessing/cutout-folder/cutouts-bad_poi/master_df.csv"
     outlier_paths = [
         "experiments/experiment_evaluation/k_fold/fold_1/test/outliers_error_higher_10.csv",
@@ -288,3 +286,58 @@ if __name__ == "__main__":
 
     updated_master_df = add_outliers_to_master_df(master_df_path, outlier_paths, save_path)
     print(updated_master_df.head())
+
+
+def analyze_ct():
+
+    def get_ct(container) -> NII:
+        ct_query = container.new_query(flatten=True)
+        ct_query.filter_format("ct")
+        ct_query.filter_filetype("nii.gz")  # only nifti files
+        if not ct_query.candidates:
+            return None
+        ct_candidate = ct_query.candidates[0]
+        print(f"ct_candidate: ", ct_candidate)
+
+        try:
+            ct = ct_candidate.open_nii()
+            return ct
+        except Exception as e:
+            print(f"Error opening CT: {str(e)}")
+            return None
+    
+    def get_vertseg(container) -> NII:
+        vertseg_query = container.new_query(flatten=True)
+        vertseg_query.filter_format("msk")
+        vertseg_query.filter_filetype("nii.gz")  # only nifti files
+        vertseg_query.filter("seg", "vert")
+        vertseg_candidate = vertseg_query.candidates[0]
+        print(f"vertseg_candidate: {vertseg_candidate}")
+
+        try:
+            vertseg = vertseg_candidate.open_nii()
+            return vertseg
+        except Exception as e:
+            print(f"Error opening vertseg: {str(e)}")
+            return None
+
+    bgi = BIDS_Global_info(
+        datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder"],
+        parents=["derivatives", "rawdata"],
+    )
+
+    for sub, container in bgi.enumerate_subjects():
+        ct = get_ct(container)
+        vertseg = get_vertseg(container)
+
+        print(f"Subject: {sub}")
+        print(f"ct_shape: {ct.shape}")
+        print(f"vertseg_shape: {vertseg.shape}\n")
+
+#sub-WS-25_ses-20221024_seq-2_ct.json
+#sub-WS-25_ses-20221024_seq-2_ct.nii.gz
+
+if __name__ == "__main__":
+    #analyse_original_orientation()
+    #run_add_outliers_to_master_df()
+    analyze_ct()

@@ -102,8 +102,6 @@ def get_implants_poi(container) -> POI:
 def get_gruber_poi(container) -> POI:
     poi_query = container.new_query(flatten=True)
     poi_query.filter_format("poi")
-    #poi_query.filter("source", "gruber")
-    #print(f"Query candidates: {poi_query.candidates}")
 
     if not poi_query.candidates:
         print("ERROR: No POI candidates found!")
@@ -114,14 +112,10 @@ def get_gruber_poi(container) -> POI:
 
     try:
         poi = POI.load(poi_candidate.file["json"])
-        #print("Loaded POI with keys:", list(poi.keys()))
         return poi
     except Exception as e:
         print(f"Error loading POI: {str(e)}")
         return None
-    #poi = poi_candidate.open_ctd()
-    #("gruber_poi: ", poi)
-    #return poi
 
 """
 def get_gruber_registration_poi(container):
@@ -196,7 +190,6 @@ def get_subreg(container) -> NII:
     
 
 def get_vertseg(container) -> NII:
-    print("get_vertseg")
     vertseg_query = container.new_query(flatten=True)
     vertseg_query.filter_format("msk")
     vertseg_query.filter_filetype("nii.gz")  # only nifti files
@@ -280,23 +273,24 @@ def process_container(
     compute_surface_mask: bool = False, 
     include_neighbouring_vertebrae: bool = False,
 ):
+    
+    print(f"Processing Subject: {subject}")
     poi, ct, subreg, vertseg = get_files_fn(container)
     
     #reorient data to same orientation
-    #ct.reorient_(("L", "A", "S"))
+    ct.reorient_(("L", "A", "S"))
     subreg.reorient_(("L", "A", "S"))
     vertseg.reorient_(("L", "A", "S"))
     poi.reorient_(axcodes_to=vertseg.orientation, _shape=vertseg.shape) 
 
     surface_mask = None
     if compute_surface_mask:
-        print(f"Computing surface mask for subject {subject}")
         try:
             surface_mask = vertseg.compute_surface_mask(connectivity=3, dilated_surface=False)
         except Exception as e:
             print(f"Error computing surface mask for subject {subject}: {str(e)}")
             surface_mask = None
-
+    
 
     vertebrae = {key[0] for key in poi.keys()} 
     vertseg_arr = vertseg.get_array() 
@@ -347,23 +341,23 @@ def process_container(
                     continue
 
             #defines output paths for cropped files
-            #ct_path = os.path.join(save_path, subject, str(vert), "ct.nii.gz")
+            ct_path = os.path.join(save_path, subject, str(vert), "ct.nii.gz")
             subreg_path = os.path.join(save_path, subject, str(vert), "subreg.nii.gz")
             vertseg_path = os.path.join(save_path, subject, str(vert), "vertseg.nii.gz")
             poi_path = os.path.join(save_path, subject, str(vert), "poi.json")
 
             if compute_surface_mask and surface_mask is not None:
                 surface_path = os.path.join(save_path, subject, str(vert), "surface_msk.nii.gz")
-
+            
 
             #create directories if they do not exist
             if not os.path.exists(os.path.join(save_path, subject, str(vert))):
                 os.makedirs(os.path.join(save_path, subject, str(vert)))
 
             try:            
-                #ct_cropped = ct.apply_crop(
-                #    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-                #)
+                ct_cropped = ct.apply_crop(
+                    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+                )
                 subreg_cropped = subreg.apply_crop(
                     ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
                 )
@@ -389,7 +383,7 @@ def process_container(
             
             if rescale_zoom:
 
-                #ct_cropped.rescale_(rescale_zoom)
+                ct_cropped.rescale_(rescale_zoom)
                 subreg_cropped.rescale_(rescale_zoom)
                 vertseg_cropped.rescale_(rescale_zoom)
                 poi_cropped.rescale_(rescale_zoom)
@@ -397,7 +391,7 @@ def process_container(
                 if compute_surface_mask and surface_mask_cropped is not None:
                     surface_mask_cropped.rescale_(rescale_zoom)
 
-            #ct_cropped.save(ct_path, verbose=False)
+            ct_cropped.save(ct_path, verbose=False)
             subreg_cropped.save(subreg_path, verbose=False)
             vertseg_cropped.save(vertseg_path, verbose=False)
             poi_cropped.save(poi_path, verbose=False)
