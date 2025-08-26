@@ -36,7 +36,7 @@ class POIDataModule(pl.LightningDataModule):
         train_subjects: list,
         val_subjects: list,
         test_subjects: list,
-        input_data_type: str = "vertseg",
+        input_data_type: str = "subreg",
         input_shape: tuple = (128, 128, 96),
         flip_prob: float = 0.5,
         transform_config: dict | None = None,
@@ -115,6 +115,7 @@ class POIDataModule(pl.LightningDataModule):
         if self.dataset == "Gruber":
             self.train_dataset = GruberDataset(
                 self.train_df,
+                input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
                 include_com=self.include_com,
                 include_poi_list=self.include_poi_list,
@@ -126,6 +127,7 @@ class POIDataModule(pl.LightningDataModule):
             )
             self.val_dataset = GruberDataset(
                 self.val_df,
+                input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
                 include_com=self.include_com,
                 include_poi_list=self.include_poi_list,
@@ -137,6 +139,7 @@ class POIDataModule(pl.LightningDataModule):
             )
             self.test_dataset = GruberDataset(
                 self.test_df,
+                input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
                 include_com=self.include_com,
                 include_poi_list=self.include_poi_list,
@@ -214,6 +217,7 @@ class GruberDataModule(POIDataModule):
         train_subjects: list,
         val_subjects: list,
         test_subjects: list,
+        input_data_type: str = "subreg",
         input_shape: tuple = (128, 128, 96),
         flip_prob: float = 0.5,
         transform_config: dict | None = None,
@@ -231,6 +235,7 @@ class GruberDataModule(POIDataModule):
             train_subjects=train_subjects,
             val_subjects=val_subjects,
             test_subjects=test_subjects,
+            input_data_type=input_data_type,
             input_shape=input_shape,
             flip_prob=flip_prob,
             transform_config=transform_config,

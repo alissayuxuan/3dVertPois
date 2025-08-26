@@ -399,6 +399,7 @@ class NoPoiVertPatchTransformer(nn.Module):
         self.lr = lr
 
         self.warmup_epochs = warmup_epochs
+        print(f"Refinement Module: NoPoiVertPatchTransformer")
 
     def forward(self, batch):
         coarse_preds = batch["coarse_preds"]
@@ -574,6 +575,8 @@ class NoPoiFeaturePatchTransformer(nn.Module):
 
         self.warmup_epochs = warmup_epochs
 
+        print("Refinement Module: NoPoiFeaturePatchTransformer")
+
     def forward(self, batch):
         coarse_preds = batch["coarse_preds"]
         poi_indices = batch["poi_list_idx"]
@@ -688,9 +691,9 @@ class NoCoarsePredTransformer(nn.Module):
         self,
         n_landmarks: int,
         n_verts: int,
-        patch_size: int,
+        #patch_size: int,
         poi_feature_l: int,
-        patch_feature_l: int,
+        #patch_feature_l: int,
         #coord_embedding_l: int,
         poi_embedding_l: int,
         vert_embedding_l: int,
@@ -705,8 +708,8 @@ class NoCoarsePredTransformer(nn.Module):
     ):
         super().__init__()
 
-        self.refinement_module = PoiTransformer(
-            poi_feature_l=poi_feature_l + patch_feature_l,
+        self.refinement_module = FlexiblePoiTransformer(
+            poi_feature_l=poi_feature_l, #+ patch_feature_l,
             coord_embedding_l=None,
             poi_embedding_l=poi_embedding_l,
             vert_embedding_l=vert_embedding_l,
@@ -726,6 +729,8 @@ class NoCoarsePredTransformer(nn.Module):
 
         self.warmup_epochs = warmup_epochs
 
+        print("Refinement Module: NoCoarsePredTransformer")
+
     def forward(self, batch):
         #coarse_preds = batch["coarse_preds"]
         poi_indices = batch["poi_list_idx"]
@@ -735,7 +740,7 @@ class NoCoarsePredTransformer(nn.Module):
         coords_preds = self.refinement_module(
             coarse_preds=None,
             poi_indices=poi_indices,
-            vertebra_indices=vertebra_indices,
+            vertebra=vertebra_indices,
             poi_features=poi_features
         )
         batch["offsets"] = coords_preds

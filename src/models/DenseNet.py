@@ -178,6 +178,7 @@ class HeatmapDenseNet(nn.Module):
         act: str | tuple = ("relu", {"inplace": True}),
         norm: str | tuple = "batch",
         dropout_prob: float = 0.0,
+        weight_features: bool = True
     ) -> None:
         super().__init__()
 
@@ -264,6 +265,8 @@ class HeatmapDenseNet(nn.Module):
                 nn.init.constant_(torch.as_tensor(m.bias), 0)
             elif isinstance(m, nn.Linear):
                 nn.init.constant_(torch.as_tensor(m.bias), 0)
+        
+        self.weight_features = weight_features
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x.float()  # Ensure input is float
@@ -287,8 +290,15 @@ class HeatmapDenseNet(nn.Module):
         # heatmaps_normalized is (B, N, H, W, D)
         # feature_map_expanded is (B, 1, F, H, W, D)
         # We want the output to be (B, N, F), summing over the spatial dimensions (H, W, D)
-        weighted_features = (
-            normalized_heatmaps.unsqueeze(2).detach() * feature_map_expanded
-        ).sum(dim=(3, 4, 5))
+        if self.weight_features:
+            # weight the feature maps with the heatmaps
+            landmark_features = (
+                normalized_heatmaps.unsqueeze(2).detach() * feature_map_expanded
+            ).sum(dim=(3, 4, 5))
 
-        return normalized_heatmaps, weighted_features
+        else:
+            # global average pooling of feature maps (no heatmap weighting)
+            global_features = feature_map.mean(dim=(2, 3, 4))  # (B, feature_l)
+            landmark_features = global_features.unsqueeze(1).expand(-1, N, -1)  # (B, N, feature_l)
+
+        return normalized_heatmaps, landmark_features

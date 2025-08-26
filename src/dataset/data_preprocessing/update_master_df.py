@@ -176,21 +176,21 @@ def add_excel_and_outliers_to_master_df(master_df_path, excel_exclude_path=None,
 
 if __name__ == "__main__":
 
-    mode = 'both'  # Default mode
+    mode = 'both'  # please change
 
-    master_df_path = 'cutout-folder/cutouts-all_pois/master_df.csv'
+    master_df_path = 'cutout-folder/cutouts/master_df.csv'
     excel_exclude_path = 'exclude/correction_excel'
     outlier_paths = [
-        "experiments/experiment_evaluation/k_fold/fold_1/test/outliers_error_higher_10.csv",
-        "experiments/experiment_evaluation/k_fold/fold_2/test/outliers_error_higher_10.csv",
-        "experiments/experiment_evaluation/k_fold/fold_3/test/outliers_error_higher_10.csv",
-        "experiments/experiment_evaluation/k_fold/fold_4/test/outliers_error_higher_10.csv",
-        "experiments/experiment_evaluation/k_fold/fold_5/test/outliers_error_higher_10.csv",
-        "experiments/experiment_evaluation/k_fold/fold_6/test/outliers_error_higher_10.csv"
+        "../../experiments/experiment_evaluation/k_fold/fold_1/test/outliers_error_higher_10.csv",
+        "../../experiments/experiment_evaluation/k_fold/fold_2/test/outliers_error_higher_10.csv",
+        "../../experiments/experiment_evaluation/k_fold/fold_3/test/outliers_error_higher_10.csv",
+        "../../experiments/experiment_evaluation/k_fold/fold_4/test/outliers_error_higher_10.csv",
+        "../../experiments/experiment_evaluation/k_fold/fold_5/test/outliers_error_higher_10.csv",
+        "../../experiments/experiment_evaluation/k_fold/fold_6/test/outliers_error_higher_10.csv"
         ]
-    save_path_excel = 'cutout-folder/cutouts-all_pois/master_df-excel_exclude.csv'
-    save_path_outliers = 'cutout-folder/cutouts-all_pois/master_df-outliers_exclude.csv'
-    save_path_both = 'cutout-folder/cutouts-all_pois/master_df-excel_outliers_exclude.csv'
+    save_path_excel = 'cutout-folder/cutouts/master_df-excel_exclude.csv'
+    save_path_outliers = 'cutout-folder/cutouts/master_df-outliers_exclude.csv'
+    save_path_both = 'cutout-folder/cutouts/master_df-excel_outliers_exclude.csv'
 
 
 

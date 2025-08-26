@@ -18,7 +18,7 @@ class PoiDataset(Dataset):
         poi_indices,
         include_vert_list,
         poi_flip_pairs=None,
-        input_data_type="vertseg",
+        input_data_type="subreg",
         input_shape=(128, 128, 96),
         transforms=None,
         flip_prob=0.5,
@@ -73,28 +73,37 @@ class PoiDataset(Dataset):
         ct_path = os.path.join(file_dir, "ct.nii.gz")
         msk_path = os.path.join(file_dir, "vertseg.nii.gz")
         subreg_path = os.path.join(file_dir, "subreg.nii.gz")
+        surface_msk_path = os.path.join(file_dir, "surface_msk.nii.gz")
         poi_path = os.path.join(file_dir, self.poi_file_ending)
 
         # Load the BIDS objects
-        # ct = NII.load(ct_path, seg = False)
+        ct = NII.load(ct_path, seg = False)
         subreg = NII.load(subreg_path, seg=True)
         vertseg = NII.load(msk_path, seg=True)
+        surface_msk = NII.load(surface_msk_path, seg=True)
         poi = POI.load(poi_path)
 
         zoom = (1, 1, 1)
 
-        # ct.rescale_and_reorient_(
-        #   axcodes_to=('L', 'A', 'S'), voxel_spacing = zoom, verbose = False
-        # )
+        ct.rescale_and_reorient_(
+            axcodes_to=('L', 'A', 'S'), voxel_spacing = zoom, verbose = False
+        )
         subreg.rescale_and_reorient_(
             axcodes_to=("L", "A", "S"), voxel_spacing=zoom, verbose=False
         )
         vertseg.rescale_and_reorient_(
             axcodes_to=("L", "A", "S"), voxel_spacing=zoom, verbose=False
         )
+        surface_msk.rescale_and_reorient_(
+            axcodes_to=("L", "A", "S"), voxel_spacing=zoom, verbose=False
+        )
         poi.reorient_(axcodes_to=("L", "A", "S"), verbose=False).rescale_(
             zoom, verbose=False
         )
+
+        #TODO: muss ich CT scans normalisieren?
+        ct.normalize_ct(min_out=0, max_out=1, inplace=True)
+
 
         # Get the ground truth POIs
         poi, missing_pois = get_gt_pois(poi, vertebra, self.poi_indices)
@@ -103,34 +112,50 @@ class PoiDataset(Dataset):
         poi_indices = torch.tensor(self.poi_indices)
 
         # Get arrays
-        # ct = ct.get_array()
+        ct = ct.get_array()
         subreg = subreg.get_array()
         vertseg = vertseg.get_array()
+        surface_msk = surface_msk.get_array()
 
         mask = vertseg == vertebra
 
-        # ct = ct * mask
+        ct = ct * mask
         subreg = subreg * mask
+        vertseg = vertseg * mask
+        surface_msk = surface_msk * mask
+        
 
         subreg, offset = pad_array_to_shape(subreg, self.input_shape)
         vertseg, _ = pad_array_to_shape(vertseg, self.input_shape)
+        surface_msk, _ = pad_array_to_shape(surface_msk, self.input_shape)
+        ct, _ = pad_array_to_shape(ct, self.input_shape)
 
         poi = poi + torch.tensor(offset)
 
-        # Convert subreg and vertseg to tensors
+        # Convert subreg, vertseg and surface_msk to tensors
+        ct = torch.from_numpy(ct.astype(float))
         subreg = torch.from_numpy(subreg.astype(float))
         vertseg = torch.from_numpy(vertseg.astype(float))
+        surface_msk = torch.from_numpy(surface_msk.astype(float))
 
         # Add channel dimension
+        ct = ct.unsqueeze(0)
         subreg = subreg.unsqueeze(0)
         vertseg = vertseg.unsqueeze(0)
+        surface_msk = surface_msk.unsqueeze(0)
 
         if self.input_data_type == "vertseg":  
             data_dict["input"] = vertseg  
+            print("vertseg")
         elif self.input_data_type == "subreg":   
             data_dict["input"] = subreg  
-        #elif self.input_data_type == "ct":  
-        #    data_dict["input"] = ct
+            print("subreg")
+        elif self.input_data_type == "ct":  
+            data_dict["input"] = ct
+            print("ct")
+        elif self.input_data_type == "surface_msk":
+            data_dict["input"] = surface_msk
+            print("surface_msk")
 
         #data_dict["input"] = vertseg#subreg
         data_dict["target"] = poi
@@ -277,6 +302,7 @@ class GruberDataset(PoiDataset):
     def __init__(
         self,
         master_df,
+        input_data_type="subreg",
         input_shape=(128, 128, 96),
         transforms=None,
         flip_prob=0.5,
@@ -473,6 +499,7 @@ class GruberDataset(PoiDataset):
                 #50: 50,
                 #0: 0,
             },
+            input_data_type=input_data_type,
             input_shape=input_shape,
             transforms=transforms,
             flip_prob=flip_prob,
