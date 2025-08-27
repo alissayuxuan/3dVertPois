@@ -321,7 +321,7 @@ class GruberDataset(PoiDataset):
                     [
                         81,
                         82, #
-                        83,
+                        83, 
                         84,
                         85,
                         86,
@@ -332,24 +332,29 @@ class GruberDataset(PoiDataset):
                         102,
                         103,
                         104,
+                        105, #
+                        106, #
+                        107, #
+                        108, #
                         109,
                         110,
                         111,
                         112,
+                        113, #
+                        114, #
+                        115, #
+                        116, #
                         117,
                         118,
                         119,
                         120,
+                        121, #
+                        122, #
+                        123, #
+                        124, #
                         125,
                         127,
-                        134,
-                        136,
-                        141,
-                        142,
-                        143,
-                        144,
-                        149,
-                        151,
+
                         41,
                         42,
                         43,
@@ -398,14 +403,6 @@ class GruberDataset(PoiDataset):
                         124, #
                         125,
                         127,
-                        #134,
-                        #136,
-                        #141,
-                        #142,
-                        #143,
-                        #144,
-                        #149,
-                        #151,
                     ]
                 )
             ),
@@ -452,8 +449,6 @@ class GruberDataset(PoiDataset):
                 108: 108, #
                 125: 125,
                 127: 127,
-                #134: 134,
-                #136: 136,
                 # Flipped left to right
                 83: 82,
                 84: 85,
@@ -467,9 +462,6 @@ class GruberDataset(PoiDataset):
                 114: 122, #
                 115: 123, #
                 116: 124, #
-                #149: 141,
-                #151: 143,
-                #142: 144,
                 # Flipped right to left
                 82: 83,
                 85: 84,
@@ -483,21 +475,19 @@ class GruberDataset(PoiDataset):
                 122: 114, 
                 123: 115,
                 124: 116,
-                #141: 149,
-                #143: 151,
-                #144: 142,
                 # Center of mass, does not need to be flipped
-                #41: 41,
-                #42: 42,
-                #43: 43,
-                #44: 44,
-                #45: 45,
-                #46: 46,
-                #47: 47,
-                #48: 48,
-                #49: 49,
-                #50: 50,
-                #0: 0,
+                # TODO: Passt das so??? geht das auch wenn include_com=false ist und die POIs gar nicht definiert sind?
+                41: 41,
+                42: 42,
+                43: 43,
+                44: 44,
+                45: 45,
+                46: 46,
+                47: 47,
+                48: 48,
+                49: 49,
+                50: 50,
+                0: 0,
             },
             input_data_type=input_data_type,
             input_shape=input_shape,
@@ -637,3 +627,6 @@ class JointDataset(PoiDataset):
             flip_prob=flip_prob,
             poi_file_ending=poi_file_ending,
         )
+
+
+
