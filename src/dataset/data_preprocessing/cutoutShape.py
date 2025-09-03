@@ -7,7 +7,7 @@ def find_max_shape():
     Findet die maximale Form (Shape) aller 'vertseg.nii.gz' Dateien in den Unterordnern von '/cutouts'.
     Gibt die maximale Form als Tuple zurück.
     """
-    base_dir = 'cutout-folder/cutouts_neighbor_exclude'  # Basisordner anpassen, falls nötig
+    base_dir = 'cutout-folder/cutouts-neighbor'  # Basisordner anpassen, falls nötig
 
     max_shape = None
 

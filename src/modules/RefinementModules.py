@@ -58,8 +58,9 @@ class Identity(RefinementModule):
     This is useful for testing the feature extraction module in isolation.
     """
 
-    def __init__(self):
+    def __init__(self, project_gt: bool = False,):
         super().__init__()
+        self.project_gt = project_gt
 
     def forward(self, batch):
         return batch
@@ -68,7 +69,55 @@ class Identity(RefinementModule):
         return 0
 
     def calculate_metrics(self, batch, mode):
-        return {}
+
+        metrics = {}
+
+        loss_mask = batch["loss_mask"]  # (batch_size, n_landmarks)
+        fine_preds = batch["coarse_preds"]  # (batch_size, n_landmarks, 3)
+        target = batch["target"]  # (batch_size, n_landmarks, 3)
+        target_indices = batch["target_indices"]  # (batch_size, n_landmarks)
+
+        if self.project_gt:
+            # Project targets to surface
+            surface = batch["surface"]
+            target, projection_dist = surface_project_coords(target, surface)
+
+            metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
+
+        # Calculate the mean Euclidean distance between the predicted and target landmarks
+        distances = torch.norm(fine_preds - target, dim=-1)  # (batch_size, n_landmarks)
+        distances_mean, distances_std = distances.mean(), distances.std()
+
+        # Mask the distances with the loss mask
+        distances_masked = distances[loss_mask]
+        distances_masked_mean, distances_masked_std = (
+            distances_masked.mean(),
+            distances_masked.std(),
+        )
+
+        metrics[f"fine_mean_distance_{mode}"] = distances_mean
+        metrics[f"fine_std_distance_{mode}"] = distances_std
+        metrics[f"fine_mean_distance_masked_{mode}"] = distances_masked_mean
+        metrics[f"fine_std_distance_masked_{mode}"] = distances_masked_std
+
+        # Calculate the magnitude of the offsets
+        metrics[f"offsets_magnitude_mean_{mode}"] = 0.0
+        metrics[f"offsets_magnitude_std_{mode}"] = 0.0
+        metrics[f"offsets_magnitude_masked_mean_{mode}"] = 0.0
+        metrics[f"offsets_magnitude_masked_std_{mode}"] = 0.0
+
+        # Calculate mean Euclidian distance grouped by landmark type
+        for i, landmark_type in enumerate(target_indices.unique()):
+            landmark_mask = target_indices == landmark_type
+            landmark_mask = landmark_mask * loss_mask
+            distances_landmark = distances[landmark_mask]
+            distances_landmark_mean = distances_landmark.mean()
+            metrics[f"fine_mean_distance_{landmark_type.item()}_{mode}"] = (
+                distances_landmark_mean
+            )
+
+        return metrics
+        
 
 
 class FeatureTransformer(nn.Module):

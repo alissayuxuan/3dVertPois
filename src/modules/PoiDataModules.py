@@ -8,12 +8,16 @@ import pytorch_lightning as pl
 import torch
 #from BIDS import BIDS_Global_info
 from TPTBox import BIDS_Global_info
+import json
+
 
 
 from pqdm.processes import pqdm
 from torch.utils.data import DataLoader
 
-from dataset.dataset import GruberDataset, ImplantsDataset, JointDataset, PoiDataset
+from dataset.dataset import custom_collate_fn
+
+from dataset.dataset import GruberDataset, ImplantsDataset, JointDataset, PoiDataset, GruberNeighborDataset
 from transforms.transforms import create_transform
 from utils.dataloading_utils import (
     get_ct,
@@ -150,6 +154,45 @@ class POIDataModule(pl.LightningDataModule):
                 iterations=self.surface_erosion_iterations,
             )
 
+
+        elif self.dataset == "GruberNeighbor":  # NEU
+            self.train_dataset = GruberNeighborDataset(  
+                self.train_df,
+                input_data_type=self.input_data_type,
+                input_shape=self.input_shape,
+                include_com=self.include_com,
+                include_poi_list=self.include_poi_list,
+                include_vert_list=self.include_vert_list,
+                transforms=transform,
+                flip_prob=0.0,  # Explizit deaktiviert
+                poi_file_ending=self.poi_file_ending,
+                iterations=self.surface_erosion_iterations,
+            )
+            self.val_dataset = GruberNeighborDataset(
+                self.val_df,
+                input_data_type=self.input_data_type,
+                input_shape=self.input_shape,
+                include_com=self.include_com,
+                include_poi_list=self.include_poi_list,
+                include_vert_list=self.include_vert_list,
+                transforms=None,
+                flip_prob=0.0,
+                poi_file_ending=self.poi_file_ending,
+                iterations=self.surface_erosion_iterations,
+            )
+            self.test_dataset = GruberNeighborDataset(
+                self.test_df,
+                input_data_type=self.input_data_type,
+                input_shape=self.input_shape,
+                include_com=self.include_com,
+                include_poi_list=self.include_poi_list,
+                include_vert_list=self.include_vert_list,
+                transforms=None,
+                flip_prob=0.0,
+                poi_file_ending=self.poi_file_ending,
+                iterations=self.surface_erosion_iterations,
+            )
+
         elif self.dataset == "Implants":
             self.train_dataset = ImplantsDataset(
                 self.train_df,
@@ -191,6 +234,7 @@ class POIDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=True,
+            #collate_fn=custom_collate_fn
         )
 
     def val_dataloader(self):
@@ -199,6 +243,7 @@ class POIDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=False,
+            #collate_fn=custom_collate_fn
         )
 
     def test_dataloader(self):
@@ -460,11 +505,30 @@ class JointDataModule(pl.LightningDataModule):
         )
 
 
+class GruberNeighborDataModule(POIDataModule):
+    def __init__(self, **kwargs):        
+        # deactivate horizontal flip
+        if kwargs.get('flip_prob', 0) > 0:
+            print("WARNING: flip_prob set to 0.0 for neighbor dataset")
+            kwargs['flip_prob'] = 0.0
+            
+        kwargs['input_shape'] = (120, 121, 149)
+        super().__init__(dataset="GruberNeighbor", **kwargs)
+
+    def prepare_data(self, bids_surgery_info, save_path, rescale_zoom=None):
+        gruber_get_files = partial(
+            get_files, get_poi=get_gruber_poi, get_ct=get_ct, 
+            get_subreg=get_subreg, get_vertseg=get_vertseg,
+        )
+        super().prepare_data(bids_surgery_info, save_path, gruber_get_files, rescale_zoom)
+
 def create_data_module(config):
     module_type = config["type"]
     module_params = config["params"]
     if module_type == "GruberDataModule":
         return GruberDataModule(**module_params)
+    elif module_type == "GruberNeighborDataModule":  
+        return GruberNeighborDataModule(**module_params)
     elif module_type == "ImplantsDataModule":
         return ImplantsDataModule(**module_params)
     elif module_type == "JointDataModule":
@@ -474,6 +538,16 @@ def create_data_module(config):
 
 
 if __name__ == "__main__":
+    config_path = "neighbors-test/datamodule_config.json"
+    with open(config_path, "r") as f:
+            config = json.load(f)
+
+    data_module = create_data_module(config)
+    data_module.setup()
+
+    
+
+    """
     bids_surgery_poi = BIDS_Global_info(
         ["/home/daniel/Data/Implants/dataset-implants"], additional_key=["seq"]
     )
@@ -491,3 +565,4 @@ if __name__ == "__main__":
 
     data_module = GruberDataModule()
     data_module.prepare_data(bids_surgery_poi, save_path, rescale_zoom=(1, 1, 1))
+    """
