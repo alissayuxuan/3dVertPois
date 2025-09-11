@@ -41,16 +41,38 @@ def get_subreg(container):
     subreg_query.filter_format("msk")
     subreg_query.filter_filetype("nii.gz")  # only nifti files
     subreg_query.filter("seg", "subreg")
+    if not subreg_query.candidates:
+        print("ERROR: No subreg candidates found!")
+        return None
+    #subreg_candidate = subreg_query.candidates[0]
+    #return str(subreg_candidate.file["nii.gz"])
     subreg_candidate = subreg_query.candidates[0]
-    return str(subreg_candidate.file["nii.gz"])
+
+    try:
+        subreg = subreg_candidate.open_nii()
+        return subreg
+    except Exception as e:
+        print(f"Error opening subreg: {str(e)}")
+        return None
 
 def get_vertseg(container):
     vertseg_query = container.new_query(flatten=True)
     vertseg_query.filter_format("msk")
     vertseg_query.filter_filetype("nii.gz")  # only nifti files
     vertseg_query.filter("seg", "vert")
+    if not vertseg_query.candidates:
+        print("ERROR: No vertseg candidate found!")
+        return None
+    #vertseg_candidate = vertseg_query.candidates[0]
+    #return str(vertseg_candidate.file["nii.gz"])
     vertseg_candidate = vertseg_query.candidates[0]
-    return str(vertseg_candidate.file["nii.gz"])
+
+    try:
+        vertseg = vertseg_candidate.open_nii()
+        return vertseg
+    except Exception as e:
+        print(f"Error opening vertseg: {str(e)}")
+        return None
 
 def get_poi(container):
     poi_query = container.new_query(flatten=True)
@@ -116,6 +138,7 @@ class GruberInferenceDataset(Dataset):
         self,
         master_df,
         input_shape,
+        input_data_type,
         include_vert_list,
         poi_indices=[
             81,
@@ -157,6 +180,7 @@ class GruberInferenceDataset(Dataset):
     ):
         self.master_df = master_df
         self.input_shape = input_shape
+        self.input_data_type = input_data_type
         self.poi_indices = torch.tensor(poi_indices)
         self.poi_idx_to_list_idx = {poi: idx for idx, poi in enumerate(poi_indices)}
         self.vert_idx_to_list_idx = {
@@ -232,7 +256,11 @@ class GruberInferenceDataset(Dataset):
         # Uses default iterations of 1, must be changed if model was trained with more iterations ("thicker" surface)
         surface = compute_surface(subreg)
 
-        data_dict["input"] = vertseg#subreg
+        if self.input_data_type == "vertseg":
+            data_dict["input"] = vertseg
+        elif self.input_data_type == "subreg":
+            data_dict["input"] = subreg
+
         data_dict["surface"] = surface
         data_dict["vertebra"] = vertebra
         data_dict["padding_offset"] = torch.tensor(offset).float()
@@ -270,16 +298,16 @@ def safe_collate(batch):
 
 def preprocess_segmentation_masks(
     subject,
-    vert_msk_path,
-    subreg_msk_path,
+    vert_msk,
+    subreg_msk,
     vert_list
 ):
     """
     Preprocess segmentation masks and create a master dataframe.
     """
-
-    vert_msk = NII.load(vert_msk_path, seg=True)
-    subreg_msk = NII.load(subreg_msk_path, seg=True)   
+    print(f"preprocessing subject: {subject}")
+    #vert_msk = NII.load(vert_msk_path, seg=True)
+    #subreg_msk = NII.load(subreg_msk_path, seg=True)   
 
     # Save original parameters to restore them later
     original_orientation = vert_msk.orientation
@@ -373,8 +401,8 @@ def preprocess_segmentation_masks(
 
 def create_prediction_poi_files(
     subject,
-    vert_msk_path,
-    subreg_msk_path,
+    vert_msk,
+    subreg_msk,
     dm_path,
     model_path,
     save_dir,
@@ -383,23 +411,25 @@ def create_prediction_poi_files(
     # Load data module parameters
     dm_params = json.load(open(dm_path, "r"))
     input_shape = dm_params["input_shape"]
+    input_data_type = dm_params["input_data_type"]
     vert_list = dm_params["include_vert_list"]
     poi_indices = dm_params["include_poi_list"]
 
-    # TODO: preprocess segmentation masks and then save the info in a master_df ( create a /tmp)
-    master_df, temp_dir = preprocess_segmentation_masks(subject, vert_msk_path, subreg_msk_path, vert_list)
+    # preprocess segmentation masks and then save the info in a master_df ( create a /tmp)
+    master_df, temp_dir = preprocess_segmentation_masks(subject, vert_msk, subreg_msk, vert_list)
     
-    # TODO: get data_module and create dataset
+    print(f"inferencing subject: {subject}")
+    # get data_module and create dataset
     ds = GruberInferenceDataset(
-        master_df, input_shape=input_shape, include_vert_list=vert_list
+        master_df, input_shape=input_shape, input_data_type=input_data_type, include_vert_list=vert_list
     )
     dl = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False,  collate_fn=safe_collate)
 
-    # TODO: load checkpoint
+    # load checkpoint
     model = ev.load_model_from_checkpoint(model_path)
 
     partial_centroids = []
-    # TODO: predict POIs
+    # predict POIs
     for batch in dl:
 
         if batch is None:
@@ -541,49 +571,57 @@ def create_prediction_poi_files(
     pois.to_global().save_mrk(os.path.join(save_dir, sub, "poi_predicted_global.json"))
 
     #vert_msk_path
-    if os.path.exists(vert_msk_path):
-        shutil.copy(vert_msk_path, os.path.join(save_dir, sub, "vertseg.nii.gz"))
-    else:
-        print(f"⚠️ Segmentation file not found: {vert_msk_path}")
+    vert_msk.save(os.path.join(save_dir, sub, "vertseg.nii.gz"))
 
 
 
 if __name__ == "__main__":
     
-    #bgi = BIDS_Global_info(
-    #    datasets=["/home/student/alissa/3dVertPois/src/predictions/dataset-myelom-small"],
-    #    parents=["derivatives"],
-    #)
-
     bgi = BIDS_Global_info(
-        datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder-test"],
+        datasets=["/home/student/alissa/3dVertPois/src/predictions/dataset-myelom"],
         parents=["derivatives"],
     )
 
-    save_dir = "/home/student/alissa/3dVertPois/src/predictions/test-inference-vertseg-combined"
-    dm_path = "experiments/experiment_logs/all_subjects_test/model_1/SA-DenseNet-PatchTransformer/version_0/data_module_params.json"
-    model_path = "experiments/experiment_logs/all_subjects_test/model_1/SA-DenseNet-PatchTransformer/version_0/checkpoints/sad-pt-epoch=99-fine_mean_distance_val=1.92.ckpt"
+    #bgi = BIDS_Global_info(
+    #    datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder-test"],
+    #    parents=["derivatives"],
+    #)
 
-    #dm_path_2 = "experiments/experiment_logs/myelom/model_2/SA-DenseNet-PatchTransformer/version_0/data_module_params.json"
-    #model_path_2 = "experiments/experiment_logs/myelom/model_2/SA-DenseNet-PatchTransformer/version_0/checkpoints/sad-pt-epoch=138-fine_mean_distance_val=1.86.ckpt"
-    
-    #dm_path_3 = "experiments/experiment_logs/myelom/model_3/SA-DenseNet-PatchTransformer/version_1/data_module_params.json"
-    #model_path_3 = "experiments/experiment_logs/myelom/model_3/SA-DenseNet-PatchTransformer/version_1/checkpoints/sad-pt-epoch=111-fine_mean_distance_val=1.82.ckpt"
+    save_dir = "/home/student/alissa/3dVertPois/src/predictions/myelom-inferenced/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude"
+    dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
+    model_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=74-fine_mean_distance_val=1.77.ckpt"
 
+    subjects_inferenced = 0
 
     for sub, container in bgi.enumerate_subjects():
-        vert_msk_path = get_vertseg(container)
-        subreg_msk_path = get_subreg(container)
+        print(f"Subject: {sub}")
+        if subjects_inferenced >= 10:
+            print(f"10 Subjects have been inferenced. Break.")
+            break
+
+        vert_msk = get_vertseg(container)
+        subreg_msk = get_subreg(container)
+
         #gt_poi_path = get_poi(container)
+
+        if vert_msk is None or subreg_msk is None:
+            print(f"Skip Subject: {sub} - not all data available")
+            continue
+
+        if vert_msk.shape != subreg_msk.shape:
+            print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and subreg {subreg_msk.shape} shapes don't match")
+            continue
 
         create_prediction_poi_files(
             sub,
-            vert_msk_path,
-            subreg_msk_path,
+            vert_msk,
+            subreg_msk,
             dm_path,
             model_path,
             save_dir,
             project_to_surface=False,
         ) 
+
+        subjects_inferenced += 1
     
 

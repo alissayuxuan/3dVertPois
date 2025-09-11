@@ -113,11 +113,43 @@ def rescale_cutouts(zoom:tuple):
                 poi.to_global().save_mrk(save_global_poi_path)           
 
 
+def mask_seg():
+    subreg_16_12_path = "cutout-folder/cutouts/WS-16/12/subreg.nii.gz"
+    vertseg_16_12_path = "cutout-folder/cutouts/WS-16/12/vertseg.nii.gz"
+    vert = 12
+
+    subreg = NII.load(subreg_16_12_path, seg=True)
+    vertseg = NII.load(vertseg_16_12_path, seg=True)
+
+    # Extract only vertebra 12 from the vertebra segmentation  
+    vert_12_mask = vertseg.extract_label(12)  
+      
+    # Apply the mask to the subregion  
+    masked_subreg = subreg.apply_mask(vert_12_mask)  
+      
+    masked_subreg.save("ppt_seg/subreg_16_12.nii.gz")
+    """
+    subreg_arr = subreg.get_array()
+    vertseg_arr = vertseg.get_array()
+    
+
+    mask = (vertseg_arr == vert)
+    new_subreg = subreg_arr * mask # correct??
+
+    subreg.set_array(new_subreg)
+
+    subreg.save("ppt_seg/subreg_16_12.nii.gz")
+    """
+
+
+
 if __name__ == "__main__":
-    find_max_shape()
+    #find_max_shape()
     #rescale_cutouts((2, 2, 2))
 
     #copy_and_update_master_df(
     #    base_dir='cutout-folder/cutouts',
     #    save_dir='cutout-folder/cutouts-2.0_zoom'
     #)
+
+    mask_seg()

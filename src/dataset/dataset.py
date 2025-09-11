@@ -21,6 +21,7 @@ class PoiDataset(Dataset):
         poi_flip_pairs=None,
         input_data_type="subreg",
         input_shape=(128, 128, 96),
+        zoom=(1, 1, 1),
         transforms=None,
         flip_prob=0.5,
         include_com=False,
@@ -34,6 +35,7 @@ class PoiDataset(Dataset):
         self.master_df = master_df
         self.input_data_type = input_data_type
         self.input_shape = input_shape
+        self.zoom = zoom
         self.poi_indices = poi_indices
         self.transform = Compose(transforms) if transforms else None
         if flip_prob > 0:
@@ -49,6 +51,7 @@ class PoiDataset(Dataset):
             vert: idx for idx, vert in enumerate(include_vert_list)
         }
         self.iterations = iterations
+        
 
     def __len__(self):
         return len(self.master_df)
@@ -84,25 +87,22 @@ class PoiDataset(Dataset):
         surface_msk = NII.load(surface_msk_path, seg=True)
         poi = POI.load(poi_path)
 
-        zoom = (1, 1, 1)
-
         ct.rescale_and_reorient_(
-            axcodes_to=('L', 'A', 'S'), voxel_spacing = zoom, verbose = False
+            axcodes_to=('L', 'A', 'S'), voxel_spacing = self.zoom, verbose = False
         )
         subreg.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=zoom, verbose=False
+            axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
         )
         vertseg.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=zoom, verbose=False
+            axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
         )
         surface_msk.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=zoom, verbose=False
+            axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
         )
         poi.reorient_(axcodes_to=("L", "A", "S"), verbose=False).rescale_(
-            zoom, verbose=False
+            self.zoom, verbose=False
         )
 
-        #TODO: muss ich CT scans normalisieren?
         ct.normalize_ct(min_out=0, max_out=1, inplace=True)
 
 
@@ -196,7 +196,7 @@ class PoiDataset(Dataset):
         data_dict["surface"] = surface
         data_dict["subject"] = str(subject)
         data_dict["vertebra"] = vertebra
-        data_dict["zoom"] = torch.tensor(zoom).float()
+        data_dict["zoom"] = torch.tensor(self.zoom).float()
         data_dict["offset"] = torch.tensor(offset).float()
         data_dict["ct_path"] = ct_path
         data_dict["msk_path"] = msk_path
@@ -210,210 +210,7 @@ class PoiDataset(Dataset):
         return data_dict
 
 
-    
-    def ex_getitem(self, index):
-        data_dict = {}
-
-        # Read the row from the master dataframe
-        row = self.master_df.iloc[index]
-        subject = row["subject"]
-        vertebra = row["vertebra"]
-        file_dir = row["file_dir"]
-
-        # Get the paths
-        ct_path = os.path.join(file_dir, "ct.nii.gz")
-        msk_path = os.path.join(file_dir, "vertseg.nii.gz")
-        subreg_path = os.path.join(file_dir, "subreg.nii.gz")
-        surface_msk_path = os.path.join(file_dir, "surface_msk.nii.gz")
-        poi_path = os.path.join(file_dir, self.poi_file_ending)
-
-        # Load the BIDS objects
-        ct = NII.load(ct_path, seg = False)
-        subreg = NII.load(subreg_path, seg=True)
-        vertseg = NII.load(msk_path, seg=True)
-        surface_msk = NII.load(surface_msk_path, seg=True)
-        poi = POI.load(poi_path)
-
-        zoom = (1, 1, 1)
-
-        ct.rescale_and_reorient_(
-            axcodes_to=('L', 'A', 'S'), voxel_spacing = zoom, verbose = False
-        )
-        subreg.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=zoom, verbose=False
-        )
-        vertseg.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=zoom, verbose=False
-        )
-        surface_msk.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=zoom, verbose=False
-        )
-        poi.reorient_(axcodes_to=("L", "A", "S"), verbose=False).rescale_(
-            zoom, verbose=False
-        )
-
-        ct.normalize_ct(min_out=0, max_out=1, inplace=True)
-
-        # 0 as dummy vertebra
-        neighbor_top = vertebra - 1 if vertebra > 1 else 0
-        neighbor_bottom = vertebra + 1 if vertebra < 24 else 0 
-
-        all_vertebrae = [vertebra]
-        if neighbor_top != 0:
-            all_vertebrae.append(neighbor_top)
-        if neighbor_bottom != 0:
-            all_vertebrae.append(neighbor_bottom)
-
-
-        current_poi, current_missing_pois = get_gt_pois(poi, vertebra, self.poi_indices)
-        top_poi, top_missing_pois = get_gt_pois(poi, neighbor_top, self.poi_indices)
-        bottom_poi, bottom_missing_pois = get_gt_pois(poi, neighbor_bottom, self.poi_indices)
-
-        poi_indices = torch.tensor(self.poi_indices) #???
-
-        # Get arrays
-        ct = ct.get_array()
-        subreg = subreg.get_array()
-        vertseg = vertseg.get_array()
-        surface_msk = surface_msk.get_array()
-
-        mask = np.isin(vertseg, all_vertebrae)
-
-        ct = ct * mask
-        subreg = subreg * mask
-        vertseg = vertseg * mask
-        surface_msk = surface_msk * mask
-        
-
-        subreg, offset = pad_array_to_shape(subreg, self.input_shape)
-        vertseg, _ = pad_array_to_shape(vertseg, self.input_shape)
-        surface_msk, _ = pad_array_to_shape(surface_msk, self.input_shape)
-        ct, _ = pad_array_to_shape(ct, self.input_shape)
-
-        #poi = poi + torch.tensor(offset) TODO: how to handle the offset?
-
-        # Convert subreg, vertseg and surface_msk to tensors
-        ct = torch.from_numpy(ct.astype(float))
-        subreg = torch.from_numpy(subreg.astype(float))
-        vertseg = torch.from_numpy(vertseg.astype(float))
-        surface_msk = torch.from_numpy(surface_msk.astype(float))
-
-        # Add channel dimension
-        ct = ct.unsqueeze(0)
-        subreg = subreg.unsqueeze(0)
-        vertseg = vertseg.unsqueeze(0)
-        surface_msk = surface_msk.unsqueeze(0)
-
-        if self.input_data_type == "vertseg":  
-            data_dict["input"] = vertseg  
-        elif self.input_data_type == "subreg":   
-            data_dict["input"] = subreg  
-        elif self.input_data_type == "ct":  
-            data_dict["input"] = ct
-        elif self.input_data_type == "surface_msk":
-            data_dict["input"] = surface_msk
-
-        #data_dict["input"] = vertseg#subreg
-        #data_dict["target"] = poi
-        #data_dict["target_indices"] = poi_indices
-
-        data_dict = self.transform(data_dict) if self.transform else data_dict
-
-        
-
-        # get bad_poi_list
-        if "bad_poi_list" in self.master_df.columns:
-            current_bad_poi_list = ast.literal_eval(row["bad_poi_list"])
-            current_bad_poi_list = [int(poi) for poi in current_bad_poi_list]
-            current_bad_poi_list = torch.tensor(current_bad_poi_list)
-
-            if neighbor_top != 0:
-                top_row = self.master_df[
-                    (self.master_df["subject"] == subject) & 
-                    (self.master_df["vertebra"] == neighbor_top)
-                ]
-                
-                top_bad_poi_list = ast.literal_eval(top_row.iloc[0]["bad_poi_list"])
-                top_bad_poi_list = [int(poi) for poi in top_bad_poi_list]
-                top_bad_poi_list = torch.tensor(top_bad_poi_list)
-            else:
-                top_bad_poi_list = torch.tensor([], dtype=torch.int)
-            
-            if neighbor_bottom != 0:
-                bottom_row = self.master_df[
-                    (self.master_df["subject"] == subject) & 
-                    (self.master_df["vertebra"] == neighbor_bottom)
-                ]
-
-                bottom_bad_poi_list = ast.literal_eval(bottom_row.iloc[0]["bad_poi_list"])
-                bottom_bad_poi_list = [int(poi) for poi in bottom_bad_poi_list]
-                bottom_bad_poi_list = torch.tensor(bottom_bad_poi_list)
-
-            else: 
-                bottom_bad_poi_list = torch.tensor([], dtype=torch.int)
-                    
-        else:
-            current_bad_poi_list = torch.tensor([], dtype=torch.int)
-            top_bad_poi_list = torch.tensor([], dtype=torch.int)
-            bottom_bad_poi_list = torch.tensor([], dtype=torch.int)
-
-        current_loss_mask = torch.ones_like(current_poi) # is it the same as: loss_mask = torch.ones_like(data_dict["target"][:, 0]) ?
-        curent_bad_poi_list_idx = [
-            self.poi_idx_to_list_idx[bad_poi.item()]
-            for bad_poi in current_bad_poi_list
-            if bad_poi.item() in self.poi_indices
-        ]
-        current_loss_mask[curent_bad_poi_list_idx] = 0
-        current_missing_poi_list_idx = [
-            self.poi_idx_to_list_idx[missing_poi.item()] for missing_poi in current_missing_pois
-        ]
-        current_loss_mask[current_missing_poi_list_idx] = 0
-
-        # TODO: repeat for top and bottom neighbor
-
-        # TODO: combine results: combine_pois (if neighbor == 0, add dummy neighbor) and combine_loss_mask
-
-        # TODO: add offset
-
-        # TODO: set data_dict
-
-        # TODO: identify any outside of input shape pois
-
-        # Identify pois outside of the input shape
-        max_x = self.input_shape[0] - 1
-        max_y = self.input_shape[1] - 1
-        max_z = self.input_shape[2] - 1
-
-        outside_poi_indices = (
-            (data_dict["target"][:, 0] < 0)
-            | (data_dict["target"][:, 0] > max_x)
-            | (data_dict["target"][:, 1] < 0)
-            | (data_dict["target"][:, 1] > max_y)
-            | (data_dict["target"][:, 2] < 0)
-            | (data_dict["target"][:, 2] > max_z)
-        )
-
-        data_dict["loss_mask"] = loss_mask.bool()
-
-        transformed_mask = data_dict["input"] > 0
-        surface = compute_surface(transformed_mask, iterations=self.iterations)
-
-        data_dict["surface"] = surface
-        data_dict["subject"] = str(subject)
-        data_dict["vertebra"] = vertebra
-        data_dict["zoom"] = torch.tensor(zoom).float()
-        data_dict["offset"] = torch.tensor(offset).float()
-        data_dict["ct_path"] = ct_path
-        data_dict["msk_path"] = msk_path
-        data_dict["subreg_path"] = subreg_path
-        data_dict["poi_path"] = poi_path
-        data_dict["poi_list_idx"] = torch.tensor(
-            [self.poi_idx_to_list_idx[poi.item()] for poi in poi_indices]
-        )
-        data_dict["vert_list_idx"] = torch.tensor([self.vert_idx_to_list_idx[vertebra]])
-
-        return data_dict
-
+   
 
 class ImplantsDataset(PoiDataset):
     def __init__(
@@ -504,6 +301,7 @@ class GruberDataset(PoiDataset):
         master_df,
         input_data_type="subreg",
         input_shape=(128, 128, 96),
+        zoom=(1, 1, 1),
         transforms=None,
         flip_prob=0.5,
         include_com=False,
@@ -691,6 +489,7 @@ class GruberDataset(PoiDataset):
             },
             input_data_type=input_data_type,
             input_shape=input_shape,
+            zoom=zoom,
             transforms=transforms,
             flip_prob=flip_prob,
             include_com=include_com,
@@ -838,6 +637,7 @@ class PoiNeighborDataset(Dataset):
         poi_flip_pairs=None,
         input_data_type="subreg",
         input_shape=(120, 121, 149),
+        zoom=(1, 1, 1),
         transforms=None,
         flip_prob=0.0,
         include_com=False,
@@ -851,6 +651,7 @@ class PoiNeighborDataset(Dataset):
         self.master_df = master_df
         self.input_data_type = input_data_type
         self.input_shape = input_shape
+        self.zoom = tuple(zoom)
         self.poi_indices = poi_indices
         self.transform = Compose(transforms) if transforms else None
         if flip_prob > 0:
@@ -933,22 +734,22 @@ class PoiNeighborDataset(Dataset):
         surface_msk = NII.load(surface_msk_path, seg=True)
         poi = POI.load(poi_path)
 
-        zoom = (1, 1, 1)
+        #zoom = (1, 1, 1)
 
         ct.rescale_and_reorient_(
-            axcodes_to=('L', 'A', 'S'), voxel_spacing = zoom, verbose = False
+            axcodes_to=('L', 'A', 'S'), voxel_spacing = self.zoom, verbose = False
         )
         subreg.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=zoom, verbose=False
+            axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
         )
         vertseg.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=zoom, verbose=False
+            axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
         )
         surface_msk.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=zoom, verbose=False
+            axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
         )
         poi.reorient_(axcodes_to=("L", "A", "S"), verbose=False).rescale_(
-            zoom, verbose=False
+            self.zoom, verbose=False
         )
 
         ct.normalize_ct(min_out=0, max_out=1, inplace=True)
@@ -1078,7 +879,7 @@ class PoiNeighborDataset(Dataset):
         data_dict["surface"] = surface
         data_dict["subject"] = str(subject)
         data_dict["vertebra"] = vertebra
-        data_dict["zoom"] = torch.tensor(zoom).float()
+        data_dict["zoom"] = torch.tensor(self.zoom).float()
         data_dict["offset"] = torch.tensor(offset).float()
         data_dict["ct_path"] = ct_path
         data_dict["msk_path"] = msk_path
@@ -1089,9 +890,6 @@ class PoiNeighborDataset(Dataset):
         )
         data_dict["vert_list_idx"] = torch.tensor([self.vert_idx_to_list_idx[vertebra]])
 
-        #data_dict["n_vertebrae"] = len([vert for _, vert in all_vert if vert != 0])
-        #data_dict["vertebrae_list"] = torch.tensor(all_vert)  
-        #data_dict["current_vertebra_idx"] = 0
         data_dict["current_vertebra"] = vertebra
         data_dict["n_pois_per_vertebra"] = len(self.poi_indices)
 
@@ -1131,6 +929,7 @@ class GruberNeighborDataset(PoiNeighborDataset):
         master_df,
         input_data_type="subreg",
         input_shape=(120, 121, 149),
+        zoom=(1, 1, 1),
         transforms=None,
         flip_prob=0.0,
         include_com=False,
@@ -1314,6 +1113,7 @@ class GruberNeighborDataset(PoiNeighborDataset):
             },
             input_data_type=input_data_type,
             input_shape=input_shape,
+            zoom=zoom,
             transforms=transforms,
             flip_prob=flip_prob,
             include_com=include_com,

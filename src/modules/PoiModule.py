@@ -61,7 +61,7 @@ class PoiPredictionModule(pl.LightningModule):
         loss_weights=None,
         optimizer="AdamW",
         scheduler_config=None,
-        feature_freeze_patience=None,
+        feature_freeze_patience=None
     ):
         super().__init__()
         if loss_weights is None:
@@ -245,6 +245,7 @@ def create_feature_extraction_module(config):
     if module_type is None:
         raise ValueError(f"Unknown feature extraction module type: {config['type']}")
 
+    
     return module_type(**config["params"])
 
 

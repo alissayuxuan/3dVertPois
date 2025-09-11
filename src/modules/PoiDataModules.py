@@ -42,6 +42,7 @@ class POIDataModule(pl.LightningDataModule):
         test_subjects: list,
         input_data_type: str = "subreg",
         input_shape: tuple = (128, 128, 96),
+        zoom: tuple = (1, 1, 1),
         flip_prob: float = 0.5,
         transform_config: dict | None = None,
         include_com: bool = False,
@@ -60,6 +61,7 @@ class POIDataModule(pl.LightningDataModule):
         self.test_subjects = test_subjects
         self.input_data_type = input_data_type
         self.input_shape = input_shape
+        self.zoom = zoom
         self.flip_prob = flip_prob
         self.include_com = include_com
         self.include_poi_list = include_poi_list
@@ -121,6 +123,7 @@ class POIDataModule(pl.LightningDataModule):
                 self.train_df,
                 input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
+                zoom=self.zoom,
                 include_com=self.include_com,
                 include_poi_list=self.include_poi_list,
                 include_vert_list=self.include_vert_list,
@@ -133,6 +136,7 @@ class POIDataModule(pl.LightningDataModule):
                 self.val_df,
                 input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
+                zoom=self.zoom,
                 include_com=self.include_com,
                 include_poi_list=self.include_poi_list,
                 include_vert_list=self.include_vert_list,
@@ -145,6 +149,7 @@ class POIDataModule(pl.LightningDataModule):
                 self.test_df,
                 input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
+                zoom=self.zoom,
                 include_com=self.include_com,
                 include_poi_list=self.include_poi_list,
                 include_vert_list=self.include_vert_list,
@@ -160,6 +165,7 @@ class POIDataModule(pl.LightningDataModule):
                 self.train_df,
                 input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
+                zoom=self.zoom,
                 include_com=self.include_com,
                 include_poi_list=self.include_poi_list,
                 include_vert_list=self.include_vert_list,
@@ -172,6 +178,7 @@ class POIDataModule(pl.LightningDataModule):
                 self.val_df,
                 input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
+                zoom=self.zoom,
                 include_com=self.include_com,
                 include_poi_list=self.include_poi_list,
                 include_vert_list=self.include_vert_list,
@@ -184,6 +191,7 @@ class POIDataModule(pl.LightningDataModule):
                 self.test_df,
                 input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
+                zoom=self.zoom,
                 include_com=self.include_com,
                 include_poi_list=self.include_poi_list,
                 include_vert_list=self.include_vert_list,
@@ -264,6 +272,7 @@ class GruberDataModule(POIDataModule):
         test_subjects: list,
         input_data_type: str = "subreg",
         input_shape: tuple = (128, 128, 96),
+        zoom: tuple = (1, 1, 1),
         flip_prob: float = 0.5,
         transform_config: dict | None = None,
         include_com: bool = False,
@@ -282,6 +291,7 @@ class GruberDataModule(POIDataModule):
             test_subjects=test_subjects,
             input_data_type=input_data_type,
             input_shape=input_shape,
+            zoom=zoom,
             flip_prob=flip_prob,
             transform_config=transform_config,
             include_com=include_com,

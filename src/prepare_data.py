@@ -512,7 +512,13 @@ if __name__ == "__main__":
         help="The number of workers to use for parallel processing",
         default=8,
     )
-    
+
+    parser.add_argument(
+        "--set_zoom",
+        type=lambda x: tuple(map(int, x.split(','))),
+        help="Zoom for rescaling (format: x,y,z)",
+        default=(1, 1, 1),
+    )
     
     parser.add_argument(
         '--exclude_path',
@@ -568,7 +574,7 @@ if __name__ == "__main__":
         save_path=args.save_path,
         exclusion_path=args.exclude_path,
         get_files_fn=get_data_files,
-        rescale_zoom=None if args.no_rescale else (1, 1, 1),
+        rescale_zoom=None if args.no_rescale else args.set_zoom,
         n_workers=args.n_workers,
         compute_surface_mask=args.compute_surface_mask,
         include_neighbouring_vertebrae=args.include_neighbouring_vertebrae,

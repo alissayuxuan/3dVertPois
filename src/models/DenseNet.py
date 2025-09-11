@@ -301,4 +301,4 @@ class HeatmapDenseNet(nn.Module):
             global_features = feature_map.mean(dim=(2, 3, 4))  # (B, feature_l)
             landmark_features = global_features.unsqueeze(1).expand(-1, N, -1)  # (B, N, feature_l)
 
-        return normalized_heatmaps, landmark_features
+        return normalized_heatmaps, landmark_features, feature_map
