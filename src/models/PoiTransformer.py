@@ -90,6 +90,7 @@ class PoiTransformer(nn.Module):
         return x
     
 
+# POI Transformer that can take optional arguments for ablation study
 class FlexiblePoiTransformer(nn.Module):
     def __init__(
         self,
@@ -128,7 +129,6 @@ class FlexiblePoiTransformer(nn.Module):
             self.vert_embedding_l
         )
         
-        # Ensure we have at least some input
         if hidden_size == 0:
             raise ValueError("At least one component must be enabled (poi_features, coord_embedding, poi_embedding, or vert_embedding)")
 
@@ -166,15 +166,7 @@ class FlexiblePoiTransformer(nn.Module):
         self.fine_pred = nn.Linear(hidden_size, 3)
 
     def forward(self, coarse_preds=None, poi_indices=None, vertebra=None, poi_features=None):
-        """
-        Flexible forward pass - only processes provided inputs
-        
-        Args:
-            coarse_preds: (B, N_landmarks, 3) - coordinates for embedding (optional)
-            poi_indices: (B, N_landmarks) - POI type indices (optional)
-            vertebra: (B,) - vertebra indices (optional)
-            poi_features: (B, N_landmarks, poi_feature_l) - coarse features (optional)
-        """
+        """Flexible forward pass - only processes provided inputs"""
         
         # Collect feature components
         features_list = []

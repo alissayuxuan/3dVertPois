@@ -210,91 +210,6 @@ class PoiDataset(Dataset):
         return data_dict
 
 
-   
-
-class ImplantsDataset(PoiDataset):
-    def __init__(
-        self,
-        master_df,
-        input_shape=(128, 128, 96),
-        transforms=None,
-        flip_prob=0.5,
-        include_com=False,
-        include_poi_list=None,
-        include_vert_list=None,
-        poi_file_ending="poi.json",
-        iterations=1,
-    ):
-        super().__init__(
-            master_df,
-            poi_indices=(
-                include_poi_list
-                if include_poi_list
-                else (
-                    [90, 91, 92, 93, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
-                    if include_com
-                    else [90, 91, 92, 93]
-                )
-            ),
-            include_vert_list=(
-                include_vert_list
-                if include_vert_list
-                else [
-                    2,
-                    3,
-                    4,
-                    5,
-                    6,
-                    7,
-                    8,
-                    9,
-                    10,
-                    11,
-                    12,
-                    13,
-                    14,
-                    15,
-                    16,
-                    17,
-                    18,
-                    19,
-                    20,
-                    21,
-                    22,
-                    23,
-                    24,
-                    25,
-                ]
-            ),
-            poi_flip_pairs={
-                90: 91,
-                91: 90,
-                92: 93,
-                93: 92,
-                94: 95,
-                95: 94,
-                # Center of mass is not flipped
-                41: 41,
-                42: 42,
-                43: 43,
-                44: 44,
-                45: 45,
-                46: 46,
-                47: 47,
-                48: 48,
-                49: 49,
-                50: 50,
-                0: 0,
-            },
-            input_shape=input_shape,
-            transforms=transforms,
-            flip_prob=flip_prob,
-            include_com=include_com,
-            poi_file_ending=poi_file_ending,
-            iterations=iterations,
-        )
-
-
 class GruberDataset(PoiDataset):
     def __init__(
         self,
@@ -497,137 +412,6 @@ class GruberDataset(PoiDataset):
             iterations=iterations,
         )
 
-
-class JointDataset(PoiDataset):
-    def __init__(
-        self,
-        master_df,
-        input_shape=(128, 128, 96),
-        transforms=None,
-        flip_prob=0.5,
-        include_poi_list=None,
-        include_vert_list=None,
-        poi_file_ending="poi.json",
-    ):
-        super().__init__(
-            master_df,
-            poi_indices=(
-                include_poi_list
-                if include_poi_list
-                else [
-                    81,
-                    101,
-                    102,
-                    103,
-                    104,
-                    109,
-                    110,
-                    111,
-                    112,
-                    117,
-                    118,
-                    119,
-                    120,
-                    125,
-                    127,
-                    134,
-                    136,
-                    141,
-                    142,
-                    143,
-                    144,
-                    149,
-                    151,
-                    90,
-                    91,
-                    92,
-                    93,
-                ]
-            ),
-            include_vert_list=(
-                include_vert_list
-                if include_vert_list
-                else [
-                    2,
-                    3,
-                    4,
-                    5,
-                    6,
-                    7,
-                    8,
-                    9,
-                    10,
-                    11,
-                    12,
-                    13,
-                    14,
-                    15,
-                    16,
-                    17,
-                    18,
-                    19,
-                    20,
-                    21,
-                    22,
-                    23,
-                    24,
-                    25,
-                ]
-            ),
-            poi_flip_pairs={
-                # These are the middle points, i.e. the ones that are not flipped
-                81: 81,
-                101: 101,
-                103: 103,
-                102: 102,
-                104: 104,
-                125: 125,
-                127: 127,
-                134: 134,
-                136: 136,
-                # Flipped left to right
-                109: 117,
-                111: 119,
-                110: 118,
-                112: 120,
-                149: 141,
-                151: 143,
-                142: 144,
-                # Flipped right to left
-                117: 109,
-                119: 111,
-                118: 110,
-                120: 112,
-                141: 149,
-                143: 151,
-                144: 142,
-                # Center of mass, does not need to be flipped
-                41: 41,
-                42: 42,
-                43: 43,
-                44: 44,
-                45: 45,
-                46: 46,
-                47: 47,
-                48: 48,
-                49: 49,
-                50: 50,
-                0: 0,
-                # Implants
-                90: 91,
-                91: 90,
-                92: 93,
-                93: 92,
-                94: 95,
-                95: 94,
-            },
-            input_shape=input_shape,
-            transforms=transforms,
-            flip_prob=flip_prob,
-            poi_file_ending=poi_file_ending,
-        )
-
-
 class PoiNeighborDataset(Dataset):
     def __init__(
         self,
@@ -695,7 +479,6 @@ class PoiNeighborDataset(Dataset):
 
             if len(vert_row) == 0:
                 bad_poi_list = torch.tensor([], dtype=torch.int)
-                #print(f"\n\n\nEMPTY VERT_ROW\nvertebra: {vertebra}\nsubject: {subject}\n\n\n")
 
             else:
                 bad_poi_list = ast.literal_eval(vert_row.iloc[0]["bad_poi_list"])
@@ -793,21 +576,15 @@ class PoiNeighborDataset(Dataset):
         all_loss_masks = []
 
         for label, vert in all_vert:
-            #print(f"vertebra: {vert}")
             if vert == 0: # dummy
                 vert_pois = torch.full((len(self.poi_indices), 3), -1)
                 vert_loss_mask = torch.zeros(len(self.poi_indices), dtype=torch.float)
-                #print(f"  Created DUMMY: pois shape {vert_pois.shape}, mask shape {vert_loss_mask.shape}")
 
             else: # real
                 vert_pois, vert_loss_mask = self._process_single_vert(poi, subject, vert)
-                #print(f"  Created REAL: pois shape {vert_pois.shape}, mask shape {vert_loss_mask.shape}")
 
             all_pois.append(vert_pois)
             all_loss_masks.append(vert_loss_mask)
-
-        #print(f"\n=== SAMPLE {index}: VERTEBRA {vertebra} ===")
-        #print(f"all_vert: {all_vert}")
 
         # combine pois and loss masks
         combined_pois = torch.cat(all_pois, dim=0)
@@ -866,13 +643,6 @@ class PoiNeighborDataset(Dataset):
         data_dict["loss_mask"] = combined_loss_mask.bool()
 
 
-
-        #print(f"FINAL combined_pois shape: {combined_pois.shape}")
-        #print(f"FINAL combined_loss_mask shape: {combined_loss_mask.shape}")
-        #print(f"Expected shape: ({3 * len(self.poi_indices)}, 3) and ({3 * len(self.poi_indices)},)")
-
-
-
         transformed_mask = data_dict["input"] > 0
         surface = compute_surface(transformed_mask, iterations=self.iterations)
 
@@ -893,34 +663,6 @@ class PoiNeighborDataset(Dataset):
         data_dict["current_vertebra"] = vertebra
         data_dict["n_pois_per_vertebra"] = len(self.poi_indices)
 
-        """
-        print("=== BASIC SHAPES ===")
-        print(f"Input shape: {data_dict['input'].shape}")
-        print(f"Target shape: {data_dict['target'].shape}")  
-        print(f"Loss mask shape: {data_dict['loss_mask'].shape}")
-        print(f"Expected: {data_dict['n_vertebrae']} vertebrae × {self.poi_indices} POIs = {data_dict['n_vertebrae'] * len(self.poi_indices)} total POIs")
-
-
-        print("\n=== LOSS MASK VALIDATION ===")
-        loss_mask = data_dict['loss_mask']
-        target = data_dict['target']
-        
-        # Check außerhalb der Grenzen
-        input_shape = self.input_shape
-        outside_bounds = (
-            (target[:, 0] < 0) | (target[:, 0] >= input_shape[0]) |
-            (target[:, 1] < 0) | (target[:, 1] >= input_shape[1]) |
-            (target[:, 2] < 0) | (target[:, 2] >= input_shape[2])
-        )
-        
-        print(f"POIs outside bounds: {outside_bounds.sum()}")
-        print(f"Outside POIs masked: {(outside_bounds & ~loss_mask).sum() == outside_bounds.sum()}")
-        
-        # Check dummy POIs
-        dummy_pois = (target == -1).all(dim=1)
-        print(f"Dummy POIs: {dummy_pois.sum()}")
-        print(f"Dummy POIs masked: {(dummy_pois & loss_mask).sum() == 0}")
-        """
         return data_dict
 
 class GruberNeighborDataset(PoiNeighborDataset):
@@ -1120,34 +862,3 @@ class GruberNeighborDataset(PoiNeighborDataset):
             poi_file_ending=poi_file_ending,
             iterations=iterations,
         )
-
-
-def custom_collate_fn(batch):
-    """Custom collate function die dir genau zeigt wo der Fehler ist"""
-    print(f"\n=== COLLATING BATCH OF SIZE {len(batch)} ===")
-    
-    # Prüfe jeden Key einzeln
-    for key in batch[0].keys():
-        print(f"\nTrying to collate key: '{key}'")
-        try:
-            values = [item[key] for item in batch]
-            
-            # Zeige Shapes/Types für diesen Key
-            for i, val in enumerate(values):
-                if isinstance(val, torch.Tensor):
-                    print(f"  Sample {i} - {key}: {val.shape} (dtype: {val.dtype})")
-                else:
-                    print(f"  Sample {i} - {key}: {type(val)} - {val}")
-            
-            # Versuche zu kollationieren
-            if isinstance(values[0], torch.Tensor):
-                collated = torch.stack(values)
-                print(f"  -> Successfully collated {key}: {collated.shape}")
-            else:
-                print(f"  -> {key} is not a tensor, skipping...")
-                
-        except Exception as e:
-            print(f"  -> ERROR collating {key}: {e}")
-            print(f"  -> This is likely the problematic tensor!")
-            raise e
-

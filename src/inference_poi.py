@@ -140,6 +140,7 @@ class GruberInferenceDataset(Dataset):
         input_shape,
         input_data_type,
         include_vert_list,
+        zoom=(1, 1, 1),
         poi_indices=[
             81,
             82, 
@@ -181,6 +182,7 @@ class GruberInferenceDataset(Dataset):
         self.master_df = master_df
         self.input_shape = input_shape
         self.input_data_type = input_data_type
+        self.zoom = zoom
         self.poi_indices = torch.tensor(poi_indices)
         self.poi_idx_to_list_idx = {poi: idx for idx, poi in enumerate(poi_indices)}
         self.vert_idx_to_list_idx = {
@@ -300,14 +302,13 @@ def preprocess_segmentation_masks(
     subject,
     vert_msk,
     subreg_msk,
-    vert_list
+    vert_list,
+    zoom=(1, 1, 1)
 ):
     """
     Preprocess segmentation masks and create a master dataframe.
     """
-    print(f"preprocessing subject: {subject}")
-    #vert_msk = NII.load(vert_msk_path, seg=True)
-    #subreg_msk = NII.load(subreg_msk_path, seg=True)   
+    print(f"preprocessing subject: {subject}")  
 
     # Save original parameters to restore them later
     original_orientation = vert_msk.orientation
@@ -348,9 +349,9 @@ def preprocess_segmentation_masks(
             ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
         )
 
-        # rescale the cutouts to (1,1,1) mm resolution
-        vert_cropped.rescale_((1, 1, 1))
-        subreg_cropped.rescale_((1, 1, 1))
+        # rescale the cutouts to zoom mm resolution
+        vert_cropped.rescale_(zoom)
+        subreg_cropped.rescale_(zoom)
 
         vert_cropped.save(vert_path, verbose=False)
         subreg_cropped.save(subreg_path, verbose=False)
@@ -414,14 +415,15 @@ def create_prediction_poi_files(
     input_data_type = dm_params["input_data_type"]
     vert_list = dm_params["include_vert_list"]
     poi_indices = dm_params["include_poi_list"]
+    zoom = dm_params.get("zoom", (1, 1, 1))
 
     # preprocess segmentation masks and then save the info in a master_df ( create a /tmp)
-    master_df, temp_dir = preprocess_segmentation_masks(subject, vert_msk, subreg_msk, vert_list)
+    master_df, temp_dir = preprocess_segmentation_masks(subject, vert_msk, subreg_msk, vert_list, zoom)
     
     print(f"inferencing subject: {subject}")
     # get data_module and create dataset
     ds = GruberInferenceDataset(
-        master_df, input_shape=input_shape, input_data_type=input_data_type, include_vert_list=vert_list
+        master_df, input_shape=input_shape, input_data_type=input_data_type, include_vert_list=vert_list, zoom=zoom
     )
     dl = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False,  collate_fn=safe_collate)
 

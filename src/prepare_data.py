@@ -10,11 +10,9 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from TPTBox import NII, BIDS_Global_info #, POI
+from TPTBox import NII, BIDS_Global_info 
 from TPTBox.core.poi import POI
 from TPTBox import Subject_Container
-#from BIDS import NII, POI, BIDS_Global_info
-#from BIDS.bids_files import Subject_Container
 from pqdm.processes import pqdm
 
 
@@ -45,32 +43,6 @@ def load_exclusion_dict(excel_path):
     
     return exclude_dict
 
-
-# benutze ich nicht mehr -> funktion löscht die POIs, aber ich will die einfach im bad_poi_list haben
-def filter_poi(poi_object: POI, subject_id: str, exclude_dict: dict[str, list[tuple[int, int]]]) -> POI:
-    """Filter POIs by removing excluded ones for the given subject.
-    
-    Args:
-        poi_object: POI object to filter
-        subject_id: Current subject ID
-        exclude_dict: Dictionary of {subject_id: [pois_to_exclude]}
-        
-    Returns:
-        Filtered POI object
-    """
-    if not isinstance(poi_object, POI):
-        raise TypeError(f"Expected POI object, got {type(poi_object)}")
-    print(f"pois before exclusion: {poi_object.centroids}")
-    pois_to_exclude = exclude_dict.get(subject_id, [])
-    print(f"exclude_dict: {exclude_dict}")
-    print(f"subject_id: {subject_id}")
-    print(f"pois to exclude: \n{pois_to_exclude}") 
-
-    if pois_to_exclude:
-        poi_object = poi_object.remove(*pois_to_exclude) 
-        
-    return poi_object
-
 def get_bad_poi_list(subject_id: str, vert: int,  exclude_dict: dict[str, list[tuple[int, int]]]) ->list[int]:
     """
     Args:
@@ -87,16 +59,6 @@ def get_bad_poi_list(subject_id: str, vert: int,  exclude_dict: dict[str, list[t
     filtered_pois = [ poi_id for vert_id, poi_id in bad_pois if vert_id == vert ]
     return filtered_pois
     
-
-
-def get_implants_poi(container) -> POI:
-    poi_query = container.new_query(flatten=True)
-    poi_query.filter_format("poi")
-    poi_query.filter("desc", "local")
-    poi_candidate = poi_query.candidates[0]
-
-    poi = poi_candidate.open_ctd()
-    return poi
 
 
 def get_gruber_poi(container) -> POI:
@@ -117,49 +79,6 @@ def get_gruber_poi(container) -> POI:
         print(f"Error loading POI: {str(e)}")
         return None
 
-"""
-def get_gruber_registration_poi(container):
-    poi_query = container.new_query(flatten=True)
-    poi_query.filter_format("poi")
-    poi_query.filter("source", "registered")
-    poi_query.filter_filetype(".json")
-
-    registration_ctds = [POI.load(poi) for poi in poi_query.candidates]
-
-    # Check whether zoom, shape and direction coincide
-    for i in range(1, len(registration_ctds)):
-        if not registration_ctds[0].zoom == registration_ctds[i].zoom:
-            print("Zoom does not match")
-        if not registration_ctds[0].shape == registration_ctds[i].shape:
-            print("Shape does not match")
-        if not registration_ctds[0].orientation == registration_ctds[i].orientation:
-            print("Direction does not match")
-
-    # Get the keys that are present in all POIs
-    keys = set(registration_ctds[0].keys())
-    for ctd in registration_ctds:
-        keys = keys.intersection(set(ctd.keys()))
-    keys = list(keys)
-
-    ctd = {}
-    for key in keys:
-        #
-        ctd[key] = tuple(
-            np.array([reg_ctd[key] for reg_ctd in registration_ctds]).mean(axis=0)
-        )
-
-    # Sort the new ctd by keys
-    ctd = dict(sorted(ctd.items()))
-    new_poi = POI(
-        centroids=ctd,
-        orientation=registration_ctds[0].orientation,
-        zoom=registration_ctds[0].zoom,
-        shape=registration_ctds[0].shape,
-    )
-
-    return new_poi
-"""
-
 def get_ct(container) -> NII:
     ct_query = container.new_query(flatten=True)
     ct_query.filter_format("ct")
@@ -172,7 +91,6 @@ def get_ct(container) -> NII:
     except Exception as e:
         print(f"Error opening CT: {str(e)}")
         return None
-
 
 def get_subreg(container) -> NII:
     subreg_query = container.new_query(flatten=True)
@@ -188,7 +106,6 @@ def get_subreg(container) -> NII:
         print(f"Error opening subreg: {str(e)}")
         return None
     
-
 def get_vertseg(container) -> NII:
     vertseg_query = container.new_query(flatten=True)
     vertseg_query.filter_format("msk")
@@ -203,7 +120,6 @@ def get_vertseg(container) -> NII:
         print(f"Error opening vertseg: {str(e)}")
         return None
 
-
 def get_files(
     container,
     get_poi: Callable,
@@ -217,7 +133,6 @@ def get_files(
         get_subreg_fn(container),
         get_vertseg_fn(container),
     )
-
 
 def get_bounding_box(mask, vert, margin=5):
     """Get the bounding box of a given vertebra in a mask.
@@ -477,15 +392,6 @@ def prepare_data(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    # Get dataset type (must be gruber or implants)
-    
-    parser.add_argument(
-        "--dataset_type",
-        type=str,
-        help="The dataset to prepare",
-        choices=["Gruber", "Implants"],
-        required=True,
-    )
     parser.add_argument(
         "--data_path", type=str, help="The path to the BIDS dataset", required=True
     )
@@ -550,23 +456,13 @@ if __name__ == "__main__":
     )
 
 
-    if args.dataset_type == "Gruber":
-        get_data_files = partial(
-            get_files,
-            get_poi=get_gruber_poi,
-            get_ct_fn=get_ct,
-            get_subreg_fn=get_subreg,
-            get_vertseg_fn=get_vertseg,
-        )
-
-    elif args.dataset_type == "Implants":
-        get_data_files = partial(
-            get_files,
-            get_poi=get_implants_poi,
-            get_ct_fn=get_ct,
-            get_subreg_fn=get_subreg,
-            get_vertseg_fn=get_vertseg,
-        )
+    get_data_files = partial(
+        get_files,
+        get_poi=get_gruber_poi,
+        get_ct_fn=get_ct,
+        get_subreg_fn=get_subreg,
+        get_vertseg_fn=get_vertseg,
+    )
 
     
     prepare_data(

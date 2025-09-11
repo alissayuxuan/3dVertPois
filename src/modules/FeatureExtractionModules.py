@@ -31,7 +31,6 @@ class SADenseNet(nn.Module):
         block_config: Sequence[int] = (6, 12, 24, 16),
         bn_size: int = 4,
         dropout_prob: float = 0.0,
-        zoom=(1, 1, 1),
         **kwargs,
     ):
         super().__init__()
@@ -53,7 +52,6 @@ class SADenseNet(nn.Module):
 
         self.soft_argmax = SoftArgmax3D()
         self.project_gt = project_gt
-        self.zoom = torch.tensor(zoom, dtype=torch.float32)
 
     def forward(self, batch):
         x = batch["input"]
@@ -90,7 +88,9 @@ class SADenseNet(nn.Module):
             surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
         
-        zoom = self.zoom.to(target.device) 
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
+
         coarse_preds_mm = batch["coarse_preds"] * zoom 
         target_mm = target * zoom 
 
@@ -113,7 +113,9 @@ class SADenseNet(nn.Module):
             metrics[f"coarse_projection_dist_{mode}"] = projection_dist.mean()
 
         # Consider zoom (mm per voxel) 
-        zoom = self.zoom.to(target.device)
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
+        
         # Calculate the mean Euclidean distance between the predicted and target landmarks
         distances = torch.norm(
             (coarse_preds - target) * zoom, dim=-1
@@ -168,7 +170,6 @@ class HeatmapFeatureDenseNet(nn.Module):
         block_config: Sequence[int] = (6, 12, 24, 16),
         bn_size: int = 4,
         dropout_prob: float = 0.0,
-        zoom=(1, 1, 1),
         **kwargs,
     ):
         super().__init__()
@@ -192,7 +193,6 @@ class HeatmapFeatureDenseNet(nn.Module):
 
         self.project_gt = project_gt
 
-        self.zoom = torch.tensor(zoom, dtype=torch.float32)
 
     def forward(self, batch):
         x = batch["input"]
@@ -229,7 +229,9 @@ class HeatmapFeatureDenseNet(nn.Module):
             surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
         
-        zoom = self.zoom.to(target.device)
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
+
         coarse_preds_mm = batch["coarse_preds"] * zoom
         target_mm = target * zoom
 
@@ -252,7 +254,8 @@ class HeatmapFeatureDenseNet(nn.Module):
             metrics[f"coarse_projection_dist_{mode}"] = projection_dist.mean()
 
         # Consider zoom (mm per voxel)
-        zoom = self.zoom.to(target.device)
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
 
         # Calculate the mean Euclidean distance between the predicted and target landmarks
         distances = torch.norm(

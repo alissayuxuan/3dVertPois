@@ -142,7 +142,7 @@ class PatchTransformer(nn.Module):
         num_heads: int = 4,
         dropout: float = 0.2,
         lr: float = 1e-5,
-        zoom=(1, 1, 1)
+
     ):
         super().__init__()
 
@@ -178,7 +178,6 @@ class PatchTransformer(nn.Module):
 
         self.warmup_epochs = warmup_epochs
 
-        self.zoom = torch.tensor(zoom, dtype=torch.float32)
 
     def forward(self, batch):
         coarse_preds = batch["coarse_preds"]
@@ -220,7 +219,9 @@ class PatchTransformer(nn.Module):
             surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
         
-        zoom = self.zoom.to(target.device)
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
+
         refined_preds_mm = batch["refined_preds"] * zoom
         target_mm = target * zoom
         return self.loss_fn(refined_preds_mm, target_mm, batch["loss_mask"]) #self.loss_fn(batch["refined_preds"], target, batch["loss_mask"])
@@ -242,7 +243,8 @@ class PatchTransformer(nn.Module):
             metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
 
         # Consider zoom (mm per voxel)
-        zoom = self.zoom.to(target.device)
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
 
         # Calculate the mean Euclidean distance between the predicted and target landmarks
         distances = torch.norm((fine_preds - target) * zoom, dim=-1)  # (batch_size, n_landmarks)
@@ -293,7 +295,6 @@ class PatchTransformer(nn.Module):
         return metrics
     
 
-
 class NoPoiVertPatchTransformer(nn.Module):
     """Enrich the coarse features with patch features extracted with a simple CNN
     regressor, then refine the predictions using a transformer WITHOUT Poi and vertebra embeddings. """
@@ -316,7 +317,6 @@ class NoPoiVertPatchTransformer(nn.Module):
         num_heads: int = 4,
         dropout: float = 0.2,
         lr: float = 1e-5,
-        zoom=(1, 1, 1)
     ):
         super().__init__()
 
@@ -349,8 +349,6 @@ class NoPoiVertPatchTransformer(nn.Module):
         self.loss_fn = get_loss_fn(loss_fn)
 
         self.lr = lr
-
-        self.zoom = torch.tensor(zoom, dtype=torch.float32)
 
         self.warmup_epochs = warmup_epochs
         print(f"Refinement Module: NoPoiVertPatchTransformer")
@@ -404,7 +402,9 @@ class NoPoiVertPatchTransformer(nn.Module):
             surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
         
-        zoom = self.zoom.to(target.device)
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
+
         refined_preds_mm = batch["refined_preds"] * zoom
         target_mm = target * zoom
 
@@ -427,7 +427,8 @@ class NoPoiVertPatchTransformer(nn.Module):
             metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
         
         # Consider zoom (mm per voxel)
-        zoom = self.zoom.to(target.device)
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
 
         # Calculate the mean Euclidean distance between the predicted and target landmarks
         distances = torch.norm((fine_preds - target) * zoom, dim=-1)  # (batch_size, n_landmarks)
@@ -501,7 +502,6 @@ class NoPoiFeaturePatchTransformer(nn.Module):
         num_heads: int = 4,
         dropout: float = 0.2,
         lr: float = 1e-5,
-        zoom=(1, 1, 1)
     ):
         super().__init__()
 
@@ -536,9 +536,6 @@ class NoPoiFeaturePatchTransformer(nn.Module):
         self.lr = lr
 
         self.warmup_epochs = warmup_epochs
-
-        self.zoom = torch.tensor(zoom, dtype=torch.float32)
-
         print("Refinement Module: NoPoiFeaturePatchTransformer")
 
     def forward(self, batch):
@@ -581,7 +578,8 @@ class NoPoiFeaturePatchTransformer(nn.Module):
             surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
 
-        zoom = self.zoom.to(target.device)
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
 
         refined_preds_mm = batch["refined_preds"] * zoom
         target_mm = target * zoom
@@ -605,7 +603,8 @@ class NoPoiFeaturePatchTransformer(nn.Module):
             metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
 
         # Consider zoom (mm per voxel)
-        zoom = self.zoom.to(target.device)
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
 
         # Calculate the mean Euclidean distance between the predicted and target landmarks
         distances = torch.norm((fine_preds - target) * zoom, dim=-1)  # (batch_size, n_landmarks)
@@ -655,6 +654,7 @@ class NoPoiFeaturePatchTransformer(nn.Module):
 
         return metrics
     
+
 class NoCoarsePredTransformer(nn.Module):
     """Refinement module that uses patch features and embeddings, 
     but does NOT use coordinate information in the transformer."""
@@ -677,7 +677,6 @@ class NoCoarsePredTransformer(nn.Module):
         num_heads: int = 4,
         dropout: float = 0.2,
         lr: float = 1e-5,
-        zoom=(1, 1, 1)
     ):
         super().__init__()
 
@@ -701,8 +700,6 @@ class NoCoarsePredTransformer(nn.Module):
         self.lr = lr
 
         self.warmup_epochs = warmup_epochs
-
-        self.zoom = torch.tensor(zoom, dtype=torch.float32)
 
         print("Refinement Module: NoCoarsePredTransformer")
 
@@ -730,7 +727,8 @@ class NoCoarsePredTransformer(nn.Module):
             surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
 
-        zoom = self.zoom.to(target.device)
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
 
         refined_preds_mm = batch["refined_preds"] * zoom
         target_mm = target * zoom
@@ -754,7 +752,8 @@ class NoCoarsePredTransformer(nn.Module):
             metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
 
         # Consider zoom (mm per voxel)
-        zoom = self.zoom.to(target.device)
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
 
         # Calculate the mean Euclidean distance between the predicted and target landmarks
         distances = torch.norm((fine_preds - target) * zoom, dim=-1)  # (batch_size, n_landmarks)
@@ -804,6 +803,7 @@ class NoCoarsePredTransformer(nn.Module):
 
         return metrics
 
+
 class FeatureTransformer(nn.Module):
     """Refinement module that skips the patch feature extractor"""
     
@@ -825,7 +825,6 @@ class FeatureTransformer(nn.Module):
         num_heads: int = 4,
         dropout: float = 0.2,
         lr: float = 1e-5,
-        zoom=(1, 1, 1)
     ):
         super().__init__()
 
@@ -850,7 +849,6 @@ class FeatureTransformer(nn.Module):
 
         self.warmup_epochs = warmup_epochs
 
-        self.zoom = torch.tensor(zoom, dtype=torch.float32)
         print("Refinement Module: FeatureTransformer")
 
     def forward(self, batch):
@@ -891,7 +889,8 @@ class FeatureTransformer(nn.Module):
             surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
         
-        zoom = self.zoom.to(target.device)
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
 
         refined_preds_mm = batch["refined_preds"] * zoom
         target_mm = target * zoom
@@ -915,7 +914,8 @@ class FeatureTransformer(nn.Module):
             metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
 
         # Consider zoom (mm per voxel)
-        zoom = self.zoom.to(target.device)
+        zoom = batch["zoom"].to(target.device)
+        zoom = zoom.unsqueeze(1)
 
         # Calculate the mean Euclidean distance between the predicted and target landmarks
         distances = torch.norm((fine_preds - target) * zoom, dim=-1)  # (batch_size, n_landmarks)

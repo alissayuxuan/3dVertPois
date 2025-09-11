@@ -22,7 +22,7 @@ from TPTBox import NII  # For loading NIfTI files
 import shutil  # For file operations
 
 from modules.PoiModule import PoiPredictionModule
-from src.modules.PoiDataModules import JointDataModule, POIDataModule
+from src.modules.PoiDataModules import POIDataModule
 from utils.misc import surface_project_coords
 
 
@@ -85,7 +85,7 @@ def save_feature_maps(batch, out_dir="feature_maps"):
             plt.close()
 
 
-def load_data_module_from_config(config_path, joint=False, alternative_poi_ending=None):
+def load_data_module_from_config(config_path, alternative_poi_ending=None):
     # Load the configuration file
     with open(config_path, "r") as f:
         config = json.load(f)
@@ -94,8 +94,6 @@ def load_data_module_from_config(config_path, joint=False, alternative_poi_endin
     config["batch_size"] = 1
     if alternative_poi_ending is not None:
         config["poi_file_ending"] = alternative_poi_ending
-    if joint:
-        return JointDataModule(**config)
     else:
         return POIDataModule(**config)
 
@@ -196,7 +194,6 @@ def create_prediction_poi_files(
     checkpoint_path,
     poi_file_ending,
     split="val",
-    joint=False,
     save_in_dir=False,
     save_path=None,
     return_paths=False,
@@ -215,7 +212,7 @@ def create_prediction_poi_files(
     if not poi_file_ending.endswith(".json"):
         raise ValueError("The poi_file_ending must be a json file")
 
-    data_module = load_data_module_from_config(data_module_save_path, joint=joint)
+    data_module = load_data_module_from_config(data_module_save_path)
     data_module.setup()
 
     # Load the checkpoint
@@ -392,14 +389,12 @@ def run_predictions(
     data_module_save_path,
     checkpoint_path,
     split="val",
-    joint=False,
     alternative_poi_ending=None,
     neighbor=False,
 ):
     # Change the ending of the POI files if necessary
     data_module = load_data_module_from_config(
         data_module_save_path,
-        joint=joint,
         alternative_poi_ending=alternative_poi_ending,
     )
     data_module.setup()
@@ -584,12 +579,11 @@ def create_prediction_df(
     data_module_save_path,
     checkpoint_path,
     split="val",
-    joint=False,
     alternative_poi_ending=None,
     neighbor=False
 ):
     pred_dict = run_predictions(
-        data_module_save_path, checkpoint_path, split, joint, alternative_poi_ending, neighbor
+        data_module_save_path, checkpoint_path, split, alternative_poi_ending, neighbor
     )
     # Calculate distances between target and predicted POIs (in mm)
     pred_dict["coarse_error"] = [
@@ -684,7 +678,6 @@ def create_neighbor_prediction_poi_files(
     checkpoint_path,
     poi_file_ending,
     split="val",
-    joint=False,
     save_in_dir=False,
     save_path=None,
     return_paths=False,
@@ -700,7 +693,7 @@ def create_neighbor_prediction_poi_files(
     if not poi_file_ending.endswith(".json"):
         raise ValueError("The poi_file_ending must be a json file")
 
-    data_module = load_data_module_from_config(data_module_save_path, joint=joint)
+    data_module = load_data_module_from_config(data_module_save_path)
     data_module.setup()
 
     # Load the checkpoint
@@ -982,9 +975,6 @@ if __name__ == "__main__":
         "--save_path", type=str, help="Path to save the evaluation results"
     )
     parser.add_argument(
-        "--joint", action="store_true", help="Whether to use the JointDataModule"
-    )
-    parser.add_argument(
         "--neighbor", action="store_true", help="Whether neighbor predictions were made"
     )
 
@@ -1004,7 +994,6 @@ if __name__ == "__main__":
         data_module_save_path=args.data_module_save_path,
         checkpoint_path=args.checkpoint_path, 
         split=args.split,
-        joint=args.joint,
         neighbor=args.neighbor
     )
     prediction_df = prediction_df[prediction_df['loss_mask'] == True]
@@ -1060,7 +1049,6 @@ if __name__ == "__main__":
             checkpoint_path=args.checkpoint_path,
             poi_file_ending="_pred.json",
             split=args.split,
-            joint=args.joint,
             save_path=prediction_files_path,
             return_paths=True, 
             project=args.project  
@@ -1072,7 +1060,6 @@ if __name__ == "__main__":
             checkpoint_path=args.checkpoint_path,
             poi_file_ending="_pred.json",
             split=args.split,
-            joint=args.joint,
             save_path=prediction_files_path,
             return_paths=True, 
             project=args.project  
@@ -1083,7 +1070,6 @@ if __name__ == "__main__":
             checkpoint_path=args.checkpoint_path,
             poi_file_ending="_pred.json",
             split=args.split,
-            joint=args.joint,
             save_path=prediction_files_no_proj_path,
             return_paths=True, 
             project=False  
