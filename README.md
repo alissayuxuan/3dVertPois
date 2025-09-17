@@ -1,9 +1,8 @@
-# Automated Point-of-Interest Prediction on CT Scans of Human Vertebrae Using Spine Segmentations
+# Deep Learning-Based Prediction of Anatomical Ponits-of-Interest from Sparse Annotations on Segmentation Masks
 
-Welcome to the code repository of my master thesis at TUM. This project addresses the challenge of predicting ligament attachment points on vertebrae in CT Scans of the spine. Accurate identification of these points is crucial for understanding spinal anatomy and facilitating patient-specific simulations that may uncover risk factors of low back pain.
+Welcome to the code repository of my bachelor's thesis at TUM. This code is focussing on the POI-prediction on the vertebra. Most of the code was taken from the master's thesis 'Automated Point-of-Interest Prediction on CT Scans of Human Vertebrae Using Spine Segmentations' by Daniel-Jordi Regenbrecht. You can find the code here: https://github.com/doppelplusungut/3dVertPois.
 
-For a quick overview of the project, view the [poster](doc/PresentationPosterMA.pdf). For an in-depth exploration, refer to my [thesis](doc/Daniel_Regenbrecht_Master_Thesis_final_signed.pdf).
-
+For a quick overview of the project, you can view my [poster](doc/PosterPOIPred.pdf).
 ## Project Description
 
 The project comprises of three major components:
@@ -27,13 +26,10 @@ Set the python interpreter path in your IDE to the version in the environment, i
 which python
 ```
 
-Install the BIDS toolbox as provided in this repository
+Install the TPTBox
 
 ```bash
-unzip bids.zip
-cd bids
-python setup.py build
-python setup.py install
+pip install TPTBox
 ```
 
 Back in the project directory, install the required packages 
@@ -62,8 +58,7 @@ For each CT file, corresponding segmentation files and a POI file are required.
 
 Since the size of the CT scans and segmentations is generally too large to fit into GPU memory, the model predicts the POIs on a vertebra-level instead of processing an entire spine segmentation at once. Therefore, it is necessary to cut out individual vertebrae from the large image and masks and shift the POI file accordingly, which the instance mask is used for. Further, the images are brought into standard orientation and scale. To avoid repetitive computations during training, these preprocessing steps are carried out in bulk and the cutouts are saved to the disk. In order to run the bulk preprocessing, enter the src folder and run prepare_data.py.
 
-WARNING: By default, this step uses 8 CPU cores in parallel to speed up the pre-processing. You can specify a different number with the --n_workers argument. This step will run for several minutes to hours and may require several GB of disk space depending on the size of the dataset (The cutouts of the Ligament Attachment Point dataset used in the development of this project require 465MB of disk space for 36 initial scans)
-
+WARNING: By default, this step uses 8 CPU cores in parallel to speed up the pre-processing. You can specify a different number with the --n_workers argument. This step will run for several minutes to hours and may require several GB of disk space depending on the size of the dataset.
 ```bash
 cd src
 python3 prepare_data.py --data_path $PATH_TO_YOUR_DS --derivatives_name $NAME_OF_DERIVATIVES_FOLDER --save_path $PATH_TO_SAVE_CUTOUS

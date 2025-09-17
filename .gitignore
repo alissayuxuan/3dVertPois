@@ -120,7 +120,11 @@ src/dataset/data_preprocessing/dataset-folder/*
 src/dataset/data_preprocessing/dataset-folder-test/*
 src/experiments/*
 src/predictions/*
-src/ablation_study/*
-
+src/ablation_study/architecture/evaluation/*
+src/ablation_study/architecture/training/*
+src/ablation_study/dataloader/evaluation/*
+src/ablation_study/dataloader/training/*
+src/ablation_study/neighbor/evaluation/*
+src/ablation_study/neighbor/training/*
 *.ckpt
 *.nii.gz

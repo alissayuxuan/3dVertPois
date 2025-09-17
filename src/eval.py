@@ -349,14 +349,8 @@ def create_prediction_poi_files(
             POI.load(ctd_save_path).to_global().save_mrk(ctd_global_save_path)
 
             # === (2) Speichere GT-POI-Datei ===
-            #all_vert = [vert, vert - 1 if vert > 1 else None, vert + 1 if vert < 24 else None]
-            all_vert = [vert]
-            if vert > 1:
-                all_vert.append(vert - 1)
-            if vert < 24:
-                all_vert.append(vert + 1)
                 
-            gt_poi = POI.load(poi_path).extract_region(*all_vert)
+            gt_poi = POI.load(poi_path).extract_region(vert)
             gt_save_path = ctd_save_path.replace("_pred.json", "_gt.json")
             gt_poi.save(gt_save_path)
 
@@ -953,6 +947,22 @@ def create_neighbor_prediction_poi_files(
         return poi_paths_dict
 
 
+def load_and_filter_csv(df):
+    """
+    Lädt CSV-Datei und filtert poi_idx 41-50 heraus
+    """
+    # CSV laden
+    df
+    
+    # poi_idx 41-50 ausschließen
+    excluded_poi_idx = [41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
+    df_filtered = df[~df['poi_idx'].isin(excluded_poi_idx)]
+    
+    print(f"Original Anzahl Zeilen: {len(df)}")
+    print(f"Gefilterte Anzahl Zeilen: {len(df_filtered)}")
+    print(f"Entfernte Zeilen: {len(df) - len(df_filtered)}")
+    
+    return df_filtered
 
 if __name__ == "__main__":
 
@@ -1001,6 +1011,8 @@ if __name__ == "__main__":
     prediction_df.to_csv(os.path.join(args.save_path, "results.csv"))
     print("Prediction DataFrame saved")
 
+    prediction_df = load_and_filter_csv(prediction_df)
+
     ### Compute overall metrics 
     metrics_df = compute_overall_metrics(prediction_df)
     metrics_df.to_csv(os.path.join(args.save_path, "overall_metrics.csv"))
@@ -1026,9 +1038,9 @@ if __name__ == "__main__":
 
 
     ### Find Outliers
-    outlier_df = filter_high_refined_proj_error_pois(prediction_df, 10)
-    outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_proj_error_higher_10.csv"))
-    print("Outliers (refined_proj_error > 10) saved")
+    #outlier_df = filter_high_refined_proj_error_pois(prediction_df, 10)
+    #outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_proj_error_higher_10.csv"))
+    #print("Outliers (refined_proj_error > 10) saved")
 
     outlier_df = filter_high_refined_error_pois(prediction_df, 10)
     outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_error_higher_10.csv"))
@@ -1065,15 +1077,15 @@ if __name__ == "__main__":
             project=args.project  
         )
 
-        poi_paths_dict = create_prediction_poi_files(
-            data_module_save_path=args.data_module_save_path,
-            checkpoint_path=args.checkpoint_path,
-            poi_file_ending="_pred.json",
-            split=args.split,
-            save_path=prediction_files_no_proj_path,
-            return_paths=True, 
-            project=False  
-        )
+        #poi_paths_dict = create_prediction_poi_files(
+        #    data_module_save_path=args.data_module_save_path,
+        #    checkpoint_path=args.checkpoint_path,
+        #    poi_file_ending="_pred.json",
+        #    split=args.split,
+        #    save_path=prediction_files_no_proj_path,
+        #    return_paths=True, 
+        #    project=False  
+        #)
 
 
     print(f"Saved predictions and ground truths to: {prediction_files_path}")
