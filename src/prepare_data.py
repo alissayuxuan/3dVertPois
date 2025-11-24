@@ -60,7 +60,6 @@ def get_bad_poi_list(subject_id: str, vert: int,  exclude_dict: dict[str, list[t
     return filtered_pois
     
 
-
 def get_gruber_poi(container) -> POI:
     poi_query = container.new_query(flatten=True)
     poi_query.filter_format("poi")
@@ -78,6 +77,7 @@ def get_gruber_poi(container) -> POI:
     except Exception as e:
         print(f"Error loading POI: {str(e)}")
         return None
+
 
 def get_ct(container) -> NII:
     ct_query = container.new_query(flatten=True)
@@ -199,12 +199,15 @@ def process_container(
     poi.reorient_(axcodes_to=vertseg.orientation, _shape=vertseg.shape) 
 
     surface_mask = None
+    surface_subreg = None
     if compute_surface_mask:
         try:
             surface_mask = vertseg.compute_surface_mask(connectivity=3, dilated_surface=False)
+            surface_subreg = subreg.compute_surface_mask(connectivity=3, dilated_surface=False)
         except Exception as e:
             print(f"Error computing surface mask for subject {subject}: {str(e)}")
             surface_mask = None
+            surface_subreg = None
     
 
     vertebrae = {key[0] for key in poi.keys()} 
@@ -261,8 +264,9 @@ def process_container(
             vertseg_path = os.path.join(save_path, subject, str(vert), "vertseg.nii.gz")
             poi_path = os.path.join(save_path, subject, str(vert), "poi.json")
 
-            if compute_surface_mask and surface_mask is not None:
-                surface_path = os.path.join(save_path, subject, str(vert), "surface_msk.nii.gz")
+            if compute_surface_mask and surface_mask is not None and surface_subreg is not None:
+                surface_mask_path = os.path.join(save_path, subject, str(vert), "surface_msk.nii.gz")
+                surface_subreg_path = os.path.join(save_path, subject, str(vert), "surface_subreg.nii.gz")
             
 
             #create directories if they do not exist
@@ -284,8 +288,12 @@ def process_container(
                 )
 
                 surface_mask_cropped = None
-                if compute_surface_mask and surface_mask is not None:
+                surfcae_subreg_cropped = None
+                if compute_surface_mask and surface_mask is not None and surface_subreg is not None:
                     surface_mask_cropped = surface_mask.apply_crop(
+                        ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+                    )
+                    surface_subreg_cropped = surface_subreg.apply_crop(
                         ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
                     )
 
@@ -303,16 +311,18 @@ def process_container(
                 vertseg_cropped.rescale_(rescale_zoom)
                 poi_cropped.rescale_(rescale_zoom)
 
-                if compute_surface_mask and surface_mask_cropped is not None:
+                if compute_surface_mask and surface_mask_cropped is not None and surface_subreg_cropped is not None:
                     surface_mask_cropped.rescale_(rescale_zoom)
+                    surface_subreg_cropped.rescale_(rescale_zoom)
 
             ct_cropped.save(ct_path, verbose=False)
             subreg_cropped.save(subreg_path, verbose=False)
             vertseg_cropped.save(vertseg_path, verbose=False)
             poi_cropped.save(poi_path, verbose=False)
 
-            if compute_surface_mask and surface_mask_cropped is not None:
-                surface_mask_cropped.save(surface_path, verbose=False)
+            if compute_surface_mask and surface_mask_cropped is not None and surface_subreg_cropped is not None:
+                surface_mask_cropped.save(surface_mask_path, verbose=False)
+                surface_subreg_cropped.save(surface_subreg_path, verbose=False)
 
             # Save the slice indices as json to reconstruct the original POI file (there probably is a more BIDS-like approach to this)
             slice_indices = {
@@ -381,8 +391,8 @@ def prepare_data(
         partial_process_container,
         n_jobs=n_workers,
         argument_type="args",
-        exception_behaviour="immediate",
-        #exception_behaviour="continue"
+        #exception_behaviour="immediate",
+        exception_behaviour="continue"
     )
     master = [item for sublist in master for item in sublist]
     master_df = pd.DataFrame(master)

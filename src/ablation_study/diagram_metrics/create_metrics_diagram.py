@@ -433,16 +433,16 @@ if __name__ == "__main__":
     # Experiment-Reihenfolge definieren (optional)
     #experiment_order = ['all-pois', 'excel-exclude', 'excel-outliers-exclude', 'include-com']
     #experiment_order = ['subreg-0.5-zoom', 'subreg-1.0-zoom', 'subreg-2.0-zoom', 'vertseg', 'surface-mask', 'ct-scan', 'neighbors']
-    experiment_order = ['standard-architecture', 'only-coarse-module', 'no-coarse-preds', 'no-global-features', 'no-poi-vert', 'no-patch-features', 'no-projection']
+    experiment_order = ['standard-architecture', 'only-coarse-module', 'no-coarse-preds', 'no-global-features', 'no-poi-id', 'no-vert-id', 'no-poi-vert-id', 'no-patch-features', 'no-poi-vert-id-global-features', 'no-projection']
     # Alle Plots mit festen Skalen erstellen
-    create_ablation_plots('architecture/run_2', #'dataloader/include_pois/run_1',
+    create_ablation_plots('architecture/run_1', #'dataloader/include_pois/run_1',
                          fixed_scales=fixed_scales,
                          experiment_order=experiment_order,
                          val_color='#1F3E74', 
                          test_color='#4469AD')
     
     # Neue Error-Type Vergleichsplots erstellen
-    create_error_type_comparison_plots('architecture/run_2', #'dataloader/include_pois/run_1', #
+    create_error_type_comparison_plots('architecture/run_1', #'dataloader/include_pois/run_1', #
                                       experiment_order=experiment_order,
                                       bar_width=0.2,  # Säulenbreite kontrollieren
                                       fixed_scales=fixed_scales)

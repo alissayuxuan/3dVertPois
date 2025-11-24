@@ -289,7 +289,7 @@ class GruberNeighborDataModule(POIDataModule):
             print("WARNING: flip_prob set to 0.0 for neighbor dataset")
             kwargs['flip_prob'] = 0.0
             
-        kwargs['input_shape'] = (120, 121, 149)
+        #kwargs['input_shape'] = (120, 121, 149)
         super().__init__(dataset="GruberNeighbor", **kwargs)
 
     def prepare_data(self, bids_surgery_info, save_path, rescale_zoom=None):

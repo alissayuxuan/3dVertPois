@@ -394,6 +394,8 @@ def run_predictions(
     data_module.setup()
     zoom = getattr(data_module, 'zoom', (1, 1, 1))
 
+    print(f"ZOOM: {zoom}")
+
     # Load the checkpoint
     poi_module = PoiPredictionModule.load_from_checkpoint(checkpoint_path)
 

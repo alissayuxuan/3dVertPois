@@ -1,6 +1,3 @@
-# Von Alissa selbst angepasster Code
-
-
 """Inference Pipeline:
 Given a path to a vert and subreg segmentation mask, model and data module, this pipeline will:
 1. Load the vert and subreg mask
@@ -44,8 +41,6 @@ def get_subreg(container):
     if not subreg_query.candidates:
         print("ERROR: No subreg candidates found!")
         return None
-    #subreg_candidate = subreg_query.candidates[0]
-    #return str(subreg_candidate.file["nii.gz"])
     subreg_candidate = subreg_query.candidates[0]
 
     try:
@@ -63,8 +58,6 @@ def get_vertseg(container):
     if not vertseg_query.candidates:
         print("ERROR: No vertseg candidate found!")
         return None
-    #vertseg_candidate = vertseg_query.candidates[0]
-    #return str(vertseg_candidate.file["nii.gz"])
     vertseg_candidate = vertseg_query.candidates[0]
 
     try:
@@ -526,7 +519,8 @@ def create_prediction_poi_files(
         ctd_global_save_path = ctd_save_path.replace("_pred.json", "_pred_global.json")
 
         unpadded_refined_preds_ctd.save(ctd_save_path, verbose=False)
-        unpadded_refined_preds_ctd.to_global().save_mrk(ctd_global_save_path)
+        unpadded_refined_preds_ctd_poi = POI.load(ctd_save_path)
+        unpadded_refined_preds_ctd_poi.to_global().save_mrk(ctd_global_save_path)
         
         # copy segmentation masks
         vertseg_save_path = ctd_save_path.replace("_pred.json", "_vertseg.nii.gz")
@@ -553,7 +547,7 @@ def create_prediction_poi_files(
 
         unpadded_refined_preds_ctd.centroids = new_centroids
 
-        unpadded_refined_preds_ctd.reorient_(original_orientation)
+        unpadded_refined_preds_ctd.reorient_(original_orientation) 
 
         partial_centroids.append(
             {
@@ -568,6 +562,7 @@ def create_prediction_poi_files(
         )
     
     sub, pois = combine_centroids(partial_centroids)
+
     
     pois.save(os.path.join(save_dir, sub, "poi_predicted.json"))
     pois.to_global().save_mrk(os.path.join(save_dir, sub, "poi_predicted_global.json"))
@@ -579,20 +574,28 @@ def create_prediction_poi_files(
 
 if __name__ == "__main__":
     
-    bgi = BIDS_Global_info(
-        datasets=["/home/student/alissa/3dVertPois/src/predictions/dataset-myelom"],
-        parents=["derivatives"],
-    )
+    #bgi = BIDS_Global_info(
+    #    datasets=["/home/student/alissa/3dVertPois/src/predictions/dataset-myelom"],
+    #    parents=["derivatives"],
+    #)
 
     #bgi = BIDS_Global_info(
     #    datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder-test"],
     #    parents=["derivatives"],
     #)
 
-    save_dir = "/home/student/alissa/3dVertPois/src/predictions/myelom-inferenced/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude"
-    dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
-    model_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=74-fine_mean_distance_val=1.77.ckpt"
+    bgi = BIDS_Global_info(
+        datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-verse19"],
+        parents=["derivatives"],
+    )
 
+    save_dir = "/home/student/alissa/3dVertPois/src/predictions/verse19-inferenced-test-test/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude"
+    #dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
+    #model_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=74-fine_mean_distance_val=1.77.ckpt"
+
+    dm_path = "ablation_study/architecture/training/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude/version_0/data_module_params.json"
+    model_path = "ablation_study/architecture/training/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=94-fine_mean_distance_val=1.66.ckpt"
+    
     subjects_inferenced = 0
 
     for sub, container in bgi.enumerate_subjects():

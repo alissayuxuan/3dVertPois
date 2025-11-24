@@ -90,7 +90,7 @@
     "data_module_config": {
         "type": "GruberNeighborDataModule",
         "params": {
-            "master_df": "/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/cutout-folder/cutouts-neighbor/master_df-excel_outlier_exclude.csv",
+            "master_df": "/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/cutout-folder/cutouts-neighbor/master_df-excel_outliers_exclude.csv",
             "train_subjects": [
                 "WS-17",
                 "WS-18",

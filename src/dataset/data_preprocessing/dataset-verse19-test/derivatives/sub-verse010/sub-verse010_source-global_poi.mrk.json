@@ -1,0 +1,6340 @@
+{
+  "markups": [
+    {
+      "type": "Fiducial",
+      "coordinateSystem": "RAS",
+      "locked": false,
+      "labelFormat": "%N-%d",
+      "controlPoints": [
+        {
+          "id": "20-41",
+          "label": "20-41",
+          "description": 41,
+          "associatedNodeID": 20,
+          "position": [
+            -4.5267188,
+            -242.61,
+            -83.4556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-42",
+          "label": "20-42",
+          "description": 42,
+          "associatedNodeID": 20,
+          "position": [
+            -2.7167188,
+            -262.42,
+            -99.6956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-43",
+          "label": "20-43",
+          "description": 43,
+          "associatedNodeID": 20,
+          "position": [
+            -31.6167188,
+            -247.29,
+            -80.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-44",
+          "label": "20-44",
+          "description": 44,
+          "associatedNodeID": 20,
+          "position": [
+            18.3132812,
+            -241.69,
+            -86.4356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-45",
+          "label": "20-45",
+          "description": 45,
+          "associatedNodeID": 20,
+          "position": [
+            -19.0067188,
+            -251.1,
+            -74.0756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-46",
+          "label": "20-46",
+          "description": 46,
+          "associatedNodeID": 20,
+          "position": [
+            14.0132812,
+            -248.65,
+            -77.9256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-47",
+          "label": "20-47",
+          "description": 47,
+          "associatedNodeID": 20,
+          "position": [
+            -14.6967188,
+            -244.0,
+            -98.3756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-48",
+          "label": "20-48",
+          "description": 48,
+          "associatedNodeID": 20,
+          "position": [
+            3.3532812,
+            -242.63,
+            -98.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-50",
+          "label": "20-50",
+          "description": 50,
+          "associatedNodeID": 20,
+          "position": [
+            -5.6367188,
+            -216.12,
+            -72.9456053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-61",
+          "label": "20-61",
+          "description": 61,
+          "associatedNodeID": 20,
+          "position": [
+            -3.8567188,
+            -248.21,
+            -89.1156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-81",
+          "label": "20-81",
+          "description": 81,
+          "associatedNodeID": 20,
+          "position": [
+            -2.6367188,
+            -270.0,
+            -112.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-82",
+          "label": "20-82",
+          "description": 82,
+          "associatedNodeID": 20,
+          "position": [
+            30.3632812,
+            -243.0,
+            -91.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-83",
+          "label": "20-83",
+          "description": 83,
+          "associatedNodeID": 20,
+          "position": [
+            -40.6367188,
+            -251.0,
+            -83.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-84",
+          "label": "20-84",
+          "description": 84,
+          "associatedNodeID": 20,
+          "position": [
+            -24.1367188,
+            -218.24,
+            -70.7656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-85",
+          "label": "20-85",
+          "description": 85,
+          "associatedNodeID": 20,
+          "position": [
+            12.8632812,
+            -214.0,
+            -75.1256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-86",
+          "label": "20-86",
+          "description": 86,
+          "associatedNodeID": 20,
+          "position": [
+            -19.6367188,
+            -242.0,
+            -111.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-87",
+          "label": "20-87",
+          "description": 87,
+          "associatedNodeID": 20,
+          "position": [
+            3.3632812,
+            -240.0,
+            -109.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-88",
+          "label": "20-88",
+          "description": 88,
+          "associatedNodeID": 20,
+          "position": [
+            -15.6367188,
+            -255.0,
+            -62.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-89",
+          "label": "20-89",
+          "description": 89,
+          "associatedNodeID": 20,
+          "position": [
+            14.3632812,
+            -252.0,
+            -68.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-101",
+          "label": "20-101",
+          "description": 101,
+          "associatedNodeID": 20,
+          "position": [
+            -5.3167188,
+            -200.94,
+            -55.4256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-102",
+          "label": "20-102",
+          "description": 102,
+          "associatedNodeID": 20,
+          "position": [
+            -3.2767188,
+            -232.5,
+            -68.8656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-103",
+          "label": "20-103",
+          "description": 103,
+          "associatedNodeID": 20,
+          "position": [
+            -8.2767188,
+            -197.87,
+            -77.5656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-104",
+          "label": "20-104",
+          "description": 104,
+          "associatedNodeID": 20,
+          "position": [
+            -6.8067188,
+            -224.75,
+            -91.3056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-105",
+          "label": "20-105",
+          "description": 105,
+          "associatedNodeID": 20,
+          "position": [
+            -4.0767188,
+            -220.62,
+            -64.1056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-106",
+          "label": "20-106",
+          "description": 106,
+          "associatedNodeID": 20,
+          "position": [
+            -5.0067188,
+            -227.5,
+            -78.6756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-107",
+          "label": "20-107",
+          "description": 107,
+          "associatedNodeID": 20,
+          "position": [
+            -6.7767188,
+            -212.83,
+            -79.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-108",
+          "label": "20-108",
+          "description": 108,
+          "associatedNodeID": 20,
+          "position": [
+            -6.5067188,
+            -200.5,
+            -65.0756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-109",
+          "label": "20-109",
+          "description": 109,
+          "associatedNodeID": 20,
+          "position": [
+            -16.0467188,
+            -203.57,
+            -53.5156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-110",
+          "label": "20-110",
+          "description": 110,
+          "associatedNodeID": 20,
+          "position": [
+            -14.1267188,
+            -235.98,
+            -68.7856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-111",
+          "label": "20-111",
+          "description": 111,
+          "associatedNodeID": 20,
+          "position": [
+            -19.4967188,
+            -194.56,
+            -74.0156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-112",
+          "label": "20-112",
+          "description": 112,
+          "associatedNodeID": 20,
+          "position": [
+            -17.8567188,
+            -226.64,
+            -91.3656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-113",
+          "label": "20-113",
+          "description": 113,
+          "associatedNodeID": 20,
+          "position": [
+            -15.0567188,
+            -221.85,
+            -62.8856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-114",
+          "label": "20-114",
+          "description": 114,
+          "associatedNodeID": 20,
+          "position": [
+            -15.8467188,
+            -231.02,
+            -78.5256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-115",
+          "label": "20-115",
+          "description": 115,
+          "associatedNodeID": 20,
+          "position": [
+            -18.0067188,
+            -213.31,
+            -79.6356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-116",
+          "label": "20-116",
+          "description": 116,
+          "associatedNodeID": 20,
+          "position": [
+            -17.3267188,
+            -204.28,
+            -65.0556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-117",
+          "label": "20-117",
+          "description": 117,
+          "associatedNodeID": 20,
+          "position": [
+            5.7832812,
+            -200.92,
+            -56.7656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-118",
+          "label": "20-118",
+          "description": 118,
+          "associatedNodeID": 20,
+          "position": [
+            8.1032812,
+            -234.26,
+            -69.5856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-119",
+          "label": "20-119",
+          "description": 119,
+          "associatedNodeID": 20,
+          "position": [
+            3.8232812,
+            -200.72,
+            -73.2056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-120",
+          "label": "20-120",
+          "description": 120,
+          "associatedNodeID": 20,
+          "position": [
+            4.1632812,
+            -224.44,
+            -93.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-121",
+          "label": "20-121",
+          "description": 121,
+          "associatedNodeID": 20,
+          "position": [
+            6.8832812,
+            -219.36,
+            -65.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-122",
+          "label": "20-122",
+          "description": 122,
+          "associatedNodeID": 20,
+          "position": [
+            6.1332812,
+            -229.35,
+            -81.5356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-123",
+          "label": "20-123",
+          "description": 123,
+          "associatedNodeID": 20,
+          "position": [
+            4.1732812,
+            -211.53,
+            -80.7756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-124",
+          "label": "20-124",
+          "description": 124,
+          "associatedNodeID": 20,
+          "position": [
+            4.5332812,
+            -200.6,
+            -67.0556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-125",
+          "label": "20-125",
+          "description": 125,
+          "associatedNodeID": 20,
+          "position": [
+            -1.8067188,
+            -257.74,
+            -87.3856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-127",
+          "label": "20-127",
+          "description": 127,
+          "associatedNodeID": 20,
+          "position": [
+            -3.7767188,
+            -243.38,
+            -90.1056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-128",
+          "label": "20-128",
+          "description": 128,
+          "associatedNodeID": 20,
+          "position": [
+            -5.1467188,
+            -225.04,
+            -77.4356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-129",
+          "label": "20-129",
+          "description": 129,
+          "associatedNodeID": 20,
+          "position": [
+            -7.1867188,
+            -211.63,
+            -81.7456053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "20-130",
+          "label": "20-130",
+          "description": 130,
+          "associatedNodeID": 20,
+          "position": [
+            4.2332812,
+            -214.99,
+            -74.1056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        }
+      ],
+      "display": {
+        "visibility": true,
+        "opacity": 1.0,
+        "color": [
+          255,
+          250,
+          250
+        ],
+        "propertiesLabelVisibility": false
+      },
+      "description": ""
+    },
+    {
+      "type": "Fiducial",
+      "coordinateSystem": "RAS",
+      "locked": false,
+      "labelFormat": "%N-%d",
+      "controlPoints": [
+        {
+          "id": "21-41",
+          "label": "21-41",
+          "description": 41,
+          "associatedNodeID": 21,
+          "position": [
+            -8.2767188,
+            -229.09,
+            -112.3956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-42",
+          "label": "21-42",
+          "description": 42,
+          "associatedNodeID": 21,
+          "position": [
+            -6.2467188,
+            -249.62,
+            -127.3656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-43",
+          "label": "21-43",
+          "description": 43,
+          "associatedNodeID": 21,
+          "position": [
+            -32.0967188,
+            -233.37,
+            -110.1156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-44",
+          "label": "21-44",
+          "description": 44,
+          "associatedNodeID": 21,
+          "position": [
+            17.1332812,
+            -229.18,
+            -111.5056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-45",
+          "label": "21-45",
+          "description": 45,
+          "associatedNodeID": 21,
+          "position": [
+            -22.9067188,
+            -237.93,
+            -102.2856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-46",
+          "label": "21-46",
+          "description": 46,
+          "associatedNodeID": 21,
+          "position": [
+            9.1332812,
+            -235.99,
+            -103.7156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-47",
+          "label": "21-47",
+          "description": 47,
+          "associatedNodeID": 21,
+          "position": [
+            -18.9067188,
+            -230.28,
+            -128.2156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-48",
+          "label": "21-48",
+          "description": 48,
+          "associatedNodeID": 21,
+          "position": [
+            0.2132812,
+            -228.23,
+            -127.7956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-50",
+          "label": "21-50",
+          "description": 50,
+          "associatedNodeID": 21,
+          "position": [
+            -10.3767188,
+            -201.53,
+            -101.0156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-61",
+          "label": "21-61",
+          "description": 61,
+          "associatedNodeID": 21,
+          "position": [
+            -7.0967188,
+            -235.97,
+            -117.8356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-81",
+          "label": "21-81",
+          "description": 81,
+          "associatedNodeID": 21,
+          "position": [
+            -5.6367188,
+            -257.0,
+            -140.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-82",
+          "label": "21-82",
+          "description": 82,
+          "associatedNodeID": 21,
+          "position": [
+            30.3632812,
+            -232.0,
+            -115.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-83",
+          "label": "21-83",
+          "description": 83,
+          "associatedNodeID": 21,
+          "position": [
+            -48.6367188,
+            -239.0,
+            -111.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-84",
+          "label": "21-84",
+          "description": 84,
+          "associatedNodeID": 21,
+          "position": [
+            -29.1367188,
+            -204.13,
+            -99.3456053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-85",
+          "label": "21-85",
+          "description": 85,
+          "associatedNodeID": 21,
+          "position": [
+            7.8632812,
+            -199.0,
+            -102.6356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-86",
+          "label": "21-86",
+          "description": 86,
+          "associatedNodeID": 21,
+          "position": [
+            -22.6367188,
+            -226.0,
+            -139.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-87",
+          "label": "21-87",
+          "description": 87,
+          "associatedNodeID": 21,
+          "position": [
+            0.3632812,
+            -224.0,
+            -141.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-88",
+          "label": "21-88",
+          "description": 88,
+          "associatedNodeID": 21,
+          "position": [
+            -20.6367188,
+            -243.0,
+            -91.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-89",
+          "label": "21-89",
+          "description": 89,
+          "associatedNodeID": 21,
+          "position": [
+            9.3632812,
+            -240.0,
+            -93.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-101",
+          "label": "21-101",
+          "description": 101,
+          "associatedNodeID": 21,
+          "position": [
+            -10.2167188,
+            -189.79,
+            -80.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-102",
+          "label": "21-102",
+          "description": 102,
+          "associatedNodeID": 21,
+          "position": [
+            -7.1667188,
+            -219.3,
+            -92.6256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-103",
+          "label": "21-103",
+          "description": 103,
+          "associatedNodeID": 21,
+          "position": [
+            -14.0267188,
+            -178.0,
+            -105.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-104",
+          "label": "21-104",
+          "description": 104,
+          "associatedNodeID": 21,
+          "position": [
+            -10.9667188,
+            -209.34,
+            -119.8056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-105",
+          "label": "21-105",
+          "description": 105,
+          "associatedNodeID": 21,
+          "position": [
+            -8.5567188,
+            -207.19,
+            -89.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-106",
+          "label": "21-106",
+          "description": 106,
+          "associatedNodeID": 21,
+          "position": [
+            -9.3267188,
+            -212.5,
+            -106.3756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-107",
+          "label": "21-107",
+          "description": 107,
+          "associatedNodeID": 21,
+          "position": [
+            -12.1567188,
+            -195.97,
+            -112.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-108",
+          "label": "21-108",
+          "description": 108,
+          "associatedNodeID": 21,
+          "position": [
+            -11.8067188,
+            -186.5,
+            -93.6756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-109",
+          "label": "21-109",
+          "description": 109,
+          "associatedNodeID": 21,
+          "position": [
+            -20.7167188,
+            -192.38,
+            -80.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-110",
+          "label": "21-110",
+          "description": 110,
+          "associatedNodeID": 21,
+          "position": [
+            -17.7167188,
+            -222.5,
+            -94.2356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-111",
+          "label": "21-111",
+          "description": 111,
+          "associatedNodeID": 21,
+          "position": [
+            -24.6167188,
+            -180.5,
+            -106.2856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-112",
+          "label": "21-112",
+          "description": 112,
+          "associatedNodeID": 21,
+          "position": [
+            -21.5067188,
+            -210.71,
+            -118.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-113",
+          "label": "21-113",
+          "description": 113,
+          "associatedNodeID": 21,
+          "position": [
+            -19.1867188,
+            -208.47,
+            -88.8556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-114",
+          "label": "21-114",
+          "description": 114,
+          "associatedNodeID": 21,
+          "position": [
+            -19.5167188,
+            -217.94,
+            -107.3756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-115",
+          "label": "21-115",
+          "description": 115,
+          "associatedNodeID": 21,
+          "position": [
+            -22.8767188,
+            -196.98,
+            -112.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-116",
+          "label": "21-116",
+          "description": 116,
+          "associatedNodeID": 21,
+          "position": [
+            -22.1467188,
+            -190.42,
+            -93.9356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-117",
+          "label": "21-117",
+          "description": 117,
+          "associatedNodeID": 21,
+          "position": [
+            0.2932812,
+            -187.64,
+            -81.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-118",
+          "label": "21-118",
+          "description": 118,
+          "associatedNodeID": 21,
+          "position": [
+            3.7332812,
+            -221.36,
+            -95.2956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-119",
+          "label": "21-119",
+          "description": 119,
+          "associatedNodeID": 21,
+          "position": [
+            -3.2367188,
+            -178.02,
+            -106.0856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-120",
+          "label": "21-120",
+          "description": 120,
+          "associatedNodeID": 21,
+          "position": [
+            -0.4467188,
+            -207.31,
+            -120.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-121",
+          "label": "21-121",
+          "description": 121,
+          "associatedNodeID": 21,
+          "position": [
+            2.0232812,
+            -205.77,
+            -90.2556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-122",
+          "label": "21-122",
+          "description": 122,
+          "associatedNodeID": 21,
+          "position": [
+            1.5832812,
+            -214.64,
+            -109.0656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-123",
+          "label": "21-123",
+          "description": 123,
+          "associatedNodeID": 21,
+          "position": [
+            -1.6467188,
+            -194.35,
+            -113.6756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-124",
+          "label": "21-124",
+          "description": 124,
+          "associatedNodeID": 21,
+          "position": [
+            -1.0067188,
+            -187.52,
+            -95.8356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-125",
+          "label": "21-125",
+          "description": 125,
+          "associatedNodeID": 21,
+          "position": [
+            -5.9567188,
+            -240.84,
+            -110.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-127",
+          "label": "21-127",
+          "description": 127,
+          "associatedNodeID": 21,
+          "position": [
+            -8.1767188,
+            -229.33,
+            -117.4556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-128",
+          "label": "21-128",
+          "description": 128,
+          "associatedNodeID": 21,
+          "position": [
+            -9.5267188,
+            -210.48,
+            -105.3856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-129",
+          "label": "21-129",
+          "description": 129,
+          "associatedNodeID": 21,
+          "position": [
+            -11.7667188,
+            -197.19,
+            -109.9156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "21-130",
+          "label": "21-130",
+          "description": 130,
+          "associatedNodeID": 21,
+          "position": [
+            -0.5067188,
+            -200.16,
+            -101.8956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        }
+      ],
+      "display": {
+        "visibility": true,
+        "opacity": 1.0,
+        "color": [
+          147,
+          112,
+          219
+        ],
+        "propertiesLabelVisibility": false
+      },
+      "description": ""
+    },
+    {
+      "type": "Fiducial",
+      "coordinateSystem": "RAS",
+      "locked": false,
+      "labelFormat": "%N-%d",
+      "controlPoints": [
+        {
+          "id": "22-41",
+          "label": "22-41",
+          "description": 41,
+          "associatedNodeID": 22,
+          "position": [
+            -12.3367188,
+            -217.26,
+            -141.1156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-42",
+          "label": "22-42",
+          "description": 42,
+          "associatedNodeID": 22,
+          "position": [
+            -8.5167188,
+            -241.87,
+            -151.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-43",
+          "label": "22-43",
+          "description": 43,
+          "associatedNodeID": 22,
+          "position": [
+            -40.7767188,
+            -221.48,
+            -139.0256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-44",
+          "label": "22-44",
+          "description": 44,
+          "associatedNodeID": 22,
+          "position": [
+            15.4732812,
+            -214.18,
+            -139.6756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-45",
+          "label": "22-45",
+          "description": 45,
+          "associatedNodeID": 22,
+          "position": [
+            -28.2067188,
+            -223.5,
+            -131.0456053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-46",
+          "label": "22-46",
+          "description": 46,
+          "associatedNodeID": 22,
+          "position": [
+            7.3732812,
+            -220.96,
+            -131.3556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-47",
+          "label": "22-47",
+          "description": 47,
+          "associatedNodeID": 22,
+          "position": [
+            -21.8767188,
+            -220.44,
+            -155.6056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-48",
+          "label": "22-48",
+          "description": 48,
+          "associatedNodeID": 22,
+          "position": [
+            -0.5267188,
+            -218.01,
+            -156.0056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-50",
+          "label": "22-50",
+          "description": 50,
+          "associatedNodeID": 22,
+          "position": [
+            -14.3667188,
+            -188.64,
+            -134.0956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-61",
+          "label": "22-61",
+          "description": 61,
+          "associatedNodeID": 22,
+          "position": [
+            -10.3667188,
+            -226.2,
+            -144.9756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-81",
+          "label": "22-81",
+          "description": 81,
+          "associatedNodeID": 22,
+          "position": [
+            -9.6367188,
+            -254.0,
+            -161.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-82",
+          "label": "22-82",
+          "description": 82,
+          "associatedNodeID": 22,
+          "position": [
+            27.3632812,
+            -215.0,
+            -143.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-83",
+          "label": "22-83",
+          "description": 83,
+          "associatedNodeID": 22,
+          "position": [
+            -55.6367188,
+            -229.0,
+            -139.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-84",
+          "label": "22-84",
+          "description": 84,
+          "associatedNodeID": 22,
+          "position": [
+            -34.1367188,
+            -190.94,
+            -133.4356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-85",
+          "label": "22-85",
+          "description": 85,
+          "associatedNodeID": 22,
+          "position": [
+            4.8632812,
+            -186.4,
+            -134.7456053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-86",
+          "label": "22-86",
+          "description": 86,
+          "associatedNodeID": 22,
+          "position": [
+            -25.6367188,
+            -220.0,
+            -168.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-87",
+          "label": "22-87",
+          "description": 87,
+          "associatedNodeID": 22,
+          "position": [
+            2.3632812,
+            -219.0,
+            -175.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-88",
+          "label": "22-88",
+          "description": 88,
+          "associatedNodeID": 22,
+          "position": [
+            -26.6367188,
+            -230.0,
+            -120.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-89",
+          "label": "22-89",
+          "description": 89,
+          "associatedNodeID": 22,
+          "position": [
+            7.3632812,
+            -225.0,
+            -122.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-101",
+          "label": "22-101",
+          "description": 101,
+          "associatedNodeID": 22,
+          "position": [
+            -15.4367188,
+            -174.06,
+            -115.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-102",
+          "label": "22-102",
+          "description": 102,
+          "associatedNodeID": 22,
+          "position": [
+            -11.9267188,
+            -206.37,
+            -122.6956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-103",
+          "label": "22-103",
+          "description": 103,
+          "associatedNodeID": 22,
+          "position": [
+            -17.1767188,
+            -167.62,
+            -145.1056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-104",
+          "label": "22-104",
+          "description": 104,
+          "associatedNodeID": 22,
+          "position": [
+            -13.6367188,
+            -199.95,
+            -151.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-105",
+          "label": "22-105",
+          "description": 105,
+          "associatedNodeID": 22,
+          "position": [
+            -13.5067188,
+            -192.39,
+            -121.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-106",
+          "label": "22-106",
+          "description": 106,
+          "associatedNodeID": 22,
+          "position": [
+            -12.9667188,
+            -201.75,
+            -137.8956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-107",
+          "label": "22-107",
+          "description": 107,
+          "associatedNodeID": 22,
+          "position": [
+            -15.2067188,
+            -185.0,
+            -146.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-108",
+          "label": "22-108",
+          "description": 108,
+          "associatedNodeID": 22,
+          "position": [
+            -16.2367188,
+            -171.08,
+            -129.0056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-109",
+          "label": "22-109",
+          "description": 109,
+          "associatedNodeID": 22,
+          "position": [
+            -27.2667188,
+            -175.12,
+            -114.7056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-110",
+          "label": "22-110",
+          "description": 110,
+          "associatedNodeID": 22,
+          "position": [
+            -23.5967188,
+            -209.5,
+            -124.6656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-111",
+          "label": "22-111",
+          "description": 111,
+          "associatedNodeID": 22,
+          "position": [
+            -28.8067188,
+            -170.72,
+            -145.2056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-112",
+          "label": "22-112",
+          "description": 112,
+          "associatedNodeID": 22,
+          "position": [
+            -25.3667188,
+            -202.01,
+            -151.3956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-113",
+          "label": "22-113",
+          "description": 113,
+          "associatedNodeID": 22,
+          "position": [
+            -25.3367188,
+            -193.65,
+            -121.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-114",
+          "label": "22-114",
+          "description": 114,
+          "associatedNodeID": 22,
+          "position": [
+            -24.5167188,
+            -205.5,
+            -138.1856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-115",
+          "label": "22-115",
+          "description": 115,
+          "associatedNodeID": 22,
+          "position": [
+            -27.1067188,
+            -185.96,
+            -147.3956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-116",
+          "label": "22-116",
+          "description": 116,
+          "associatedNodeID": 22,
+          "position": [
+            -27.6167188,
+            -176.49,
+            -129.7756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-117",
+          "label": "22-117",
+          "description": 117,
+          "associatedNodeID": 22,
+          "position": [
+            -3.5267188,
+            -174.06,
+            -117.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-118",
+          "label": "22-118",
+          "description": 118,
+          "associatedNodeID": 22,
+          "position": [
+            -0.0167188,
+            -206.16,
+            -124.2156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-119",
+          "label": "22-119",
+          "description": 119,
+          "associatedNodeID": 22,
+          "position": [
+            -5.3267188,
+            -166.56,
+            -145.0056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-120",
+          "label": "22-120",
+          "description": 120,
+          "associatedNodeID": 22,
+          "position": [
+            -1.8267188,
+            -198.46,
+            -151.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-121",
+          "label": "22-121",
+          "description": 121,
+          "associatedNodeID": 22,
+          "position": [
+            -1.7267188,
+            -190.88,
+            -122.2756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-122",
+          "label": "22-122",
+          "description": 122,
+          "associatedNodeID": 22,
+          "position": [
+            -1.0167188,
+            -201.8,
+            -138.7056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-123",
+          "label": "22-123",
+          "description": 123,
+          "associatedNodeID": 22,
+          "position": [
+            -3.4367188,
+            -183.45,
+            -147.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-124",
+          "label": "22-124",
+          "description": 124,
+          "associatedNodeID": 22,
+          "position": [
+            -3.9767188,
+            -173.96,
+            -130.6356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-125",
+          "label": "22-125",
+          "description": 125,
+          "associatedNodeID": 22,
+          "position": [
+            -8.9167188,
+            -234.65,
+            -138.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-127",
+          "label": "22-127",
+          "description": 127,
+          "associatedNodeID": 22,
+          "position": [
+            -11.0067188,
+            -218.5,
+            -144.6356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-128",
+          "label": "22-128",
+          "description": 128,
+          "associatedNodeID": 22,
+          "position": [
+            -13.3467188,
+            -198.2,
+            -136.8656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-129",
+          "label": "22-129",
+          "description": 129,
+          "associatedNodeID": 22,
+          "position": [
+            -15.0167188,
+            -185.81,
+            -143.6656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "22-130",
+          "label": "22-130",
+          "description": 130,
+          "associatedNodeID": 22,
+          "position": [
+            -4.4367188,
+            -187.49,
+            -134.4256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        }
+      ],
+      "display": {
+        "visibility": true,
+        "opacity": 1.0,
+        "color": [
+          218,
+          112,
+          214
+        ],
+        "propertiesLabelVisibility": false
+      },
+      "description": ""
+    },
+    {
+      "type": "Fiducial",
+      "coordinateSystem": "RAS",
+      "locked": false,
+      "labelFormat": "%N-%d",
+      "controlPoints": [
+        {
+          "id": "23-41",
+          "label": "23-41",
+          "description": 41,
+          "associatedNodeID": 23,
+          "position": [
+            -9.3767188,
+            -211.86,
+            -169.5656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-42",
+          "label": "23-42",
+          "description": 42,
+          "associatedNodeID": 23,
+          "position": [
+            -8.0367188,
+            -239.96,
+            -173.0456053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-43",
+          "label": "23-43",
+          "description": 43,
+          "associatedNodeID": 23,
+          "position": [
+            -38.1367188,
+            -212.15,
+            -171.2256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-44",
+          "label": "23-44",
+          "description": 44,
+          "associatedNodeID": 23,
+          "position": [
+            19.5532812,
+            -207.03,
+            -166.9756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-45",
+          "label": "23-45",
+          "description": 45,
+          "associatedNodeID": 23,
+          "position": [
+            -29.5367188,
+            -215.72,
+            -160.7456053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-46",
+          "label": "23-46",
+          "description": 46,
+          "associatedNodeID": 23,
+          "position": [
+            7.4632812,
+            -212.71,
+            -157.2756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-47",
+          "label": "23-47",
+          "description": 47,
+          "associatedNodeID": 23,
+          "position": [
+            -23.2967188,
+            -222.92,
+            -182.4856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-48",
+          "label": "23-48",
+          "description": 48,
+          "associatedNodeID": 23,
+          "position": [
+            4.5532812,
+            -219.04,
+            -179.8956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-50",
+          "label": "23-50",
+          "description": 50,
+          "associatedNodeID": 23,
+          "position": [
+            -13.8767188,
+            -184.03,
+            -169.7156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-61",
+          "label": "23-61",
+          "description": 61,
+          "associatedNodeID": 23,
+          "position": [
+            -9.7567188,
+            -218.45,
+            -164.2856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-81",
+          "label": "23-81",
+          "description": 81,
+          "associatedNodeID": 23,
+          "position": [
+            -5.6367188,
+            -253.0,
+            -181.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-82",
+          "label": "23-82",
+          "description": 82,
+          "associatedNodeID": 23,
+          "position": [
+            30.3632812,
+            -207.0,
+            -162.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-83",
+          "label": "23-83",
+          "description": 83,
+          "associatedNodeID": 23,
+          "position": [
+            -47.6367188,
+            -217.0,
+            -168.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-84",
+          "label": "23-84",
+          "description": 84,
+          "associatedNodeID": 23,
+          "position": [
+            -34.1367188,
+            -186.77,
+            -171.7356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-85",
+          "label": "23-85",
+          "description": 85,
+          "associatedNodeID": 23,
+          "position": [
+            6.8632812,
+            -181.22,
+            -167.6556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-86",
+          "label": "23-86",
+          "description": 86,
+          "associatedNodeID": 23,
+          "position": [
+            -20.6367188,
+            -227.0,
+            -192.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-87",
+          "label": "23-87",
+          "description": 87,
+          "associatedNodeID": 23,
+          "position": [
+            8.3632812,
+            -223.0,
+            -189.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-88",
+          "label": "23-88",
+          "description": 88,
+          "associatedNodeID": 23,
+          "position": [
+            -27.6367188,
+            -213.0,
+            -149.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-89",
+          "label": "23-89",
+          "description": 89,
+          "associatedNodeID": 23,
+          "position": [
+            3.3632812,
+            -207.0,
+            -148.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-101",
+          "label": "23-101",
+          "description": 101,
+          "associatedNodeID": 23,
+          "position": [
+            -17.9967188,
+            -161.86,
+            -158.4856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-102",
+          "label": "23-102",
+          "description": 102,
+          "associatedNodeID": 23,
+          "position": [
+            -13.3067188,
+            -198.79,
+            -155.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-103",
+          "label": "23-103",
+          "description": 103,
+          "associatedNodeID": 23,
+          "position": [
+            -14.4467188,
+            -168.18,
+            -185.5156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-104",
+          "label": "23-104",
+          "description": 104,
+          "associatedNodeID": 23,
+          "position": [
+            -10.4567188,
+            -200.0,
+            -182.2956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-105",
+          "label": "23-105",
+          "description": 105,
+          "associatedNodeID": 23,
+          "position": [
+            -15.4067188,
+            -182.35,
+            -156.6656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-106",
+          "label": "23-106",
+          "description": 106,
+          "associatedNodeID": 23,
+          "position": [
+            -12.0267188,
+            -199.5,
+            -167.2756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-107",
+          "label": "23-107",
+          "description": 107,
+          "associatedNodeID": 23,
+          "position": [
+            -12.5067188,
+            -185.54,
+            -181.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-108",
+          "label": "23-108",
+          "description": 108,
+          "associatedNodeID": 23,
+          "position": [
+            -15.9767188,
+            -166.5,
+            -172.4856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-109",
+          "label": "23-109",
+          "description": 109,
+          "associatedNodeID": 23,
+          "position": [
+            -29.7267188,
+            -169.51,
+            -156.8856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-110",
+          "label": "23-110",
+          "description": 110,
+          "associatedNodeID": 23,
+          "position": [
+            -25.8267188,
+            -200.0,
+            -154.5256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-111",
+          "label": "23-111",
+          "description": 111,
+          "associatedNodeID": 23,
+          "position": [
+            -25.9267188,
+            -173.62,
+            -189.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-112",
+          "label": "23-112",
+          "description": 112,
+          "associatedNodeID": 23,
+          "position": [
+            -22.9367188,
+            -200.24,
+            -183.2456053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-113",
+          "label": "23-113",
+          "description": 113,
+          "associatedNodeID": 23,
+          "position": [
+            -27.7167188,
+            -183.94,
+            -157.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-114",
+          "label": "23-114",
+          "description": 114,
+          "associatedNodeID": 23,
+          "position": [
+            -24.3367188,
+            -200.65,
+            -168.5756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-115",
+          "label": "23-115",
+          "description": 115,
+          "associatedNodeID": 23,
+          "position": [
+            -24.6667188,
+            -187.3,
+            -183.4256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-116",
+          "label": "23-116",
+          "description": 116,
+          "associatedNodeID": 23,
+          "position": [
+            -27.8167188,
+            -171.61,
+            -173.1556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-117",
+          "label": "23-117",
+          "description": 117,
+          "associatedNodeID": 23,
+          "position": [
+            -5.4467188,
+            -162.72,
+            -156.7556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-118",
+          "label": "23-118",
+          "description": 118,
+          "associatedNodeID": 23,
+          "position": [
+            -0.9967188,
+            -198.04,
+            -153.4256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-119",
+          "label": "23-119",
+          "description": 119,
+          "associatedNodeID": 23,
+          "position": [
+            -1.6467188,
+            -170.3,
+            -184.6256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-120",
+          "label": "23-120",
+          "description": 120,
+          "associatedNodeID": 23,
+          "position": [
+            1.6432812,
+            -197.27,
+            -180.9556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-121",
+          "label": "23-121",
+          "description": 121,
+          "associatedNodeID": 23,
+          "position": [
+            -2.9167188,
+            -180.94,
+            -157.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-122",
+          "label": "23-122",
+          "description": 122,
+          "associatedNodeID": 23,
+          "position": [
+            0.4332812,
+            -199.5,
+            -165.7956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-123",
+          "label": "23-123",
+          "description": 123,
+          "associatedNodeID": 23,
+          "position": [
+            0.0032812,
+            -184.17,
+            -182.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-124",
+          "label": "23-124",
+          "description": 124,
+          "associatedNodeID": 23,
+          "position": [
+            -3.2767188,
+            -168.5,
+            -170.6856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-125",
+          "label": "23-125",
+          "description": 125,
+          "associatedNodeID": 23,
+          "position": [
+            -11.9767188,
+            -217.91,
+            -163.4556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-127",
+          "label": "23-127",
+          "description": 127,
+          "associatedNodeID": 23,
+          "position": [
+            -10.3267188,
+            -220.86,
+            -176.0556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-128",
+          "label": "23-128",
+          "description": 128,
+          "associatedNodeID": 23,
+          "position": [
+            -12.7067188,
+            -193.84,
+            -168.1656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-129",
+          "label": "23-129",
+          "description": 129,
+          "associatedNodeID": 23,
+          "position": [
+            -12.7267188,
+            -185.3,
+            -179.5656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "23-130",
+          "label": "23-130",
+          "description": 130,
+          "associatedNodeID": 23,
+          "position": [
+            -4.0167188,
+            -182.69,
+            -168.7356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        }
+      ],
+      "display": {
+        "visibility": true,
+        "opacity": 1.0,
+        "color": [
+          75,
+          0,
+          130
+        ],
+        "propertiesLabelVisibility": false
+      },
+      "description": ""
+    },
+    {
+      "type": "Fiducial",
+      "coordinateSystem": "RAS",
+      "locked": false,
+      "labelFormat": "%N-%d",
+      "controlPoints": [
+        {
+          "id": "24-41",
+          "label": "24-41",
+          "description": 41,
+          "associatedNodeID": 24,
+          "position": [
+            -9.3967188,
+            -220.07,
+            -193.0556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-42",
+          "label": "24-42",
+          "description": 42,
+          "associatedNodeID": 24,
+          "position": [
+            -6.5667188,
+            -247.97,
+            -197.3556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-43",
+          "label": "24-43",
+          "description": 43,
+          "associatedNodeID": 24,
+          "position": [
+            -40.5267188,
+            -216.46,
+            -194.7956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-44",
+          "label": "24-44",
+          "description": 44,
+          "associatedNodeID": 24,
+          "position": [
+            28.2132812,
+            -218.9,
+            -193.8456053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-45",
+          "label": "24-45",
+          "description": 45,
+          "associatedNodeID": 24,
+          "position": [
+            -30.2667188,
+            -221.39,
+            -184.0556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-46",
+          "label": "24-46",
+          "description": 46,
+          "associatedNodeID": 24,
+          "position": [
+            14.6332812,
+            -219.98,
+            -182.2756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-47",
+          "label": "24-47",
+          "description": 47,
+          "associatedNodeID": 24,
+          "position": [
+            -26.4567188,
+            -235.13,
+            -202.3256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-48",
+          "label": "24-48",
+          "description": 48,
+          "associatedNodeID": 24,
+          "position": [
+            10.6832812,
+            -233.59,
+            -201.1356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-50",
+          "label": "24-50",
+          "description": 50,
+          "associatedNodeID": 24,
+          "position": [
+            -6.5967188,
+            -197.08,
+            -199.5356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-61",
+          "label": "24-61",
+          "description": 61,
+          "associatedNodeID": 24,
+          "position": [
+            -10.6967188,
+            -222.2,
+            -181.1556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-81",
+          "label": "24-81",
+          "description": 81,
+          "associatedNodeID": 24,
+          "position": [
+            -5.6367188,
+            -263.0,
+            -196.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-82",
+          "label": "24-82",
+          "description": 82,
+          "associatedNodeID": 24,
+          "position": [
+            44.3632812,
+            -222.0,
+            -189.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-83",
+          "label": "24-83",
+          "description": 83,
+          "associatedNodeID": 24,
+          "position": [
+            -54.6367188,
+            -220.0,
+            -190.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-84",
+          "label": "24-84",
+          "description": 84,
+          "associatedNodeID": 24,
+          "position": [
+            -29.1367188,
+            -198.88,
+            -207.0256053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-85",
+          "label": "24-85",
+          "description": 85,
+          "associatedNodeID": 24,
+          "position": [
+            19.8632812,
+            -194.97,
+            -190.7456053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-86",
+          "label": "24-86",
+          "description": 86,
+          "associatedNodeID": 24,
+          "position": [
+            -26.6367188,
+            -246.0,
+            -208.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-87",
+          "label": "24-87",
+          "description": 87,
+          "associatedNodeID": 24,
+          "position": [
+            13.3632812,
+            -241.0,
+            -208.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-88",
+          "label": "24-88",
+          "description": 88,
+          "associatedNodeID": 24,
+          "position": [
+            -25.6367188,
+            -205.0,
+            -173.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-89",
+          "label": "24-89",
+          "description": 89,
+          "associatedNodeID": 24,
+          "position": [
+            5.3632812,
+            -203.0,
+            -174.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-101",
+          "label": "24-101",
+          "description": 101,
+          "associatedNodeID": 24,
+          "position": [
+            -8.0367188,
+            -179.5,
+            -199.4356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-102",
+          "label": "24-102",
+          "description": 102,
+          "associatedNodeID": 24,
+          "position": [
+            -11.4067188,
+            -208.06,
+            -182.4156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-103",
+          "label": "24-103",
+          "description": 103,
+          "associatedNodeID": 24,
+          "position": [
+            -0.6067188,
+            -187.37,
+            -219.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-104",
+          "label": "24-104",
+          "description": 104,
+          "associatedNodeID": 24,
+          "position": [
+            -3.9867188,
+            -215.5,
+            -202.9656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-105",
+          "label": "24-105",
+          "description": 105,
+          "associatedNodeID": 24,
+          "position": [
+            -10.6267188,
+            -189.15,
+            -189.3156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-106",
+          "label": "24-106",
+          "description": 106,
+          "associatedNodeID": 24,
+          "position": [
+            -8.8467188,
+            -210.87,
+            -189.4456053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-107",
+          "label": "24-107",
+          "description": 107,
+          "associatedNodeID": 24,
+          "position": [
+            -3.0967188,
+            -203.97,
+            -208.4156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-108",
+          "label": "24-108",
+          "description": 108,
+          "associatedNodeID": 24,
+          "position": [
+            -4.3467188,
+            -183.3,
+            -209.6156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-109",
+          "label": "24-109",
+          "description": 109,
+          "associatedNodeID": 24,
+          "position": [
+            -21.0267188,
+            -188.79,
+            -205.7656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-110",
+          "label": "24-110",
+          "description": 110,
+          "associatedNodeID": 24,
+          "position": [
+            -26.4867188,
+            -200.91,
+            -186.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-111",
+          "label": "24-111",
+          "description": 111,
+          "associatedNodeID": 24,
+          "position": [
+            -16.4067188,
+            -187.79,
+            -219.9056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-112",
+          "label": "24-112",
+          "description": 112,
+          "associatedNodeID": 24,
+          "position": [
+            -19.0067188,
+            -213.14,
+            -205.9856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-113",
+          "label": "24-113",
+          "description": 113,
+          "associatedNodeID": 24,
+          "position": [
+            -26.2367188,
+            -187.47,
+            -190.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-114",
+          "label": "24-114",
+          "description": 114,
+          "associatedNodeID": 24,
+          "position": [
+            -22.4567188,
+            -208.5,
+            -196.7156053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-115",
+          "label": "24-115",
+          "description": 115,
+          "associatedNodeID": 24,
+          "position": [
+            -18.3467188,
+            -202.99,
+            -210.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-116",
+          "label": "24-116",
+          "description": 116,
+          "associatedNodeID": 24,
+          "position": [
+            -19.0967188,
+            -187.93,
+            -211.7756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-117",
+          "label": "24-117",
+          "description": 117,
+          "associatedNodeID": 24,
+          "position": [
+            5.0132812,
+            -178.92,
+            -191.1956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-118",
+          "label": "24-118",
+          "description": 118,
+          "associatedNodeID": 24,
+          "position": [
+            1.7032812,
+            -203.08,
+            -175.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-119",
+          "label": "24-119",
+          "description": 119,
+          "associatedNodeID": 24,
+          "position": [
+            14.5232812,
+            -197.22,
+            -215.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-120",
+          "label": "24-120",
+          "description": 120,
+          "associatedNodeID": 24,
+          "position": [
+            8.5132812,
+            -211.41,
+            -193.8956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-121",
+          "label": "24-121",
+          "description": 121,
+          "associatedNodeID": 24,
+          "position": [
+            5.0532812,
+            -190.97,
+            -188.4056053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-122",
+          "label": "24-122",
+          "description": 122,
+          "associatedNodeID": 24,
+          "position": [
+            5.2732812,
+            -210.1,
+            -184.4656053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-123",
+          "label": "24-123",
+          "description": 123,
+          "associatedNodeID": 24,
+          "position": [
+            13.5132812,
+            -207.62,
+            -209.8556053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-124",
+          "label": "24-124",
+          "description": 124,
+          "associatedNodeID": 24,
+          "position": [
+            8.9132812,
+            -187.8,
+            -200.7856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-125",
+          "label": "24-125",
+          "description": 125,
+          "associatedNodeID": 24,
+          "position": [
+            -9.1667188,
+            -228.58,
+            -194.1856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-127",
+          "label": "24-127",
+          "description": 127,
+          "associatedNodeID": 24,
+          "position": [
+            -9.0367188,
+            -228.8,
+            -194.5356053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-128",
+          "label": "24-128",
+          "description": 128,
+          "associatedNodeID": 24,
+          "position": [
+            -7.9067188,
+            -205.08,
+            -193.6856053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-129",
+          "label": "24-129",
+          "description": 129,
+          "associatedNodeID": 24,
+          "position": [
+            -3.6267188,
+            -202.93,
+            -207.0756053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        },
+        {
+          "id": "24-130",
+          "label": "24-130",
+          "description": 130,
+          "associatedNodeID": 24,
+          "position": [
+            2.8632812,
+            -196.32,
+            -196.3956053
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "selected": false,
+          "locked": false,
+          "visibility": true,
+          "positionStatus": "defined"
+        }
+      ],
+      "display": {
+        "visibility": true,
+        "opacity": 1.0,
+        "color": [
+          255,
+          182,
+          193
+        ],
+        "propertiesLabelVisibility": false
+      },
+      "description": ""
+    }
+  ],
+  "schema": "https://raw.githubusercontent.com/slicer/slicer/master/Modules/Loadable/Markups/Resources/Schema/markups-schema-v1.0.3.json#"
+}

@@ -323,8 +323,9 @@ def create_error_type_comparison_plots(metrics_dir, output_dir=None, experiment_
         ))
         
         # Layout für Plot 1
+        if metric == 'Accuracy': metric = 'Accuracy (2 mm)'
         fig1.update_layout(
-            title=f'Error Type Comparison - {metric} (Coarse vs Refined)',
+            title=f'{metric} (Coarse vs Refined)',
             xaxis_title='Experiments',
             yaxis_title=metric,
             barmode='group',
@@ -335,6 +336,7 @@ def create_error_type_comparison_plots(metrics_dir, output_dir=None, experiment_
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         
+        """
         # Plot 2: coarse_proj_error vs refined_proj_error
         fig2 = go.Figure()
         
@@ -391,25 +393,26 @@ def create_error_type_comparison_plots(metrics_dir, output_dir=None, experiment_
             yaxis=dict(range=[y_min, y_max]),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
+        """
         
         # Plots speichern
-        output_path1_html = os.path.join(output_dir, f'error_comparison_coarse_vs_refined_{metric.lower().replace(" ", "_")}.html')
-        output_path2_html = os.path.join(output_dir, f'error_comparison_proj_{metric.lower().replace(" ", "_")}.html')
+        #output_path1_html = os.path.join(output_dir, f'error_comparison_coarse_vs_refined_{metric.lower().replace(" ", "_")}.html')
+        #output_path2_html = os.path.join(output_dir, f'error_comparison_proj_{metric.lower().replace(" ", "_")}.html')
         output_path1_pdf = os.path.join(output_dir, f'error_comparison_coarse_vs_refined_{metric.lower().replace(" ", "_")}.pdf')
-        output_path2_pdf = os.path.join(output_dir, f'error_comparison_proj_{metric.lower().replace(" ", "_")}.pdf')
+        #output_path2_pdf = os.path.join(output_dir, f'error_comparison_proj_{metric.lower().replace(" ", "_")}.pdf')
         
-        fig1.write_html(output_path1_html)
-        fig2.write_html(output_path2_html)
+        #fig1.write_html(output_path1_html)
+        #fig2.write_html(output_path2_html)
         fig1.write_image(output_path1_pdf, width=1000, height=600, scale=2)
-        fig2.write_image(output_path2_pdf, width=1000, height=600, scale=2)
+        #fig2.write_image(output_path2_pdf, width=1000, height=600, scale=2)
         
-        print(f"Plot gespeichert: {output_path1_html}")
-        print(f"Plot gespeichert: {output_path2_html}")
+        #print(f"Plot gespeichert: {output_path1_html}")
+        #print(f"Plot gespeichert: {output_path2_html}")
         print(f"Plot gespeichert: {output_path1_pdf}")
-        print(f"Plot gespeichert: {output_path2_pdf}")
+        #print(f"Plot gespeichert: {output_path2_pdf}")
         
         fig1.show()
-        fig2.show()
+        #fig2.show()
 
 def create_single_metric_plot(metrics_dir, metric_name, error_type, output_dir=None, 
                             val_color='#1F3E74', test_color='#4469AD', figsize=(12, 6), y_range=None):
@@ -549,8 +552,7 @@ if __name__ == "__main__":
         }
         
         # Experiment-Reihenfolge definieren (optional)
-        #experiment_order = ['standard-architecture', 'only-coarse-module', 'no-coarse-preds', 
-        #                   'no-global-features', 'no-poi-vert', 'no-patch-features', 'no-projection']
+        #experiment_order = ['standard-architecture', 'only-coarse-module', 'no-coarse-preds', 'no-global-features', 'no-poi-id', 'no-vert-id', 'no-poi-vert-id', 'no-patch-features', 'no-poi-vert-id-global-features', 'no-projection']
 
         #experiment_order = ['standard-architecture1', 'standard-architecture2', 'standard-architecture3', 'standard-architecture4',
         #                    'standard-architecture5', 'standard-architecture6', 'standard-architecture7', 'standard-architecture8', 
@@ -559,9 +561,12 @@ if __name__ == "__main__":
         
         #experiment_order = ['standard-architecture', 'only-coarse-module', 'no-coarse-preds', 'no-global-features', 'no-poi-vert', 'no-patch-features', 'no-projection']
 
-        experiment_order = ['include-com', 'all-pois', 'excel-exclude', 'excel-outliers-exclude', 'subreg-0.5-zoom', 'subreg-2.0-zoom', 'vertseg', 'surface-mask', 'ct-scan', 'neighbors']
+        #experiment_order = ['semantic-mask', 'instance-mask', 'surface-mask', 'ct-scan', 'semantic-0.5-zoom', 'semantic-2.0-zoom', 'neighbors']
         # Test ob das Verzeichnis existiert
-        metrics_dir = 'dataloader/combined'
+
+        #experiment_order = ['neighbor', 'neighbor-0.5-zoom', 'neighbor-0.75-zoom', 'neighbor-NoPoiVertFeat', 'neighbor-NoPoiVertFeat-0.5-zoom', 'neighbor-NoPoiVertFeat-0.75-zoom']
+        experiment_order = ['no-vert-id', 'semantic-mask', 'semantic-0.5-zoom', 'subreg-surface', 'neighbor', 'neighbor-NoVert']
+        metrics_dir = 'best_models'
         if not os.path.exists(metrics_dir):
             print(f"Verzeichnis {metrics_dir} existiert nicht!")
             print("Bitte passen Sie den Pfad an.")
@@ -569,11 +574,11 @@ if __name__ == "__main__":
             print(f"Verwende Verzeichnis: {metrics_dir}")
             
             # Alle Plots mit festen Skalen erstellen
-            create_ablation_plots(metrics_dir,
-                                 fixed_scales=fixed_scales,
-                                 experiment_order=experiment_order,
-                                 val_color='#1F3E74', 
-                                 test_color='#4469AD')
+            #create_ablation_plots(metrics_dir,
+            #                     fixed_scales=fixed_scales,
+            #                     experiment_order=experiment_order,
+            #                     val_color='#1F3E74', 
+            #                     test_color='#4469AD')
             
             # Neue Error-Type Vergleichsplots erstellen
             create_error_type_comparison_plots(metrics_dir,

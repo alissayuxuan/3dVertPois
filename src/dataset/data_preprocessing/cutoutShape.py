@@ -1,12 +1,13 @@
 import os
 import numpy as np
-from TPTBox import NII
+from TPTBox import NII, BIDS_Global_info
 from TPTBox.core.poi import POI
 
 import pandas as pd
 import os
 
-def copy_and_update_master_df(base_dir: str, save_dir: str, old_folder: str = "cutouts", new_folder: str = "cutouts-2.0_zoom"):
+
+def copy_and_update_master_df(base_dir: str, save_dir: str, old_folder: str = "cutouts-neighbor", new_folder: str = "cutouts-neighbor-0.5_zoom"):
     """
     Copies master_df.csv from base_dir to save_dir and updates file_dir paths
     
@@ -40,7 +41,7 @@ def find_max_shape():
     """
     Goes through all segmentation masks and returns the maximum shape found as a tuple.
     """
-    base_dir = 'cutout-folder/cutouts-2.0_zoom'#'cutout-folder/cutouts-0.5_zoom'  # change!
+    base_dir = 'cutout-folder/cutouts-verse19'#'cutout-folder/cutouts-0.5_zoom'  # change!
 
     max_shape = None
 
@@ -69,8 +70,8 @@ def rescale_cutouts(zoom:tuple):
     """
     rescales all files to specified zoom
     """
-    base_dir = 'cutout-folder/cutouts' # change
-    save_dir = 'cutout-folder/cutouts-2.0_zoom' #change
+    base_dir = 'cutout-folder/cutouts-neighbor'#cutout-folder/cutouts' # change
+    save_dir = 'cutout-folder/cutouts-neighbor-0.75_zoom'#cutout-folder/cutouts-2.0_zoom' #change
 
 
     for ws_folder in os.listdir(base_dir):
@@ -142,14 +143,50 @@ def mask_seg():
     """
 
 
+# Function to check if all subjects in BIDS are in the master_df, and prints the missing ones
+def master_has_all_subjects():
+    bids_gloabl_info = BIDS_Global_info(
+        datasets=["dataset-verse19"], parents=["rawdata", "derivatives"]
+    )
+    master_df = pd.read_csv("cutout-folder/cutouts-verse19/master_df.csv")
+    for subject, _ in bids_gloabl_info.enumerate_subjects():
+        if subject not in master_df['subject'].values:
+            print(f"Missing subject: {subject}\n")
+
+
+# prints all subjects in the master_df (and splits them into train/val/test)
+def print_list(label, arr):
+    print(f"{label}:")
+    for item in arr:
+        print(f'    "{item}",')
+
+def print_all_subjects():
+    master_df = pd.read_csv("cutout-folder/cutouts-verse19/master_df.csv")
+    all_subjects = master_df['subject'].unique()
+    total_subjects = len(all_subjects)
+    train_split = int(total_subjects * 0.7) 
+    val_split = int(total_subjects * 0.15)
+    train_subjects = all_subjects[:train_split]
+    val_subjects = all_subjects[train_split:train_split + val_split]
+    test_subjects = all_subjects[train_split + val_split:]
+
+    print_list("train subjects", train_subjects)
+    print()
+    print_list("val subjects", val_subjects)
+    print()
+    print_list("test subjects", test_subjects)
+
 
 if __name__ == "__main__":
-    #find_max_shape()
-    #rescale_cutouts((2, 2, 2))
+    find_max_shape()
+    #rescale_cutouts((0.75, 0.75, 0.75))
 
     #copy_and_update_master_df(
-    #    base_dir='cutout-folder/cutouts',
-    #    save_dir='cutout-folder/cutouts-2.0_zoom'
+    #    base_dir='cutout-folder/cutouts-neighbor',
+    #    save_dir='cutout-folder/cutouts-neighbor-0.5_zoom'
     #)
 
-    mask_seg()
+    #mask_seg()
+
+
+    #print_all_subjects()
