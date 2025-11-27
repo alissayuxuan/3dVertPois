@@ -11,14 +11,17 @@ import numpy as np
 from joblib import Parallel, delayed
 from TPTBox.core.bids_constants import sequence_splitting_keys
 
+import os
+
 
 logger = No_Logger()
 
 # zoom = (0.8, 0.8, 0.8)
 
-der_seg = "derivatives_spine_r"
+der_seg = "derivatives"
 
-DATASET = "dataset/data_preprocessing/dataset-verse20-copy"
+DATASET = "dataset/data_preprocessing/dataset-verse19"
+SAVE_PATH = "predictions/verse19-deterministic"
 
 SKIPPED_SUBJECTS = []
 
@@ -50,9 +53,10 @@ def _proc(name, subject):
 
             #####
             # outputs
-            out_det = ct_ref.get_changed_path(file_type="json", bids_format="poi", parent=der_seg, info={"source": "deterministic"})
+            #out_det = ct_ref.get_changed_path(file_type="json", bids_format="poi", parent=der_seg, info={"source": "deterministic"})
             #out_det_global = ct_ref.get_changed_path(file_type="json", bids_format="poi", parent=der_seg, info={"source": "global"})
-
+            out_det = Path(SAVE_PATH) / name / "poi_predicted.json"
+            out_det.parent.mkdir(parents=True, exist_ok=True)
             #####
             if out_det.exists():
                 logger.print("Outputs already exist")

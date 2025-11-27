@@ -115,7 +115,6 @@ bids/*
 .mypy_cache/
 
 # ignore big data
-src/dataset/data_preprocessing/cutout-folder/*
 src/dataset/data_preprocessing/dataset-folder/*
 src/dataset/data_preprocessing/dataset-folder-test/*
 src/experiments/*
@@ -128,3 +127,4 @@ src/ablation_study/neighbor/evaluation/*
 src/ablation_study/neighbor/training/*
 *.ckpt
 *.nii.gz
+*.json

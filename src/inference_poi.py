@@ -589,20 +589,20 @@ if __name__ == "__main__":
         parents=["derivatives"],
     )
 
-    save_dir = "/home/student/alissa/3dVertPois/src/predictions/verse19-inferenced-test-test/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude"
+    save_dir = "/home/student/alissa/3dVertPois/src/predictions/verse19-inferenced-LAS/subreg-project_gt-no_freeze-SADenseNet-standard_architecture-excel_outliers_exclude"
     #dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
     #model_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=74-fine_mean_distance_val=1.77.ckpt"
 
-    dm_path = "ablation_study/architecture/training/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude/version_0/data_module_params.json"
-    model_path = "ablation_study/architecture/training/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=94-fine_mean_distance_val=1.66.ckpt"
+    dm_path = "ablation_study/architecture/training/subreg-no_project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
+    model_path = "ablation_study/architecture/training/subreg-no_project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=60-fine_mean_distance_val=1.76.ckpt"
     
-    subjects_inferenced = 0
+    #subjects_inferenced = 0
 
     for sub, container in bgi.enumerate_subjects():
         print(f"Subject: {sub}")
-        if subjects_inferenced >= 10:
-            print(f"10 Subjects have been inferenced. Break.")
-            break
+        #if subjects_inferenced >= 10:
+        #    print(f"10 Subjects have been inferenced. Break.")
+        #    break
 
         vert_msk = get_vertseg(container)
         subreg_msk = get_subreg(container)
@@ -617,6 +617,14 @@ if __name__ == "__main__":
             print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and subreg {subreg_msk.shape} shapes don't match")
             continue
 
+        if vert_msk.orientation != subreg_msk.orientation:
+            print(f"Skip Subject: {sub} - vertseg {vert_msk.orientation} and subreg {subreg_msk.orientation} orientations don't match")
+            continue
+
+        if vert_msk.orientation != ("L", "A", "S"):
+            print(f"Skip Subject: {sub} - vertseg orientation {vert_msk.orientation} is not LAS")
+            continue
+
         create_prediction_poi_files(
             sub,
             vert_msk,
@@ -627,6 +635,6 @@ if __name__ == "__main__":
             project_to_surface=False,
         ) 
 
-        subjects_inferenced += 1
+        #subjects_inferenced += 1
     
 
