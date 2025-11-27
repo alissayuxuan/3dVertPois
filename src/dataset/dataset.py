@@ -3,7 +3,7 @@ import os
 
 import torch
 import numpy as np
-#from BIDS import NII, POI
+# from BIDS import NII, POI
 from TPTBox import NII
 from TPTBox.core.poi import POI
 from torch.utils.data import Dataset
@@ -51,10 +51,22 @@ class PoiDataset(Dataset):
             vert: idx for idx, vert in enumerate(include_vert_list)
         }
         self.iterations = iterations
-        
 
     def __len__(self):
         return len(self.master_df)
+
+    def preprocess_nifti(self, nii_path, is_img=False):
+        nii = NII.load(nii_path, seg=not is_img)
+        nii.rescale_and_reorient_(axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False)
+        if is_img:
+            nii = nii.normalize_ct(min_out=0, max_out=1, inplace=True)
+        array = nii.get_array()
+
+        array, offset = pad_array_to_shape(array, self.input_shape)
+
+        tensor = torch.from_numpy(array.astype(float)).unsqueeze(0)  # Add channel dim
+
+        return tensor, offset
 
     def __getitem__(self, index):
         data_dict = {}
@@ -80,80 +92,95 @@ class PoiDataset(Dataset):
         surface_msk_path = os.path.join(file_dir, "surface_msk.nii.gz")
         poi_path = os.path.join(file_dir, self.poi_file_ending)
 
-        # Load the BIDS objects
-        ct = NII.load(ct_path, seg = False)
-        subreg = NII.load(subreg_path, seg=True)
-        vertseg = NII.load(msk_path, seg=True)
-        surface_msk = NII.load(surface_msk_path, seg=True)
-        poi = POI.load(poi_path)
-
-        ct.rescale_and_reorient_(
-            axcodes_to=('L', 'A', 'S'), voxel_spacing = self.zoom, verbose = False
-        )
-        subreg.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
-        )
-        vertseg.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
-        )
-        surface_msk.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
-        )
-        poi.reorient_(axcodes_to=("L", "A", "S"), verbose=False).rescale_(
-            self.zoom, verbose=False
-        )
-
-        ct.normalize_ct(min_out=0, max_out=1, inplace=True)
-
-
         # Get the ground truth POIs
+        poi = POI.load(poi_path)
+        poi.reorient_(axcodes_to=("L", "A", "S"), verbose=False).rescale_(self.zoom, verbose=False)
         poi, missing_pois = get_gt_pois(poi, vertebra, self.poi_indices)
 
         poi_indices = torch.tensor(self.poi_indices)
 
-        # Get arrays
-        ct = ct.get_array()
-        subreg = subreg.get_array()
-        vertseg = vertseg.get_array()
-        surface_msk = surface_msk.get_array()
-
+        # Load Data
+        # ct, offset = self.preprocess_nifti(ct_path, is_img=True)
+        subreg, offset = self.preprocess_nifti(subreg_path, is_img=False)
+        vertseg, _ = self.preprocess_nifti(msk_path, is_img=False)
         mask = vertseg == vertebra
+        # surface_msk, _ = self.preprocess_nifti(surface_msk_path, is_img=False)
 
-        ct = ct * mask
-        subreg = subreg * mask
-        vertseg = vertseg * mask
-        surface_msk = surface_msk * mask
-        
-
-        subreg, offset = pad_array_to_shape(subreg, self.input_shape)
-        vertseg, _ = pad_array_to_shape(vertseg, self.input_shape)
-        surface_msk, _ = pad_array_to_shape(surface_msk, self.input_shape)
-        ct, _ = pad_array_to_shape(ct, self.input_shape)
-
-        poi = poi + torch.tensor(offset)
-
-        # Convert subreg, vertseg and surface_msk to tensors
-        ct = torch.from_numpy(ct.astype(float))
-        subreg = torch.from_numpy(subreg.astype(float))
-        vertseg = torch.from_numpy(vertseg.astype(float))
-        surface_msk = torch.from_numpy(surface_msk.astype(float))
-
-        # Add channel dimension
-        ct = ct.unsqueeze(0)
-        subreg = subreg.unsqueeze(0)
-        vertseg = vertseg.unsqueeze(0)
-        surface_msk = surface_msk.unsqueeze(0)
-
-        if self.input_data_type == "vertseg":  
-            data_dict["input"] = vertseg  
-        elif self.input_data_type == "subreg":   
-            data_dict["input"] = subreg  
-        elif self.input_data_type == "ct":  
+        if self.input_data_type == "vertseg":
+            data_dict["input"] = vertseg * mask
+        elif self.input_data_type == "subreg":
+            data_dict["input"] = subreg * mask
+        elif self.input_data_type == "ct":
+            ct, _ = self.preprocess_nifti(ct_path, is_img=True)
+            data_dict["input"] = ct * mask
+        elif self.input_data_type == "ct_raw":
+            ct, _ = self.preprocess_nifti(ct_path, is_img=True)
             data_dict["input"] = ct
         elif self.input_data_type == "surface_msk":
-            data_dict["input"] = surface_msk
+            surface_msk, _ = self.preprocess_nifti(surface_msk_path, is_img=False)
+            data_dict["input"] = surface_msk * mask
+        else:
+            raise ValueError(f"Unknown input data type: {self.input_data_type}")
 
-        #data_dict["input"] = vertseg#subreg
+        # Load the BIDS objects
+        # ct = NII.load(ct_path, seg = False)
+        # subreg = NII.load(subreg_path, seg=True)
+        # vertseg = NII.load(msk_path, seg=True)
+        # surface_msk = NII.load(surface_msk_path, seg=True)
+        # poi = POI.load(poi_path)
+        #
+        # ct.rescale_and_reorient_(
+        #    axcodes_to=('L', 'A', 'S'), voxel_spacing = self.zoom, verbose = False
+        # )
+        # subreg.rescale_and_reorient_(
+        #    axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
+        # )
+        # vertseg.rescale_and_reorient_(
+        #    axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
+        # )
+        # surface_msk.rescale_and_reorient_(
+        #    axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
+        # )
+        #
+
+        # ct.normalize_ct(min_out=0, max_out=1, inplace=True)
+
+        # Get arrays
+        # ct = ct.get_array()
+        # subreg = subreg.get_array()
+        # vertseg = vertseg.get_array()
+        # surface_msk = surface_msk.get_array()
+
+        # mask = vertseg == vertebra
+
+        # ct_msk = ct * mask
+        # subreg = subreg * mask
+        # vertseg = vertseg * mask
+        # surface_msk = surface_msk * mask
+        #
+        # subreg, offset = pad_array_to_shape(subreg, self.input_shape)
+        # vertseg, _ = pad_array_to_shape(vertseg, self.input_shape)
+        # surface_msk, _ = pad_array_to_shape(surface_msk, self.input_shape)
+        # ct, _ = pad_array_to_shape(ct, self.input_shape)
+        # ct_msk, _ = pad_array_to_shape(ct_msk, self.input_shape)[0]
+        #
+        poi = poi + torch.tensor(offset)
+        #
+        ## Convert subreg, vertseg and surface_msk to tensors
+        # ct = torch.from_numpy(ct.astype(float))
+        # ct_msk = torch.from_numpy(ct_msk.astype(float))
+        # subreg = torch.from_numpy(subreg.astype(float))
+        # vertseg = torch.from_numpy(vertseg.astype(float))
+        # surface_msk = torch.from_numpy(surface_msk.astype(float))
+        #
+        ## Add channel dimension
+        # ct = ct.unsqueeze(0)
+        # ct_msk = ct_msk.unsqueeze(0)
+        # subreg = subreg.unsqueeze(0)
+        # vertseg = vertseg.unsqueeze(0)
+        # surface_msk = surface_msk.unsqueeze(0)
+
+        # data_dict["input"] = vertseg#subreg
         data_dict["target"] = poi
         data_dict["target_indices"] = poi_indices
 
