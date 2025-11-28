@@ -34,10 +34,34 @@ class WingLoss3D(nn.Module):
         return loss.mean()
 
 
+class L1LossMasked(nn.Module):
+    def __init__(self):
+        super(L1LossMasked, self).__init__()
+        self.l1_loss = nn.L1Loss(reduction="none")
+
+    def forward(self, pred, target, mask=None):
+        loss = self.l1_loss(pred, target)
+        masked_loss = loss[mask]
+        return masked_loss.mean()
+
+
+class L2LossMasked(nn.Module):
+    def __init__(self):
+        super(L2LossMasked, self).__init__()
+        self.mse_loss = nn.MSELoss(reduction="none")
+
+    def forward(self, pred, target, mask=None):
+        loss = self.mse_loss(pred, target)
+        masked_loss = loss[mask]
+        return masked_loss.mean()
+
+
 def get_loss_fn(loss_fn: str):
     if loss_fn == "L1":
-        return nn.L1Loss()
+        return L1LossMasked()
     elif loss_fn == "WingLoss":
         return WingLoss3D()
+    elif loss_fn == "L2":
+        return L2LossMasked()
     else:
         raise ValueError(f"Unknown loss function: {loss_fn}")

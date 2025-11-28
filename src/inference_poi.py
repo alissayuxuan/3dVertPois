@@ -33,7 +33,7 @@ from utils.misc import surface_project_coords
 from torch.utils.data.dataloader import default_collate
 
 
-def get_subreg(container):
+def get_subreg(container) -> NII:
     subreg_query = container.new_query(flatten=True)
     subreg_query.filter_format("msk")
     subreg_query.filter_filetype("nii.gz")  # only nifti files
@@ -50,7 +50,8 @@ def get_subreg(container):
         print(f"Error opening subreg: {str(e)}")
         return None
 
-def get_vertseg(container):
+
+def get_vertseg(container) -> NII:
     vertseg_query = container.new_query(flatten=True)
     vertseg_query.filter_format("msk")
     vertseg_query.filter_filetype("nii.gz")  # only nifti files
@@ -66,6 +67,7 @@ def get_vertseg(container):
     except Exception as e:
         print(f"Error opening vertseg: {str(e)}")
         return None
+
 
 def get_poi(container):
     poi_query = container.new_query(flatten=True)
@@ -227,8 +229,7 @@ class GruberInferenceDataset(Dataset):
         # ct = ct * mask
         subreg = subreg * mask
 
-
-        ###        
+        ###
         if any(s > t for s, t in zip(subreg.shape, self.input_shape)):
             print(f"Skipping subject {subject} vertebra {vertebra} (shape {subreg.shape} > {self.input_shape})")
             return None        
@@ -255,6 +256,10 @@ class GruberInferenceDataset(Dataset):
             data_dict["input"] = vertseg
         elif self.input_data_type == "subreg":
             data_dict["input"] = subreg
+        # elif self.input_data_type == "ct":
+        #    data_dict["input"] = ct
+        elif self.input_data_type == "surface_msk":
+            data_dict["input"] = surface
 
         data_dict["surface"] = surface
         data_dict["vertebra"] = vertebra
@@ -291,12 +296,13 @@ def safe_collate(batch):
         return None  # All items skipped
     return default_collate(batch)
 
+
 def preprocess_segmentation_masks(
     subject,
-    vert_msk,
-    subreg_msk,
+    vert_msk: NII,
+    subreg_msk: NII,
     vert_list,
-    zoom=(1, 1, 1)
+    zoom=(1, 1, 1),
 ):
     """
     Preprocess segmentation masks and create a master dataframe.
@@ -310,6 +316,15 @@ def preprocess_segmentation_masks(
     original_rotation = vert_msk.rotation
     original_origin = vert_msk.origin 
 
+    print(
+        "Original msk meta",
+        original_orientation,
+        original_zoom,
+        original_shape,
+        original_rotation,
+        original_origin,
+    )
+
     # Create temp directory
     temp_dir = "tmp/"
     os.makedirs(os.path.join(temp_dir, subject), exist_ok=True)
@@ -319,7 +334,9 @@ def preprocess_segmentation_masks(
     vertebrae = [v for v in vert_list if v in msk_vert_list]
 
     # Bring the masks to standard orientation. Zoom is applied AFTER cutting out the vertebrae
-    vert_msk.reorient_(("L", "A", "S"))
+    vert_msk = vert_msk.reorient(("L", "A", "S"), verbose=True)
+    original_zoom = vert_msk.zoom  # update original zoom after reorientation
+    original_shape = vert_msk.shape  # update original shape after reorientation
     subreg_msk.reorient_(("L", "A", "S"))
 
     # Load the data array
@@ -327,6 +344,7 @@ def preprocess_segmentation_masks(
 
     # Create vertebra-wise cutouts and a master_df in a temporary directory
     cutout_info = []
+    first = True
     for vert in vertebrae:
         # This uses the standard margin of 5 voxels around the vertebra in each direction. When the model is trained with a different margin, this should be adjusted!
         x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(vertseg_arr, vert)
@@ -341,9 +359,10 @@ def preprocess_segmentation_masks(
         vert_cropped = vert_msk.apply_crop(
             ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
         )
+        print("Cropped from shape", vert_msk.shape, "to", vert_cropped.shape) if first else None
 
         # rescale the cutouts to zoom mm resolution
-        vert_cropped.rescale_(zoom)
+        vert_cropped.rescale_(zoom, verbose=first)
         subreg_cropped.rescale_(zoom)
 
         vert_cropped.save(vert_path, verbose=False)
@@ -355,6 +374,20 @@ def preprocess_segmentation_masks(
         preprocessed_orientation = vert_cropped.orientation
         preprocessed_zoom = vert_cropped.zoom
         preprocessed_shape = vert_cropped.shape
+
+        (
+            print(
+                "Preprocessed msk meta",
+                preprocessed_orientation,
+                preprocessed_zoom,
+                preprocessed_shape,
+                preprocessed_rotation,
+                preprocessed_origin,
+            )
+            if first
+            else None
+        )
+        first = False
 
         # Save the slice indices as json to reconstruct the original POI file (there probably is a more BIDS-like approach to this)
         cutout_info.append(
@@ -393,6 +426,7 @@ def preprocess_segmentation_masks(
 
     return master_df, temp_dir
 
+
 def create_prediction_poi_files(
     subject,
     vert_msk,
@@ -412,7 +446,7 @@ def create_prediction_poi_files(
 
     # preprocess segmentation masks and then save the info in a master_df ( create a /tmp)
     master_df, temp_dir = preprocess_segmentation_masks(subject, vert_msk, subreg_msk, vert_list, zoom)
-    
+
     print(f"inferencing subject: {subject}")
     # get data_module and create dataset
     ds = GruberInferenceDataset(
@@ -425,6 +459,7 @@ def create_prediction_poi_files(
 
     partial_centroids = []
     # predict POIs
+    first = True
     for batch in dl:
 
         if batch is None:
@@ -453,7 +488,7 @@ def create_prediction_poi_files(
         poi_indices = batch["poi_indices"].squeeze().detach().cpu().numpy()
         cutout_offset = batch["cutout_offset"].squeeze().detach().cpu().numpy()
         subject = batch["subject"][0]
-        
+
         # Get the preprocessed parameters
         preprocessed_rotation = batch["preprocessed_rotation"][0].detach().cpu().numpy() #ALISSA
         preprocessed_orientation = ast.literal_eval(batch["preprocessed_orientation"][0])
@@ -491,23 +526,25 @@ def create_prediction_poi_files(
             batch["original_shape"][1][0].item(),
             batch["original_shape"][2][0].item(),
         )
- 
+
         # get segmentation mask path
         vert_path = batch["vert_path"][0]      
         subreg_path = batch["subreg_path"][0]
 
         # Create the new POI file
-        unpadded_refined_preds_ctd = ev.np_to_ctd(
+        unpadded_refined_preds_ctd: POI = ev.np_to_ctd(
             pred_coords,
             vertebra=vertebra.item(),
             origin=preprocessed_origin,
-            rotation= preprocessed_rotation, 
+            rotation=preprocessed_rotation,
             idx_list=poi_indices,
             shape=preprocessed_shape,
             zoom=preprocessed_zoom,
             offset=padding_offset,
-            orientation=preprocessed_orientation
+            orientation=preprocessed_orientation,
         )
+
+        print(unpadded_refined_preds_ctd) if first else None
 
         subject_dir = os.path.join(save_dir, str(subject), "cutouts-preproccessed")
         os.makedirs(subject_dir, exist_ok=True)
@@ -521,7 +558,7 @@ def create_prediction_poi_files(
         unpadded_refined_preds_ctd.save(ctd_save_path, verbose=False)
         unpadded_refined_preds_ctd_poi = POI.load(ctd_save_path)
         unpadded_refined_preds_ctd_poi.to_global().save_mrk(ctd_global_save_path)
-        
+
         # copy segmentation masks
         vertseg_save_path = ctd_save_path.replace("_pred.json", "_vertseg.nii.gz")
         subreg_save_path = ctd_save_path.replace("_pred.json", "_subreg.nii.gz")
@@ -536,56 +573,63 @@ def create_prediction_poi_files(
         else:
             print(f"⚠️ Segmentation file not found: {subreg_path}")
 
-        
-        # TODO: combine centroids (rescale, add cutoutoffset and reorient to original space)
-        unpadded_refined_preds_ctd.rescale_(original_zoom)
+        unpadded_refined_preds_ctd.rescale_(original_zoom, verbose=first)
 
+        # TODO: combine centroids (rescale, add cutoutoffset and reorient to original space)
         new_centroids = {}
         for v, p_idx, c in unpadded_refined_preds_ctd.centroids.items():
             new_coords = c + cutout_offset
             new_centroids[(v, p_idx)] = (new_coords[0], new_coords[1], new_coords[2])
-
         unpadded_refined_preds_ctd.centroids = new_centroids
+        unpadded_refined_preds_ctd.shape = original_shape
+        #
 
-        unpadded_refined_preds_ctd.reorient_(original_orientation) 
+        unpadded_refined_preds_ctd.reorient_(original_orientation, verbose=first)
+        first = False
 
         partial_centroids.append(
             {
                 "subject": subject,
-                "original_shape": original_shape,
-                "original_zoom": original_zoom,
-                "original_orientation": original_orientation,
-                "original_rotation": original_rotation, #ALISSA 
-                "original_origin": original_origin, #ALISSA
+                "original_shape": unpadded_refined_preds_ctd.shape,
+                "original_zoom": unpadded_refined_preds_ctd.zoom,
+                "original_orientation": unpadded_refined_preds_ctd.orientation,
+                "original_rotation": original_rotation,  # ALISSA
+                "original_origin": original_origin,  # ALISSA
                 "centroids": unpadded_refined_preds_ctd.centroids,
             }
         )
-    
-    sub, pois = combine_centroids(partial_centroids)
 
-    
+    sub, pois = combine_centroids(partial_centroids)
+    print(pois, pois[16, 88])
+
+    # pois.reorient_(original_orientation, verbose=True)
+
     pois.save(os.path.join(save_dir, sub, "poi_predicted.json"))
     pois.to_global().save_mrk(os.path.join(save_dir, sub, "poi_predicted_global.json"))
 
-    #vert_msk_path
+    # vert_msk_path
     vert_msk.save(os.path.join(save_dir, sub, "vertseg.nii.gz"))
 
 
-
 if __name__ == "__main__":
-    
-    #bgi = BIDS_Global_info(
+
+    # bgi = BIDS_Global_info(
     #    datasets=["/home/student/alissa/3dVertPois/src/predictions/dataset-myelom"],
     #    parents=["derivatives"],
-    #)
+    # )
 
-    #bgi = BIDS_Global_info(
+    # bgi = BIDS_Global_info(
     #    datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder-test"],
     #    parents=["derivatives"],
-    #)
+    # )
+
+    # bgi = BIDS_Global_info(
+    #    datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-verse19"],
+    #    parents=["derivatives"],
+    # )
 
     bgi = BIDS_Global_info(
-        datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-verse19"],
+        datasets=["/DATA/NAS/datasets_processed/CT_spine/dataset-verse19"],
         parents=["derivatives"],
     )
 
@@ -599,6 +643,8 @@ if __name__ == "__main__":
     #subjects_inferenced = 0
 
     for sub, container in bgi.enumerate_subjects():
+        if not "verse004" in sub:
+            continue
         print(f"Subject: {sub}")
         #if subjects_inferenced >= 10:
         #    print(f"10 Subjects have been inferenced. Break.")
@@ -607,7 +653,7 @@ if __name__ == "__main__":
         vert_msk = get_vertseg(container)
         subreg_msk = get_subreg(container)
 
-        #gt_poi_path = get_poi(container)
+        # gt_poi_path = get_poi(container)
 
         if vert_msk is None or subreg_msk is None:
             print(f"Skip Subject: {sub} - not all data available")
@@ -617,13 +663,8 @@ if __name__ == "__main__":
             print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and subreg {subreg_msk.shape} shapes don't match")
             continue
 
-        if vert_msk.orientation != subreg_msk.orientation:
-            print(f"Skip Subject: {sub} - vertseg {vert_msk.orientation} and subreg {subreg_msk.orientation} orientations don't match")
-            continue
-
-        if vert_msk.orientation != ("L", "A", "S"):
-            print(f"Skip Subject: {sub} - vertseg orientation {vert_msk.orientation} is not LAS")
-            continue
+        vert_msk.assert_affine(other=subreg_msk)
+        print("Original msk meta", vert_msk)
 
         create_prediction_poi_files(
             sub,
