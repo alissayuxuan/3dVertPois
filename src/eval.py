@@ -4,7 +4,6 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent)) # Add project root to Python path
 
-
 import argparse
 import json
 import os
@@ -18,71 +17,11 @@ import matplotlib.pyplot as plt
 from TPTBox.core.poi import POI
 from TPTBox import NII  # For loading NIfTI files
 
-
 import shutil  # For file operations
 
 from modules.PoiModule import PoiPredictionModule
 from src.modules.PoiDataModules import POIDataModule
 from utils.misc import surface_project_coords
-
-
-def save_heatmaps_old(batch, out_dir="heatmaps"):
-    os.makedirs(out_dir, exist_ok=True)
-    heatmaps = batch["heatmaps"].detach().cpu()
-
-    for b in range(heatmaps.shape[0]):  # batch
-        for l in range(heatmaps.shape[1]):  # landmarks
-            # Beispiel: nehme die maximale Projektion entlang der z-Achse
-            heatmap_2d = torch.max(heatmaps[b, l], dim=0).values
-
-            plt.imshow(heatmap_2d.numpy(), cmap="hot")
-            plt.colorbar()
-            plt.title(f"Heatmap b{b}_l{l}")
-            plt.axis("off")
-            plt.savefig(os.path.join(out_dir, f"heatmap_b{b}_l{l}.png"))
-            plt.close()
-
-def save_heatmaps(batch, out_dir="heatmaps_0.5"):
-    os.makedirs(out_dir, exist_ok=True)
-    heatmaps = batch["heatmaps"].detach().cpu()
-
-    for b in range(heatmaps.shape[0]):  # Batch
-        for l in range(heatmaps.shape[1]):  # Landmarks
-            # Max-Projektion entlang Z
-            heatmap_2d = torch.max(heatmaps[b, l], dim=0).values
-
-            plt.imshow(heatmap_2d.numpy(), cmap="hot", interpolation="bilinear")
-            plt.axis("off")
-            plt.title(f"Heatmap b{b}_l{l}")
-            plt.savefig(os.path.join(out_dir, f"heatmap_b{b}_l{l}.png"), bbox_inches="tight", dpi=150)
-            plt.close()
-
-def save_coarse_features_old(batch, out_dir="features_0.5"):
-    os.makedirs(out_dir, exist_ok=True)
-    features = batch["coarse_features"].detach().cpu()
-
-    for b in range(features.shape[0]):  # batch
-        plt.imshow(features[b].numpy(), aspect="auto", cmap="viridis")
-        plt.colorbar()
-        plt.title(f"Features b{b}")
-        plt.xlabel("Feature dim")
-        plt.ylabel("Landmark")
-        plt.savefig(os.path.join(out_dir, f"features_b{b}.png"))
-        plt.close()
-
-def save_feature_maps(batch, out_dir="feature_maps"):
-    os.makedirs(out_dir, exist_ok=True) 
-    feature_maps = batch["feature_maps"].detach().cpu()  # (B, C, H, W, D)
-
-    for b in range(feature_maps.shape[0]):  # Batch
-        for c in range(min(8, feature_maps.shape[1])):  # Channels (Features)
-            fmap_2d = torch.max(feature_maps[b, c], dim=0).values  # Projektion entlang Z
-            plt.imshow(fmap_2d.numpy(), cmap="viridis", interpolation="bilinear")
-            plt.axis("off")
-            plt.title(f"FeatureMap b{b}_c{c}")
-            plt.savefig(os.path.join(out_dir, f"featuremap_b{b}_c{c}.png"),
-                        bbox_inches="tight", dpi=150)
-            plt.close()
 
 
 def load_data_module_from_config(config_path, alternative_poi_ending=None):
@@ -185,7 +124,7 @@ def np_to_ctd(
         rotation=rotation,
     )
 
-    ctd.reorient_(axcodes_to=("L", "A", "S"), verbose=False).rescale_((1, 1, 1), verbose=False)
+    #ctd.reorient_(axcodes_to=("L", "A", "S"), verbose=False).rescale_((1, 1, 1), verbose=False)
 
     return ctd
 
@@ -197,7 +136,7 @@ def create_prediction_poi_files(
     save_in_dir=False,
     save_path=None,
     return_paths=False,
-    project=True,
+    project=False,
 ):
     
     print(f"project: {project}")
@@ -235,10 +174,6 @@ def create_prediction_poi_files(
             for k, v in batch.items()
         }
         batch = poi_module(batch)
-
-        # ALISSA: save img of heatmaps and global features -> für ppt
-        #save_heatmaps(batch, out_dir="heatmaps")
-        #save_feature_maps(batch, out_dir="features")
 
         subject_batch = batch["subject"]
         vertebra_batch = batch["vertebra"]
@@ -338,6 +273,8 @@ def create_prediction_poi_files(
                 )
 
             ctd.save(ctd_save_path, verbose=False)
+
+            print("ctd zoom: ", ctd.zoom)
             
             
 
@@ -351,6 +288,9 @@ def create_prediction_poi_files(
             # === (2) Speichere GT-POI-Datei ===
                 
             gt_poi = POI.load(poi_path).extract_region(vert)
+
+            print("gt_poi zoom: ", gt_poi.zoom)
+
             gt_save_path = ctd_save_path.replace("_pred.json", "_gt.json")
             gt_poi.save(gt_save_path)
 
@@ -363,6 +303,9 @@ def create_prediction_poi_files(
             seg_save_path = ctd_save_path.replace("_pred.json", "_seg.nii.gz")
             if os.path.exists(seg_vert_path):
                 shutil.copy(seg_vert_path, seg_save_path)
+
+                vertseg_test = NII.load(seg_vert_path, seg=True)
+                print("seg zoom: ", vertseg_test.zoom)
             else:
                 print(f"⚠️ Segmentation file not found: {seg_vert_path}")
 
@@ -630,7 +573,7 @@ def compute_overall_metrics(df):
 
     return metrics_df
 
-def compute_poi_wise_metrics(df):
+def compute_poi_wise_metrics_proj(df):
     # Group by poi_idx and calculate metrics for refined_proj_error
     grouped = df.groupby("poi_idx")["refined_proj_error"]
     metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
@@ -638,7 +581,15 @@ def compute_poi_wise_metrics(df):
 
     return metrics_df
 
-def compute_vert_wise_metrics(df):
+def compute_poi_wise_metrics(df):
+    # Group by poi_idx and calculate metrics for refined_proj_error
+    grouped = df.groupby("poi_idx")["refined_error"]
+    metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
+    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
+
+    return metrics_df
+
+def compute_vert_wise_metrics_proj(df):
     # Group by vertebra and calculate metrics for refined_proj_error
     grouped = df.groupby("vertebra")["refined_proj_error"]
     metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
@@ -646,9 +597,25 @@ def compute_vert_wise_metrics(df):
 
     return metrics_df
 
-def compute_sub_wise_metrics(df):
+def compute_vert_wise_metrics(df):
+    # Group by vertebra and calculate metrics for refined_proj_error
+    grouped = df.groupby("vertebra")["refined_error"]
+    metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
+    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
+
+    return metrics_df
+
+def compute_sub_wise_metrics_proj(df):
     # Group by vertebra and calculate metrics for refined_proj_error
     grouped = df.groupby("subject")["refined_proj_error"]
+    metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
+    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
+
+    return metrics_df
+
+def compute_sub_wise_metrics(df):
+    # Group by vertebra and calculate metrics for refined_proj_error
+    grouped = df.groupby("subject")["refined_error"]
     metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
     metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
 
@@ -677,7 +644,7 @@ def create_neighbor_prediction_poi_files(
     save_in_dir=False,
     save_path=None,
     return_paths=False,
-    project=True,
+    project=False,
 ):
     # Create the POI files for the refined predictions
     if return_paths:
@@ -1013,40 +980,54 @@ if __name__ == "__main__":
     prediction_df.to_csv(os.path.join(args.save_path, "results.csv"))
     print("Prediction DataFrame saved")
 
-    prediction_df = load_and_filter_csv(prediction_df)
+    #prediction_df = load_and_filter_csv(prediction_df)
 
     ### Compute overall metrics 
     metrics_df = compute_overall_metrics(prediction_df)
     metrics_df.to_csv(os.path.join(args.save_path, "overall_metrics.csv"))
     print("Overal metrics saved")
 
-    ### Compute POI-wise metrics 
+    if args.project:
+        ### Compute POI-wise metrics projected
+        poi_metrics_proj_df = compute_poi_wise_metrics_proj(prediction_df)
+        poi_metrics_proj_df.to_csv(os.path.join(args.save_path, "poi_metrics_projected.csv"))
+        print("POI-wise projected metrics saved")
 
-    #prediction_df = pd.read_csv("experiments/experiment_evaluation/gruber/surface/excel_excluded_pois/no_freeze/val/version_2_epoch_55/results.csv")
-    #save_path = "experiments/experiment_evaluation/gruber/surface/excel_excluded_pois/no_freeze/val/version_2_epoch_55/"
-    poi_metrics_df = compute_poi_wise_metrics(prediction_df)
-    poi_metrics_df.to_csv(os.path.join(args.save_path, "poi_metrics.csv"))
-    print("POI-wise metrics saved")
+        ### Compute vertebra-wise metrics projected
+        vert_metrics_proj_df = compute_vert_wise_metrics_proj(prediction_df)
+        vert_metrics_proj_df.to_csv(os.path.join(args.save_path, "vertebra_metrics_projected.csv"))
+        print("Vertebra-wise projected metrics saved")
 
-    ### Compute vertebra-wise metrics 
-    vert_metrics_df = compute_vert_wise_metrics(prediction_df)
-    vert_metrics_df.to_csv(os.path.join(args.save_path, "vertebra_metrics.csv"))
-    print("Vertebra-wise metrics saved")
+        ### Compute subject-wise metrics projected
+        sub_metrics_proj_df = compute_sub_wise_metrics_proj(prediction_df)
+        sub_metrics_proj_df.to_csv(os.path.join(args.save_path, "subject_metrics_projected.csv"))
+        print("Subject-wise projected metrics saved")
 
-    ### Compute subject-wise metrics
-    sub_metrics_df = compute_sub_wise_metrics(prediction_df)
-    sub_metrics_df.to_csv(os.path.join(args.save_path, "subject_metrics.csv"))
-    print("Subject-wise metrics saved")
+        ### Find Outliers
+        outlier_df = filter_high_refined_proj_error_pois(prediction_df, 10)
+        outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_proj_error_higher_10.csv"))
+        print("Outliers (refined_proj_error > 10) saved")
+    
+    else:
+        ### Compute POI-wise metrics 
+        poi_metrics_df = compute_poi_wise_metrics(prediction_df)
+        poi_metrics_df.to_csv(os.path.join(args.save_path, "poi_metrics.csv"))
+        print("POI-wise metrics saved")
 
+        ### Compute vertebra-wise metrics 
+        vert_metrics_df = compute_vert_wise_metrics(prediction_df)
+        vert_metrics_df.to_csv(os.path.join(args.save_path, "vertebra_metrics.csv"))
+        print("Vertebra-wise metrics saved")
 
-    ### Find Outliers
-    #outlier_df = filter_high_refined_proj_error_pois(prediction_df, 10)
-    #outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_proj_error_higher_10.csv"))
-    #print("Outliers (refined_proj_error > 10) saved")
+        ### Compute subject-wise metrics
+        sub_metrics_df = compute_sub_wise_metrics(prediction_df)
+        sub_metrics_df.to_csv(os.path.join(args.save_path, "subject_metrics.csv"))
+        print("Subject-wise metrics saved")
 
-    outlier_df = filter_high_refined_error_pois(prediction_df, 10)
-    outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_error_higher_10.csv"))
-    print("Outliers (refined_error > 10) saved")
+        ### Find Outliers
+        outlier_df = filter_high_refined_error_pois(prediction_df, 10)
+        outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_error_higher_10.csv"))
+        print("Outliers (refined_error > 10) saved")
     
     
     ### Create Prediction files 
@@ -1078,16 +1059,4 @@ if __name__ == "__main__":
             return_paths=True, 
             project=args.project  
         )
-
-        #poi_paths_dict = create_prediction_poi_files(
-        #    data_module_save_path=args.data_module_save_path,
-        #    checkpoint_path=args.checkpoint_path,
-        #    poi_file_ending="_pred.json",
-        #    split=args.split,
-        #    save_path=prediction_files_no_proj_path,
-        #    return_paths=True, 
-        #    project=False  
-        #)
-
-
     print(f"Saved predictions and ground truths to: {prediction_files_path}")

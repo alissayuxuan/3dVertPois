@@ -220,7 +220,9 @@ class GruberInferenceDataset(Dataset):
         assert subreg.orientation == vertseg.orientation
         assert subreg.orientation == ("L", "A", "S")
         assert subreg.zoom == vertseg.zoom
-        assert subreg.zoom == (1, 1, 1)
+        #assert subreg.zoom == (1, 1, 1)
+
+        print("zoom in __getitem__: ", subreg.zoom)
 
         subreg = subreg.get_array()
         vertseg = vertseg.get_array()
@@ -308,6 +310,7 @@ def preprocess_segmentation_masks(
     Preprocess segmentation masks and create a master dataframe.
     """
     print(f"preprocessing subject: {subject}")  
+    print("preprocess_seg - zoom: ", zoom)
 
     # Save original parameters to restore them later
     original_orientation = vert_msk.orientation
@@ -443,6 +446,7 @@ def create_prediction_poi_files(
     vert_list = dm_params["include_vert_list"]
     poi_indices = dm_params["include_poi_list"]
     zoom = dm_params.get("zoom", (1, 1, 1))
+    print("zoom: ", zoom)
 
     # preprocess segmentation masks and then save the info in a master_df ( create a /tmp)
     master_df, temp_dir = preprocess_segmentation_masks(subject, vert_msk, subreg_msk, vert_list, zoom)
@@ -532,6 +536,7 @@ def create_prediction_poi_files(
         subreg_path = batch["subreg_path"][0]
 
         # Create the new POI file
+        print("np_to_ctd input-zoom: " , preprocessed_zoom) 
         unpadded_refined_preds_ctd: POI = ev.np_to_ctd(
             pred_coords,
             vertebra=vertebra.item(),
@@ -544,7 +549,7 @@ def create_prediction_poi_files(
             orientation=preprocessed_orientation,
         )
 
-        print(unpadded_refined_preds_ctd) if first else None
+        print("unpadded_refined_preds_ctd: ", unpadded_refined_preds_ctd) if first else None
 
         subject_dir = os.path.join(save_dir, str(subject), "cutouts-preproccessed")
         os.makedirs(subject_dir, exist_ok=True)
@@ -600,9 +605,7 @@ def create_prediction_poi_files(
         )
 
     sub, pois = combine_centroids(partial_centroids)
-    print(pois, pois[16, 88])
 
-    # pois.reorient_(original_orientation, verbose=True)
 
     pois.save(os.path.join(save_dir, sub, "poi_predicted.json"))
     pois.to_global().save_mrk(os.path.join(save_dir, sub, "poi_predicted_global.json"))
@@ -610,45 +613,31 @@ def create_prediction_poi_files(
     # vert_msk_path
     vert_msk.save(os.path.join(save_dir, sub, "vertseg.nii.gz"))
 
+    # Clear the temporary directory
+    os.system(f"rm -r {temp_dir}")
+
 
 if __name__ == "__main__":
 
-    # bgi = BIDS_Global_info(
-    #    datasets=["/home/student/alissa/3dVertPois/src/predictions/dataset-myelom"],
-    #    parents=["derivatives"],
-    # )
-
-    # bgi = BIDS_Global_info(
-    #    datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder-test"],
-    #    parents=["derivatives"],
-    # )
-
-    # bgi = BIDS_Global_info(
-    #    datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-verse19"],
-    #    parents=["derivatives"],
-    # )
-
     bgi = BIDS_Global_info(
-        datasets=["/DATA/NAS/datasets_processed/CT_spine/dataset-verse19"],
+        datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder-test"],
         parents=["derivatives"],
     )
 
-    save_dir = "/home/student/alissa/3dVertPois/src/predictions/verse19-inferenced-LAS/subreg-project_gt-no_freeze-SADenseNet-standard_architecture-excel_outliers_exclude"
-    #dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
-    #model_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=74-fine_mean_distance_val=1.77.ckpt"
+    save_dir = "/home/student/alissa/3dVertPois/src/predictions/dataset-folder-test-inferenced/TEST_0.5_zoom-dataset-folder"
 
-    dm_path = "ablation_study/architecture/training/subreg-no_project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
-    model_path = "ablation_study/architecture/training/subreg-no_project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=60-fine_mean_distance_val=1.76.ckpt"
-    
-    #subjects_inferenced = 0
+    #dm_path = "ablation_study/architecture/training/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude/version_0/data_module_params.json"
+    dm_path = "ablation_study/dataloader/training/input_type/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude-0.5_zoom/version_0/data_module_params.json"
+    #model_path = "ablation_study/architecture/training/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=94-fine_mean_distance_val=1.66.ckpt"
+    model_path = "ablation_study/dataloader/training/input_type/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude-0.5_zoom/version_0/checkpoints/sad-pt-epoch=112-fine_mean_distance_val=1.48.ckpt"
+
+    inference_subjects = 0
 
     for sub, container in bgi.enumerate_subjects():
-        if not "verse004" in sub:
-            continue
+        if inference_subjects >= 1:
+            break
+        inference_subjects += 1
         print(f"Subject: {sub}")
-        #if subjects_inferenced >= 10:
-        #    print(f"10 Subjects have been inferenced. Break.")
-        #    break
 
         vert_msk = get_vertseg(container)
         subreg_msk = get_subreg(container)
@@ -674,8 +663,5 @@ if __name__ == "__main__":
             model_path,
             save_dir,
             project_to_surface=False,
-        ) 
-
-        #subjects_inferenced += 1
-    
+        )     
 
