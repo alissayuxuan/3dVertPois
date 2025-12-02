@@ -1031,11 +1031,8 @@ if __name__ == "__main__":
     
     
     ### Create Prediction files 
-    prediction_files_path = os.path.join(args.save_path, "prediction_files")
-    prediction_files_no_proj_path = os.path.join(args.save_path, "prediction_files-no_proj")
+    prediction_files_path = os.path.join(args.save_path, "prediction_files") if args.project else os.path.join(args.save_path, "prediction_files-no_proj")
     os.makedirs(prediction_files_path, exist_ok=True)
-    os.makedirs(prediction_files_no_proj_path, exist_ok=True)
-    
 
     if args.neighbor:
         # Generate predictions and get paths
