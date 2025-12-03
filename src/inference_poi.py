@@ -28,105 +28,10 @@ from torch.utils.data import Dataset
 
 import eval as ev
 from prepare_data import get_bounding_box
-from utils.dataloading_utils import compute_surface, pad_array_to_shape
+from utils.dataloading_utils import get_subreg, get_vertseg, get_poi, compute_surface, pad_array_to_shape
 from utils.misc import surface_project_coords
 from torch.utils.data.dataloader import default_collate
 
-
-def get_subreg(container) -> NII:
-    subreg_query = container.new_query(flatten=True)
-    subreg_query.filter_format("msk")
-    subreg_query.filter_filetype("nii.gz")  # only nifti files
-    subreg_query.filter("seg", "subreg")
-    if not subreg_query.candidates:
-        print("ERROR: No subreg candidates found!")
-        return None
-    subreg_candidate = subreg_query.candidates[0]
-
-    try:
-        subreg = subreg_candidate.open_nii()
-        return subreg
-    except Exception as e:
-        print(f"Error opening subreg: {str(e)}")
-        return None
-
-
-def get_vertseg(container) -> NII:
-    vertseg_query = container.new_query(flatten=True)
-    vertseg_query.filter_format("msk")
-    vertseg_query.filter_filetype("nii.gz")  # only nifti files
-    vertseg_query.filter("seg", "vert")
-    if not vertseg_query.candidates:
-        print("ERROR: No vertseg candidate found!")
-        return None
-    vertseg_candidate = vertseg_query.candidates[0]
-
-    try:
-        vertseg = vertseg_candidate.open_nii()
-        return vertseg
-    except Exception as e:
-        print(f"Error opening vertseg: {str(e)}")
-        return None
-
-
-def get_poi(container):
-    poi_query = container.new_query(flatten=True)
-    poi_query.filter_format("poi")    
-    if not poi_query.candidates:
-        return None
-    poi_candidate = poi_query.candidates[0]
-    return str(poi_candidate.file["json"])
-
-
-def combine_centroids(data_list):
-    # Extract the first dictionary for comparison
-    first_entry = data_list[0]
-
-    # Define the expected values for comparison
-    expected_subject = first_entry["subject"]
-    expected_shape = first_entry["original_shape"]
-    expected_zoom = first_entry["original_zoom"]
-    expected_orientation = first_entry["original_orientation"]
-    expected_rotation = first_entry["original_rotation"]  # ALISSA
-    expected_origin = first_entry["original_origin"]  # ALISSA
-
-    # Initialize a defaultdict for combining centroids
-    combined_centroids = {}
-
-    # Iterate through each entry in the list
-    for entry in data_list:
-        # Assert that subject, shape, zoom, and orientation match the expected values
-        assert entry["subject"] == expected_subject, "Subjects do not match."
-        assert (
-            entry["original_shape"] == expected_shape
-        ), "Original shapes do not match."
-        assert entry["original_zoom"] == expected_zoom, "Original zooms do not match."
-        assert (
-            entry["original_orientation"] == expected_orientation
-        ), "Original orientations do not match."
-
-        assert np.allclose(
-            entry["original_rotation"], expected_rotation, rtol=1e-10
-        ), "Original rotations do not match."
-
-        # Combine the centroids
-        for v_idx, p_idx, c in entry["centroids"].items():
-            combined_centroids[v_idx, p_idx] = c
-
-    # Convert combined_centroids to a regular dict
-    combined_centroids = dict(combined_centroids)
-
-    # Return the common attributes and the combined centroids
-    poi_file = POI(
-        centroids=combined_centroids,
-        orientation=expected_orientation,
-        zoom=expected_zoom,
-        shape=expected_shape,
-        rotation=expected_rotation,  # ALISSA
-        origin=expected_origin,  # ALISSA
-    )
-
-    return expected_subject, poi_file
 
 class GruberInferenceDataset(Dataset):
     def __init__(
@@ -298,7 +203,6 @@ def safe_collate(batch):
         return None  # All items skipped
     return default_collate(batch)
 
-
 def preprocess_segmentation_masks(
     subject,
     vert_msk: NII,
@@ -428,7 +332,6 @@ def preprocess_segmentation_masks(
     master_df.to_csv(master_df_path, index=False)
 
     return master_df, temp_dir
-
 
 def create_prediction_poi_files(
     subject,
@@ -604,7 +507,7 @@ def create_prediction_poi_files(
             }
         )
 
-    sub, pois = combine_centroids(partial_centroids)
+    sub, pois = ev.combine_centroids(partial_centroids)
 
 
     pois.save(os.path.join(save_dir, sub, "poi_predicted.json"))
