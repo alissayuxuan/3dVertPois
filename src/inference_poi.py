@@ -71,7 +71,7 @@ def get_vertseg(container) -> NII:
 
 def get_poi(container):
     poi_query = container.new_query(flatten=True)
-    poi_query.filter_format("poi")    
+    poi_query.filter_format("poi")
     if not poi_query.candidates:
         return None
     poi_candidate = poi_query.candidates[0]
@@ -97,17 +97,11 @@ def combine_centroids(data_list):
     for entry in data_list:
         # Assert that subject, shape, zoom, and orientation match the expected values
         assert entry["subject"] == expected_subject, "Subjects do not match."
-        assert (
-            entry["original_shape"] == expected_shape
-        ), "Original shapes do not match."
+        assert entry["original_shape"] == expected_shape, "Original shapes do not match."
         assert entry["original_zoom"] == expected_zoom, "Original zooms do not match."
-        assert (
-            entry["original_orientation"] == expected_orientation
-        ), "Original orientations do not match."
+        assert entry["original_orientation"] == expected_orientation, "Original orientations do not match."
 
-        assert np.allclose(
-            entry["original_rotation"], expected_rotation, rtol=1e-10
-        ), "Original rotations do not match."
+        assert np.allclose(entry["original_rotation"], expected_rotation, rtol=1e-10), "Original rotations do not match."
 
         # Combine the centroids
         for v_idx, p_idx, c in entry["centroids"].items():
@@ -128,6 +122,7 @@ def combine_centroids(data_list):
 
     return expected_subject, poi_file
 
+
 class GruberInferenceDataset(Dataset):
     def __init__(
         self,
@@ -138,40 +133,40 @@ class GruberInferenceDataset(Dataset):
         zoom=(1, 1, 1),
         poi_indices=[
             81,
-            82, 
-            83, 
+            82,
+            83,
             84,
             85,
             86,
             87,
             88,
-            89, 
+            89,
             101,
             102,
             103,
             104,
-            105, 
-            106, 
-            107, 
-            108, 
+            105,
+            106,
+            107,
+            108,
             109,
             110,
             111,
             112,
-            113, 
-            114, 
-            115, 
-            116, 
+            113,
+            114,
+            115,
+            116,
             117,
             118,
             119,
             120,
-            121, 
-            122, 
-            123, 
-            124, 
+            121,
+            122,
+            123,
+            124,
             125,
-            127
+            127,
         ],
     ):
         self.master_df = master_df
@@ -180,9 +175,7 @@ class GruberInferenceDataset(Dataset):
         self.zoom = zoom
         self.poi_indices = torch.tensor(poi_indices)
         self.poi_idx_to_list_idx = {poi: idx for idx, poi in enumerate(poi_indices)}
-        self.vert_idx_to_list_idx = {
-            vert: idx for idx, vert in enumerate(include_vert_list)
-        }
+        self.vert_idx_to_list_idx = {vert: idx for idx, vert in enumerate(include_vert_list)}
 
     def __len__(self):
         return len(self.master_df)
@@ -203,7 +196,7 @@ class GruberInferenceDataset(Dataset):
         original_zoom = row["original_zoom"]
         original_shape = row["original_shape"]
         original_rotation = row["original_rotation"]
-        original_origin = row["original_origin"] 
+        original_origin = row["original_origin"]
 
         preprocessed_orientation = row["preprocessed_orientation"]
         preprocessed_zoom = row["preprocessed_zoom"]
@@ -232,7 +225,7 @@ class GruberInferenceDataset(Dataset):
         ###
         if any(s > t for s, t in zip(subreg.shape, self.input_shape)):
             print(f"Skipping subject {subject} vertebra {vertebra} (shape {subreg.shape} > {self.input_shape})")
-            return None        
+            return None
         elif any(s > t for s, t in zip(vertseg.shape, self.input_shape)):
             print(f"Skipping subject {subject} vertebra {vertebra} (shape {vertseg.shape} > {self.input_shape})")
             return None
@@ -265,16 +258,14 @@ class GruberInferenceDataset(Dataset):
         data_dict["vertebra"] = vertebra
         data_dict["padding_offset"] = torch.tensor(offset).float()
         data_dict["poi_indices"] = self.poi_indices
-        data_dict["poi_list_idx"] = torch.tensor(
-            [self.poi_idx_to_list_idx[poi.item()] for poi in self.poi_indices]
-        )
+        data_dict["poi_list_idx"] = torch.tensor([self.poi_idx_to_list_idx[poi.item()] for poi in self.poi_indices])
         data_dict["vert_list_idx"] = torch.tensor([self.vert_idx_to_list_idx[vertebra]])
         data_dict["cutout_offset"] = torch.tensor([x_min, y_min, z_min])
 
         data_dict["original_orientation"] = str(original_orientation)
         data_dict["original_zoom"] = original_zoom
         data_dict["original_shape"] = original_shape
-        data_dict["original_rotation"] = original_rotation #ALISSA
+        data_dict["original_rotation"] = original_rotation  # ALISSA
         data_dict["original_origin"] = original_origin
 
         data_dict["preprocessed_orientation"] = str(preprocessed_orientation)
@@ -289,6 +280,7 @@ class GruberInferenceDataset(Dataset):
         data_dict["subreg_path"] = subreg_path
 
         return data_dict
+
 
 def safe_collate(batch):
     batch = [b for b in batch if b is not None]
@@ -307,14 +299,14 @@ def preprocess_segmentation_masks(
     """
     Preprocess segmentation masks and create a master dataframe.
     """
-    print(f"preprocessing subject: {subject}")  
+    print(f"preprocessing subject: {subject}")
 
     # Save original parameters to restore them later
     original_orientation = vert_msk.orientation
     original_zoom = vert_msk.zoom
     original_shape = vert_msk.shape
     original_rotation = vert_msk.rotation
-    original_origin = vert_msk.origin 
+    original_origin = vert_msk.origin
 
     print(
         "Original msk meta",
@@ -344,7 +336,7 @@ def preprocess_segmentation_masks(
 
     # Create vertebra-wise cutouts and a master_df in a temporary directory
     cutout_info = []
-    first = True
+    first = False  # Change to True for printing first info only
     for vert in vertebrae:
         # This uses the standard margin of 5 voxels around the vertebra in each direction. When the model is trained with a different margin, this should be adjusted!
         x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(vertseg_arr, vert)
@@ -352,13 +344,9 @@ def preprocess_segmentation_masks(
         subreg_path = os.path.join(temp_dir, subject, f"vert_{vert}-subreg.nii.gz")
         vert_path = os.path.join(temp_dir, subject, f"vert_{vert}-vertseg.nii.gz")
 
-        subreg_cropped = subreg_msk.apply_crop(
-            ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-        )
+        subreg_cropped = subreg_msk.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
 
-        vert_cropped = vert_msk.apply_crop(
-            ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-        )
+        vert_cropped = vert_msk.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
         print("Cropped from shape", vert_msk.shape, "to", vert_cropped.shape) if first else None
 
         # rescale the cutouts to zoom mm resolution
@@ -402,18 +390,16 @@ def preprocess_segmentation_masks(
                 "z_max": int(z_max),
                 "vert_path": vert_path,
                 "subreg_path": subreg_path,
-
                 "preprocessed_orientation": preprocessed_orientation,
                 "preprocessed_zoom": preprocessed_zoom,
                 "preprocessed_rotation": preprocessed_rotation,
                 "preprocessed_origin": preprocessed_origin,
                 "preprocessed_shape": preprocessed_shape,
-
                 "original_orientation": original_orientation,
                 "original_zoom": original_zoom,
                 "original_shape": original_shape,
-                "original_rotation": original_rotation,  
-                "original_origin": original_origin,  
+                "original_rotation": original_rotation,
+                "original_origin": original_origin,
             }
         )
 
@@ -449,35 +435,28 @@ def create_prediction_poi_files(
 
     print(f"inferencing subject: {subject}")
     # get data_module and create dataset
-    ds = GruberInferenceDataset(
-        master_df, input_shape=input_shape, input_data_type=input_data_type, include_vert_list=vert_list, zoom=zoom
-    )
-    dl = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False,  collate_fn=safe_collate)
+    ds = GruberInferenceDataset(master_df, input_shape=input_shape, input_data_type=input_data_type, include_vert_list=vert_list, zoom=zoom)
+    dl = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False, collate_fn=safe_collate)
 
     # load checkpoint
     model = ev.load_model_from_checkpoint(model_path)
 
     partial_centroids = []
     # predict POIs
-    first = True
+    first = False  # Change for printing first info only
     for batch in dl:
 
         if batch is None:
             continue
 
         # Bring all tensors to device
-        batch = {
-            k: v.to(model.device) if isinstance(v, torch.Tensor) else v
-            for k, v in batch.items()
-        }
+        batch = {k: v.to(model.device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
         batch = model(batch)
 
         refined_preds_batch = batch["refined_preds"]
 
         if project_to_surface:
-            refined_preds_projected_batch, _ = surface_project_coords(
-                refined_preds_batch, batch["surface"]
-            )
+            refined_preds_projected_batch, _ = surface_project_coords(refined_preds_batch, batch["surface"])
             pred_coords = refined_preds_projected_batch.squeeze().detach().cpu().numpy()
         else:
             pred_coords = refined_preds_batch.squeeze().detach().cpu().numpy()
@@ -490,7 +469,7 @@ def create_prediction_poi_files(
         subject = batch["subject"][0]
 
         # Get the preprocessed parameters
-        preprocessed_rotation = batch["preprocessed_rotation"][0].detach().cpu().numpy() #ALISSA
+        preprocessed_rotation = batch["preprocessed_rotation"][0].detach().cpu().numpy()  # ALISSA
         preprocessed_orientation = ast.literal_eval(batch["preprocessed_orientation"][0])
         preprocessed_zoom = (
             batch["preprocessed_zoom"][0][0].item(),
@@ -509,7 +488,7 @@ def create_prediction_poi_files(
         )
 
         # Get the original parameters
-        original_rotation = batch["original_rotation"][0].detach().cpu().numpy() 
+        original_rotation = batch["original_rotation"][0].detach().cpu().numpy()
         original_orientation = ast.literal_eval(batch["original_orientation"][0])
         original_zoom = (
             batch["original_zoom"][0][0].item(),
@@ -528,7 +507,7 @@ def create_prediction_poi_files(
         )
 
         # get segmentation mask path
-        vert_path = batch["vert_path"][0]      
+        vert_path = batch["vert_path"][0]
         subreg_path = batch["subreg_path"][0]
 
         # Create the new POI file
@@ -550,9 +529,7 @@ def create_prediction_poi_files(
         os.makedirs(subject_dir, exist_ok=True)
 
         # save POI and Segmentation masks (cutouts)
-        ctd_save_path = os.path.join(
-            subject_dir, str(subject) + "_" + str(vertebra) + "_pred.json"
-        )
+        ctd_save_path = os.path.join(subject_dir, str(subject) + "_" + str(vertebra) + "_pred.json")
         ctd_global_save_path = ctd_save_path.replace("_pred.json", "_pred_global.json")
 
         unpadded_refined_preds_ctd.save(ctd_save_path, verbose=False)
@@ -600,7 +577,7 @@ def create_prediction_poi_files(
         )
 
     sub, pois = combine_centroids(partial_centroids)
-    print(pois, pois[16, 88])
+    # print(pois, pois[16, 88])
 
     # pois.reorient_(original_orientation, verbose=True)
 
@@ -636,19 +613,29 @@ if __name__ == "__main__":
     #    datasets=["/DATA/NAS/datasets_processed/CT_spine/dataset-poi-gruber"],
     #    parents=["derivatives_seg"],
     # )
+    project_to_surface = True
 
-    save_dir = "/DATA/NAS/datasets_processed/CT_spine/dataset-verse19/derivatives_inference_poi_prediction"
+    model_dir_root = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/ablation_study/dataloader/training/include_pois/"
+    model_dir = "subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude-L1"
+    model_checkpoint_name = "version_1/checkpoints/sad-pt-epoch=84-fine_mean_distance_val=1.59"
+
+    save_dir = f"/DATA/NAS/datasets_processed/CT_spine/dataset-verse19/derivatives_inference_poi_{model_dir}"
+    if project_to_surface:
+        save_dir += "_proj"
     # dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
     # model_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=74-fine_mean_distance_val=1.77.ckpt"
 
-    dm_path = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_4/data_module_params.json"
-    model_path = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_4/checkpoints/sad-pt-epoch=85-fine_mean_distance_val=1.72.ckpt"
+    dm_path = f"{model_dir_root}{model_dir}/version_1/data_module_params.json"
+    model_path = f"{model_dir_root}{model_dir}/{model_checkpoint_name}"
+
+    if not model_path.endswith(".ckpt"):
+        model_path += ".ckpt"
 
     subjects_inferenced = 0
 
     for sub, container in bgi.enumerate_subjects():
-        if not "verse004" in sub:
-            continue
+        # if not "verse004" in sub:
+        #    continue
         print(f"Subject: {sub}")
         # if subjects_inferenced >= 10:
         #    print(f"10 Subjects have been inferenced. Break.")
@@ -668,7 +655,7 @@ if __name__ == "__main__":
             continue
 
         vert_msk.assert_affine(other=subreg_msk)
-        print("Original msk meta", vert_msk)
+        # print("Original msk meta", vert_msk)
 
         create_prediction_poi_files(
             sub,
@@ -677,7 +664,7 @@ if __name__ == "__main__":
             dm_path,
             model_path,
             save_dir,
-            project_to_surface=False,
-        ) 
+            project_to_surface=project_to_surface,
+        )
 
         subjects_inferenced += 1
