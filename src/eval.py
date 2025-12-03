@@ -137,9 +137,10 @@ def create_prediction_poi_files(
     save_path=None,
     return_paths=False,
     project=False,
+    save_gt_proj=False,
 ):
     
-    print(f"project: {project}")
+    print(f"save_gt_proj: {save_gt_proj}")
 
     # Create the POI files for the refined predictions
     if return_paths:
@@ -177,18 +178,25 @@ def create_prediction_poi_files(
 
         subject_batch = batch["subject"]
         vertebra_batch = batch["vertebra"]
+
+        target_batch = batch["target"]
+        target_indices_batch = batch["target_indices"]
+        loss_mask_batch = batch["loss_mask"] 
+
+
+        coarse_preds_batch = batch["coarse_preds"]
         refined_preds_batch = batch["refined_preds"] 
+
+        if save_gt_proj:
+            target_batch, _ = surface_project_coords(target_batch, batch["surface"])
+        
         if project:
             refined_preds_projected_batch, _ = surface_project_coords(
                 refined_preds_batch, batch["surface"]
             )
-        target_indices_batch = batch["target_indices"]
+        
         offset_batch = batch["offset"]
         poi_path_batch = batch["poi_path"]
-
-        loss_mask_batch = batch["loss_mask"] #Alissa
-
-        coarse_preds_batch = batch["coarse_preds"]
 
         subreg = NII.load(batch["subreg_path"][0], seg=True)
         vertseg = NII.load(batch["msk_path"][0], seg=True)
@@ -202,10 +210,14 @@ def create_prediction_poi_files(
         # Detach all tensors
         vertebra_batch = vertebra_batch.detach().cpu().numpy()
         refined_preds_batch = refined_preds_batch.detach().cpu().numpy()
+        
+        target_batch = target_batch.detach().cpu().numpy()
+
         if project:
             refined_preds_projected_batch = (
                 refined_preds_projected_batch.detach().cpu().numpy()
             )
+            
         target_indices_batch = target_indices_batch.detach().cpu().numpy()
         offset_batch = offset_batch.detach().cpu().numpy()
 
@@ -213,14 +225,15 @@ def create_prediction_poi_files(
 
         pred_batch = refined_preds_projected_batch if project else refined_preds_batch
 
-        for sub, vert, preds, indices, poi_path, offset, mask in zip( #Alissa: mask
+        for sub, vert, preds, targets, indices, poi_path, offset, mask in zip( #Alissa: mask
             subject_batch,
             vertebra_batch,
             pred_batch,
+            target_batch, #Alissa: save GT proj 
             target_indices_batch,
             poi_path_batch,
             offset_batch,
-            loss_mask_batch, #Alissa    
+            loss_mask_batch,   
         ):
             
             #Alissa: Filter nur gültige POIs (mask == True)
@@ -251,6 +264,34 @@ def create_prediction_poi_files(
                 offset=offset,
                 orientation=orientation ### Alissa
             )
+
+            if save_gt_proj:
+                # Create GT POI file with projected targets
+                gt_proj_ctd = np_to_ctd(
+                    targets,
+                    vert,
+                    origin,
+                    rotation,
+                    idx_list=indices,
+                    shape=shape,
+                    zoom=zoom,
+                    offset=offset,
+                    orientation=orientation ### Alissa
+                )
+                # Save GT projected POI file
+                save_path_gt_proj = os.path.join(save_path, "gt_projections")
+                os.makedirs(save_path_gt_proj, exist_ok=True)
+                gt_proj_save_path = os.path.join(
+                    save_path_gt_proj, str(sub) + "_" + str(vert) + "_" + "gt_proj.json"
+                )
+                gt_proj_ctd.save(gt_proj_save_path, verbose=False)
+
+
+                gt_proj_global_save_path = gt_proj_save_path.replace("gt_proj.json", "gt_proj_global.json")
+                gt_proj = POI.load(gt_proj_save_path).extract_region(vert)
+                gt_proj.to_global().save_mrk(gt_proj_global_save_path)
+
+
 
             if save_in_dir:
                 ctd_save_path = poi_path.replace(
@@ -961,6 +1002,10 @@ if __name__ == "__main__":
         "--project", action="store_true", help="Whether the final predictions should be projected to the surface."
     )
 
+    parser.add_argument(
+        "--save_gt_proj", action="store_true", help="Whether to save projected GT POI files."
+    )
+
 
     args = parser.parse_args()
     
@@ -1054,6 +1099,7 @@ if __name__ == "__main__":
             split=args.split,
             save_path=prediction_files_path,
             return_paths=True, 
-            project=args.project  
+            project=args.project ,
+            save_gt_proj=args.save_gt_proj 
         )
     print(f"Saved predictions and ground truths to: {prediction_files_path}")
