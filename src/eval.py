@@ -240,6 +240,7 @@ def create_prediction_poi_files(
             
             preds = preds[mask]
             indices = indices[mask]
+            targets = targets[mask] 
 
             # Open the old POI file to get the origin and rotation
             ctd = POI.load(poi_path)
