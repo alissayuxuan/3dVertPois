@@ -22,9 +22,7 @@ def save_data_module_config(data_module, save_path):
     # Ensure the save directory exists
     os.makedirs(save_path, exist_ok=True)
     # Save the hyperparameters to a JSON file
-    with open(
-        os.path.join(save_path, "data_module_params.json"), "w", encoding="utf-8"
-    ) as file:
+    with open(os.path.join(save_path, "data_module_params.json"), "w", encoding="utf-8") as file:
         json.dump(data_module.hparams, file, indent=4)
 
 
@@ -33,13 +31,9 @@ def create_callbacks(callbacks_config):
     for callback_config in callbacks_config:
         callback_type = callback_config["type"]
         if callback_type == "ModelCheckpoint":
-            callbacks_list.append(
-                pl.callbacks.ModelCheckpoint(**callback_config["params"])
-            )
+            callbacks_list.append(pl.callbacks.ModelCheckpoint(**callback_config["params"]))
         elif callback_type == "EarlyStopping":
-            callbacks_list.append(
-                pl.callbacks.EarlyStopping(**callback_config["params"])
-            )
+            callbacks_list.append(pl.callbacks.EarlyStopping(**callback_config["params"]))
         # Add other callbacks as needed
     return callbacks_list
 
@@ -55,10 +49,7 @@ def run_experiment(experiment_config):
     data_module.setup()
     poi_module = PoiPredictionModule(**poi_module_config["params"])
 
-    logger = pl.loggers.TensorBoardLogger(
-        save_dir=experiment_config["path"],
-        name=experiment_config["name"]
-    )
+    logger = pl.loggers.TensorBoardLogger(save_dir=experiment_config["path"], name=experiment_config["name"])
 
     save_data_module_config(data_module, logger.log_dir)
 
@@ -76,19 +67,19 @@ def run_experiment(experiment_config):
         train_dataloaders=data_module.train_dataloader(),
         val_dataloaders=data_module.val_dataloader(),
     )
-    
+
     print("\n=== Final Debug Info ===")
     print(f"Epochs completed: {trainer.current_epoch}")
-    print(f"Max epochs allowed: {trainer.max_epochs}")    
+    print(f"Max epochs allowed: {trainer.max_epochs}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, help="Experiment config file")
-    parser.add_argument(
-        "--config-dir", type=str, help="Directory containing experiment config files"
-    )
+    parser.add_argument("--config-dir", type=str, help="Directory containing experiment config files")
     args = parser.parse_args()
+
+    pl.seed_everything(42)
 
     if args.config:
         with open(args.config, "r") as f:
