@@ -10,28 +10,31 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from TPTBox import NII, BIDS_Global_info 
+from TPTBox import NII, BIDS_Global_info
 from TPTBox.core.poi import POI
 from TPTBox import Subject_Container
 from pqdm.processes import pqdm
+
+
+# /DATA/NAS/datasets_processed/CT_spine/dataset-poi-gruber/
 
 
 def load_exclusion_dict(excel_path):
     """Load Excel file and create lookup dictionary for exclusions"""
     if not os.path.exists(excel_path):
         return {}
-    
+
     df = pd.read_excel(excel_path)
 
     exclude_dict = {}
 
     for _, row in df.iterrows():
-        subject = row['subject']
-        label = int(row['label'])  
+        subject = row["subject"]
+        label = int(row["label"])
 
         for col in df.columns[2:]:  # columns : 'subject', 'label'
             val = str(row[col]).strip().lower()
-            if val == 'x':
+            if val == "x":
                 try:
                     poi_id = int(col.strip().split()[0])  # e.g. '124 \n(VertBodAntCenR)' → 124
                 except ValueError:
@@ -40,14 +43,15 @@ def load_exclusion_dict(excel_path):
                 if subject not in exclude_dict:
                     exclude_dict[subject] = []
                 exclude_dict[subject].append((label, poi_id))
-    
+
     return exclude_dict
 
-def get_bad_poi_list(subject_id: str, vert: int,  exclude_dict: dict[str, list[tuple[int, int]]]) ->list[int]:
+
+def get_bad_poi_list(subject_id: str, vert: int, exclude_dict: dict[str, list[tuple[int, int]]]) -> list[int]:
     """
     Args:
         subject_id: Subject ID, e.g., 'WS-13'
-        vert_id: Vertebra ID, e.g., 
+        vert_id: Vertebra ID, e.g.,
         exclude_dict: Dict mapping subject_id -> list of (vert_id, poi_id)
 
     Returns:
@@ -56,9 +60,9 @@ def get_bad_poi_list(subject_id: str, vert: int,  exclude_dict: dict[str, list[t
     if exclude_dict is None:
         return []
     bad_pois = exclude_dict.get(subject_id, [])
-    filtered_pois = [ poi_id for vert_id, poi_id in bad_pois if vert_id == vert ]
+    filtered_pois = [poi_id for vert_id, poi_id in bad_pois if vert_id == vert]
     return filtered_pois
-    
+
 
 def get_gruber_poi(container) -> POI:
     poi_query = container.new_query(flatten=True)
@@ -67,7 +71,7 @@ def get_gruber_poi(container) -> POI:
     if not poi_query.candidates:
         print("ERROR: No POI candidates found!")
         return None
-    
+
     poi_candidate = poi_query.candidates[0]
     print(f"Loading POI from: {poi_candidate}")
 
@@ -92,6 +96,7 @@ def get_ct(container) -> NII:
         print(f"Error opening CT: {str(e)}")
         return None
 
+
 def get_subreg(container) -> NII:
     subreg_query = container.new_query(flatten=True)
     subreg_query.filter_format("msk")
@@ -105,7 +110,8 @@ def get_subreg(container) -> NII:
     except Exception as e:
         print(f"Error opening subreg: {str(e)}")
         return None
-    
+
+
 def get_vertseg(container) -> NII:
     vertseg_query = container.new_query(flatten=True)
     vertseg_query.filter_format("msk")
@@ -119,6 +125,7 @@ def get_vertseg(container) -> NII:
     except Exception as e:
         print(f"Error opening vertseg: {str(e)}")
         return None
+
 
 def get_files(
     container,
@@ -134,6 +141,7 @@ def get_files(
         get_vertseg_fn(container),
     )
 
+
 def get_bounding_box(mask, vert, margin=5):
     """Get the bounding box of a given vertebra in a mask.
 
@@ -148,10 +156,10 @@ def get_bounding_box(mask, vert, margin=5):
     """
     indices = np.where(mask == vert)
 
-    #debug
+    # debug
     if len(indices[0]) == 0:
         raise ValueError(f"Vertebra {vert} not found in the mask.")
-    
+
     x_min = np.min(indices[0]) - margin
     x_max = np.max(indices[0]) + margin
     y_min = np.min(indices[1]) - margin
@@ -167,7 +175,7 @@ def get_bounding_box(mask, vert, margin=5):
     z_min = max(0, z_min)
     z_max = min(mask.shape[2], z_max)
 
-    #debug
+    # debug
     if x_min >= x_max or y_min >= y_max or z_min >= z_max:
         raise ValueError(
             f"Invalid bounding box for vertebra {vert}: "
@@ -184,55 +192,54 @@ def process_container(
     save_path: PathLike,
     rescale_zoom: tuple | None,
     get_files_fn: Callable[[Subject_Container], tuple[POI, NII, NII, NII]],
-    exclusion_dict: dict | None = None, 
-    compute_surface_mask: bool = False, 
+    exclusion_dict: dict | None = None,
+    compute_surface_mask: bool = False,
     include_neighbouring_vertebrae: bool = False,
 ):
-    
+
     print(f"Processing Subject: {subject}")
     poi, ct, subreg, vertseg = get_files_fn(container)
-    
-    #reorient data to same orientation
+
+    # reorient data to same orientation
     ct.reorient_(("L", "A", "S"))
     subreg.reorient_(("L", "A", "S"))
     vertseg.reorient_(("L", "A", "S"))
-    poi.reorient_(axcodes_to=vertseg.orientation, _shape=vertseg.shape) 
+    poi.reorient_(axcodes_to=vertseg.orientation, _shape=vertseg.shape)
 
     surface_mask = None
     surface_subreg = None
     if compute_surface_mask:
         try:
-            surface_mask = vertseg.compute_surface_mask(connectivity=3, dilated_surface=False)
-            surface_subreg = subreg.compute_surface_mask(connectivity=3, dilated_surface=False)
+            surface_mask = vertseg.compute_surface_mask(connectivity=1, dilated_surface=False)
+            surface_subreg = subreg.compute_surface_mask(connectivity=1, dilated_surface=False)
         except Exception as e:
             print(f"Error computing surface mask for subject {subject}: {str(e)}")
             surface_mask = None
             surface_subreg = None
-    
 
-    vertebrae = {key[0] for key in poi.keys()} 
-    vertseg_arr = vertseg.get_array() 
+    vertebrae = {key[0] for key in poi.keys()}
+    vertseg_arr = vertseg.get_array()
     summary = []
 
     vertebrae = sorted(vertebrae)
-    for index in range(len(vertebrae)): #loops through each vertebra ID (extracted from POI keys)
-        vert = vertebrae[index]  
-        if vert in vertseg_arr: #vertebra found in segmentation mask
-            
-            #TODO: muss ich schauen ob die nachbarn in vertseg_arr sind? wenn nicht was dann?
+    for index in range(len(vertebrae)):  # loops through each vertebra ID (extracted from POI keys)
+        vert = vertebrae[index]
+        if vert in vertseg_arr:  # vertebra found in segmentation mask
+
+            # TODO: muss ich schauen ob die nachbarn in vertseg_arr sind? wenn nicht was dann?
             if include_neighbouring_vertebrae:
                 vert_neighbours = [vert]
                 if index > 0:
                     vert_neighbours.insert(0, vertebrae[index - 1])
                 if index < len(vertebrae) - 1:
                     vert_neighbours.append(vertebrae[index + 1])
-                
+
                 print(f"Vertebra {vert} neighbours: {vert_neighbours}")
 
                 # Initialize bounding box limits
                 x_min, x_max = np.inf, -np.inf
                 y_min, y_max = np.inf, -np.inf
-                z_min, z_max = np.inf, -np.inf    
+                z_min, z_max = np.inf, -np.inf
 
                 for v in vert_neighbours:
                     try:
@@ -240,25 +247,22 @@ def process_container(
                     except ValueError as e:
                         print(f"Error getting bounding box for vertebra {v}: {str(e)}")
                         continue
-                    
+
                     x_min = min(x_min, bounds[0])
                     x_max = max(x_max, bounds[1])
                     y_min = min(y_min, bounds[2])
                     y_max = max(y_max, bounds[3])
                     z_min = min(z_min, bounds[4])
                     z_max = max(z_max, bounds[5])
-               
 
             else:
                 try:
-                    x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(
-                        vertseg_arr, vert
-                    )
+                    x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(vertseg_arr, vert)
                 except ValueError as e:
                     print(f"Error getting bounding box for vertebra {vert}: {str(e)}")
                     continue
 
-            #defines output paths for cropped files
+            # defines output paths for cropped files
             ct_path = os.path.join(save_path, subject, str(vert), "ct.nii.gz")
             subreg_path = os.path.join(save_path, subject, str(vert), "subreg.nii.gz")
             vertseg_path = os.path.join(save_path, subject, str(vert), "vertseg.nii.gz")
@@ -267,32 +271,21 @@ def process_container(
             if compute_surface_mask and surface_mask is not None and surface_subreg is not None:
                 surface_mask_path = os.path.join(save_path, subject, str(vert), "surface_msk.nii.gz")
                 surface_subreg_path = os.path.join(save_path, subject, str(vert), "surface_subreg.nii.gz")
-            
 
-            #create directories if they do not exist
+            # create directories if they do not exist
             if not os.path.exists(os.path.join(save_path, subject, str(vert))):
                 os.makedirs(os.path.join(save_path, subject, str(vert)))
 
-            try:            
-                ct_cropped = ct.apply_crop(
-                    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-                )
-                subreg_cropped = subreg.apply_crop(
-                    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-                )
-                vertseg_cropped = vertseg.apply_crop(
-                    ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-                )
-                poi_cropped = poi.apply_crop(
-                    o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-                )
+            try:
+                ct_cropped = ct.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
+                subreg_cropped = subreg.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
+                vertseg_cropped = vertseg.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
+                poi_cropped = poi.apply_crop(o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
 
                 surface_mask_cropped = None
                 surfcae_subreg_cropped = None
                 if compute_surface_mask and surface_mask is not None and surface_subreg is not None:
-                    surface_mask_cropped = surface_mask.apply_crop(
-                        ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-                    )
+                    surface_mask_cropped = surface_mask.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
                     surface_subreg_cropped = surface_subreg.apply_crop(
                         ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
                     )
@@ -303,7 +296,7 @@ def process_container(
                 print(f"ex_slice: {(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))}")
                 print(f"ct shape: {ct.shape},\n subreg shape: {subreg.shape},\n vertseg shape: {vertseg.shape}, poi shape: {poi.shape}")
                 raise
-            
+
             if rescale_zoom:
 
                 ct_cropped.rescale_(rescale_zoom)
@@ -334,24 +327,20 @@ def process_container(
                 "z_max": int(z_max),
             }
             with open(
-                os.path.join(
-                    save_path, subject, str(vert), "cutout_slice_indices.json"
-                ),
+                os.path.join(save_path, subject, str(vert), "cutout_slice_indices.json"),
                 "w",
                 encoding="utf-8",
             ) as f:
                 json.dump(slice_indices, f)
 
-            
             summary.append(
                 {
                     "subject": subject,
                     "vertebra": vert,
                     "file_dir": os.path.join(save_path, subject, str(vert)),
-                    "bad_poi_list": get_bad_poi_list(f"sub-{subject}", vert, exclusion_dict)
+                    "bad_poi_list": get_bad_poi_list(f"sub-{subject}", vert, exclusion_dict),
                 }
             )
-            
 
         else:
             print(f"Vertebra {vert} has no segmentation for subject {subject}")
@@ -363,18 +352,14 @@ def prepare_data(
     bids_surgery_info: BIDS_Global_info,
     save_path: str,
     get_files_fn: callable,
-    exclusion_path: str |None = None, 
+    exclusion_path: str | None = None,
     rescale_zoom: tuple | None = None,
     n_workers: int = 8,
     compute_surface_mask: bool = False,
     include_neighbouring_vertebrae: bool = False,
 ):
     master = []
-    exclusion_dict = (
-        load_exclusion_dict(exclusion_path) 
-        if exclusion_path is not None 
-        else None
-    )
+    exclusion_dict = load_exclusion_dict(exclusion_path) if exclusion_path is not None else None
 
     partial_process_container = partial(
         process_container,
@@ -383,7 +368,7 @@ def prepare_data(
         get_files_fn=get_files_fn,
         exclusion_dict=exclusion_dict,  # Pass None if not provided
         compute_surface_mask=compute_surface_mask,
-        include_neighbouring_vertebrae=include_neighbouring_vertebrae, 
+        include_neighbouring_vertebrae=include_neighbouring_vertebrae,
     )
 
     master = pqdm(
@@ -391,8 +376,8 @@ def prepare_data(
         partial_process_container,
         n_jobs=n_workers,
         argument_type="args",
-        #exception_behaviour="immediate",
-        exception_behaviour="continue"
+        # exception_behaviour="immediate",
+        exception_behaviour="continue",
     )
     master = [item for sublist in master for item in sublist]
     master_df = pd.DataFrame(master)
@@ -402,14 +387,13 @@ def prepare_data(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "--data_path", type=str, help="The path to the BIDS dataset", required=True
-    )
+    parser.add_argument("--data_path", type=str, help="The path to the BIDS dataset", required=True)
     parser.add_argument(
         "--derivatives_name",
         type=str,
         help="The name of the derivatives folder",
         required=True,
+        nargs="+",
     )
     parser.add_argument(
         "--save_path",
@@ -431,40 +415,34 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--set_zoom",
-        type=lambda x: tuple(map(int, x.split(','))),
+        type=lambda x: tuple(map(int, x.split(","))),
         help="Zoom for rescaling (format: x,y,z)",
         default=(1, 1, 1),
     )
-    
+
+    parser.add_argument("--exclude_path", type=str, help="Path to Excel file marking POIs to exclude", default=None)
+
     parser.add_argument(
-        '--exclude_path',
-        type=str,
-        help='Path to Excel file marking POIs to exclude',
-        default=None
+        "--compute_surface_mask",
+        action="store_true",
+        help="Whether to compute the surface mask for the vertebrae",
     )
 
     parser.add_argument(
-        '--compute_surface_mask',
+        "--include_neighbouring_vertebrae",
         action="store_true",
-        help='Whether to compute the surface mask for the vertebrae',
+        help="Whether to include neighbouring vertebrae in the bounding box extraction",
     )
-
-    
-    parser.add_argument(
-        '--include_neighbouring_vertebrae',
-        action="store_true",
-        help='Whether to include neighbouring vertebrae in the bounding box extraction',
-    )
-    
 
     args = parser.parse_args()
     print(args.derivatives_name)
 
-    
-    bids_gloabl_info = BIDS_Global_info(
-        datasets=[args.data_path], parents=["rawdata", args.derivatives_name]
-    )
+    parents = ["rawdata", args.derivatives_name] if not isinstance(args.derivatives_name, list) else ["rawdata"] + args.derivatives_name
 
+    bids_gloabl_info = BIDS_Global_info(
+        datasets=[args.data_path],
+        parents=parents,
+    )
 
     get_data_files = partial(
         get_files,
@@ -474,7 +452,6 @@ if __name__ == "__main__":
         get_vertseg_fn=get_vertseg,
     )
 
-    
     prepare_data(
         bids_surgery_info=bids_gloabl_info,
         save_path=args.save_path,
