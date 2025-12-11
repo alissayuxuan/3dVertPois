@@ -962,7 +962,7 @@ def load_and_filter_csv(df):
     return df_filtered
 
 if __name__ == "__main__":
-
+    
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--data_module_save_path",
@@ -998,6 +998,8 @@ if __name__ == "__main__":
     
 
     os.makedirs(args.save_path, exist_ok=True)
+
+    
 
     
     ### Create DataFrame with prediction information 
@@ -1042,9 +1044,19 @@ if __name__ == "__main__":
     outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_error_higher_10.csv"))
     print("Outliers (refined_error > 10) saved")
     
+    """
+    save_path = "experiments/experiment_evaluation/k_fold/fold_6/val"
 
-    
-        
+    results_df = pd.read_csv("experiments/experiment_evaluation/k_fold/fold_6/val/results.csv")
+
+    outlier_df = filter_high_refined_error_pois(results_df, 6, False)
+    outlier_df.to_csv(os.path.join(save_path, "outliers_refined_error_higher_6.csv"))
+    print("Outliers (refined_error > 6) saved")
+
+    outlier_proj_df = filter_high_refined_error_pois(results_df, 6, True)
+    outlier_proj_df.to_csv(os.path.join(save_path, "outliers_refined_proj_error_higher_6.csv"))
+    print("Outliers (refined_proj_error > 6) saved")
+    """ 
     
     ### Create Prediction files 
     prediction_files_path = os.path.join(args.save_path, "prediction_files") if args.project else os.path.join(args.save_path, "prediction_files-no_proj")
@@ -1074,3 +1086,4 @@ if __name__ == "__main__":
             save_gt_proj=args.save_gt_proj 
         )
     print(f"Saved predictions and ground truths to: {prediction_files_path}")
+    
