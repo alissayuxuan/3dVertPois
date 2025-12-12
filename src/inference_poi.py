@@ -41,6 +41,7 @@ class GruberInferenceDataset(Dataset):
         input_data_type,
         include_vert_list,
         zoom=(1, 1, 1),
+        iterations=1,
         poi_indices=[
             81,
             82, 
@@ -77,7 +78,8 @@ class GruberInferenceDataset(Dataset):
             124, 
             125,
             127
-        ],
+        ]
+
     ):
         self.master_df = master_df
         self.input_shape = input_shape
@@ -88,6 +90,8 @@ class GruberInferenceDataset(Dataset):
         self.vert_idx_to_list_idx = {
             vert: idx for idx, vert in enumerate(include_vert_list)
         }
+        self.iterations = iterations
+        
 
     def __len__(self):
         return len(self.master_df)
@@ -156,19 +160,18 @@ class GruberInferenceDataset(Dataset):
         subreg = subreg.unsqueeze(0)
         vertseg = vertseg.unsqueeze(0)
 
-        # Uses default iterations of 1, must be changed if model was trained with more iterations ("thicker" surface)
-        surface = compute_surface(subreg)
-
         if self.input_data_type == "vertseg":
             data_dict["input"] = vertseg
+            print("Using vertseg as input")
         elif self.input_data_type == "subreg":
             data_dict["input"] = subreg
-        # elif self.input_data_type == "ct":
-        #    data_dict["input"] = ct
-        elif self.input_data_type == "surface_msk":
-            data_dict["input"] = surface
+            print("Using subreg as input")
+
+        transformed_mask = data_dict["input"] > 0
+        surface = compute_surface(transformed_mask, iterations=self.iterations)
 
         data_dict["surface"] = surface
+
         data_dict["vertebra"] = vertebra
         data_dict["padding_offset"] = torch.tensor(offset).float()
         data_dict["poi_indices"] = self.poi_indices
@@ -348,6 +351,7 @@ def create_prediction_poi_files(
     input_data_type = dm_params["input_data_type"]
     vert_list = dm_params["include_vert_list"]
     poi_indices = dm_params["include_poi_list"]
+    interations = dm_params["surface_erosion_iterations"]
     zoom = dm_params.get("zoom", (1, 1, 1))
     print("zoom: ", zoom)
 
@@ -357,16 +361,18 @@ def create_prediction_poi_files(
     print(f"inferencing subject: {subject}")
     # get data_module and create dataset
     ds = GruberInferenceDataset(
-        master_df, input_shape=input_shape, input_data_type=input_data_type, include_vert_list=vert_list, zoom=zoom
+        master_df, input_shape=input_shape, input_data_type=input_data_type, include_vert_list=vert_list, zoom=zoom, iterations=interations
     )
     dl = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False,  collate_fn=safe_collate)
 
     # load checkpoint
     model = ev.load_model_from_checkpoint(model_path)
+    model.eval() #ALISSA: deactivate dropout and batchnorm
 
     partial_centroids = []
     # predict POIs
     first = True
+    first_batch = True
     for batch in dl:
 
         if batch is None:
@@ -377,6 +383,24 @@ def create_prediction_poi_files(
             k: v.to(model.device) if isinstance(v, torch.Tensor) else v
             for k, v in batch.items()
         }
+        if first_batch:
+            print("\n=== INFERENCE PIPELINE DEBUG ===")
+            print(f"Subject: {batch['subject']}, Vertebra: {batch['vertebra'].item()}")
+            print(f"Input shape: {batch['input'].shape}")
+            print(f"Input mean: {batch['input'].mean().item():.6f}")
+            print(f"Input std: {batch['input'].std().item():.6f}")
+            print(f"Input min: {batch['input'].min().item():.6f}")
+            print(f"Input max: {batch['input'].max().item():.6f}")
+            print(f"Input sum: {batch['input'].sum().item():.6f}")
+            if 'surface' in batch:
+                print(f"Surface sum: {batch['surface'].sum().item():.6f}")
+            if 'padding_offset' in batch:
+                print(f"Padding offset: {batch['padding_offset']}")
+            print("================================\n")
+            first_batch = False
+
+
+
         batch = model(batch)
 
         refined_preds_batch = batch["refined_preds"]
@@ -454,7 +478,9 @@ def create_prediction_poi_files(
 
         print("unpadded_refined_preds_ctd: ", unpadded_refined_preds_ctd) if first else None
 
-        subject_dir = os.path.join(save_dir, str(subject), "cutouts-preproccessed")
+        #subject_dir = os.path.join(save_dir, str(subject), "cutouts-preproccessed")
+        subject_dir = os.path.join(save_dir, "cutouts-preproccessed")
+        
         os.makedirs(subject_dir, exist_ok=True)
 
         # save POI and Segmentation masks (cutouts)
@@ -510,6 +536,7 @@ def create_prediction_poi_files(
     sub, pois = ev.combine_centroids(partial_centroids)
 
 
+    os.makedirs(os.path.join(save_dir, subject), exist_ok=True)
     pois.save(os.path.join(save_dir, sub, "poi_predicted.json"))
     pois.to_global().save_mrk(os.path.join(save_dir, sub, "poi_predicted_global.json"))
 
@@ -523,23 +550,21 @@ def create_prediction_poi_files(
 if __name__ == "__main__":
 
     bgi = BIDS_Global_info(
-        datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder-test"],
+        datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-verse19"],
         parents=["derivatives"],
     )
 
-    save_dir = "/home/student/alissa/3dVertPois/src/predictions/dataset-folder-test-inferenced/TEST_0.5_zoom-dataset-folder"
-
-    #dm_path = "ablation_study/architecture/training/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude/version_0/data_module_params.json"
-    dm_path = "ablation_study/dataloader/training/input_type/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude-0.5_zoom/version_0/data_module_params.json"
-    #model_path = "ablation_study/architecture/training/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=94-fine_mean_distance_val=1.66.ckpt"
-    model_path = "ablation_study/dataloader/training/input_type/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude-0.5_zoom/version_0/checkpoints/sad-pt-epoch=112-fine_mean_distance_val=1.48.ckpt"
-
-    inference_subjects = 0
+    save_dir = "/home/student/alissa/3dVertPois/src/predictions/verse19-inferenced/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude"
+    dm_path = "ablation_study/architecture/training/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude/version_0/data_module_params.json"
+    ##dm_path = "ablation_study/architecture/training/subreg-no_project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
+    model_path = "ablation_study/architecture/training/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=94-fine_mean_distance_val=1.66.ckpt"
+    ##model_path = "ablation_study/architecture/training/subreg-no_project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=60-fine_mean_distance_val=1.76.ckpt"
+    #inference_subjects = 0
 
     for sub, container in bgi.enumerate_subjects():
-        if inference_subjects >= 1:
-            break
-        inference_subjects += 1
+        #if inference_subjects >= 1:
+        #    break
+        #inference_subjects += 1
         print(f"Subject: {sub}")
 
         vert_msk = get_vertseg(container)

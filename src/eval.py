@@ -175,6 +175,27 @@ def create_prediction_poi_files(
             k: v.to(poi_module.device) if isinstance(v, torch.Tensor) else v
             for k, v in batch.items()
         }
+
+        first_batch = True
+
+        if first_batch:
+            # === DEBUG CODE ===
+            print("\n=== EVAL PIPELINE DEBUG ===")
+            print(f"Subject: {batch['subject']}, Vertebra: {batch['vertebra'].item()}")
+            print(f"Input shape: {batch['input'].shape}")
+            print(f"Input mean: {batch['input'].mean().item():.6f}")
+            print(f"Input std: {batch['input'].std().item():.6f}")
+            print(f"Input min: {batch['input'].min().item():.6f}")
+            print(f"Input max: {batch['input'].max().item():.6f}")
+            print(f"Input sum: {batch['input'].sum().item():.6f}")
+            if 'surface' in batch:
+                print(f"Surface sum: {batch['surface'].sum().item():.6f}")
+            if 'offset' in batch:
+                print(f"Offset: {batch['offset']}")
+            print("=========================\n")
+            # === END DEBUG ===
+            first_batch = False
+
         batch = poi_module(batch)
 
         subject_batch = batch["subject"]
@@ -1067,7 +1088,7 @@ if __name__ == "__main__":
         poi_paths_dict = create_neighbor_prediction_poi_files(
             data_module_save_path=args.data_module_save_path,
             checkpoint_path=args.checkpoint_path,
-            poi_file_ending="_pred.json",
+            poi_file_ending="pred.json",
             split=args.split,
             save_path=prediction_files_path,
             return_paths=True, 
@@ -1078,7 +1099,7 @@ if __name__ == "__main__":
         poi_paths_dict = create_prediction_poi_files(
             data_module_save_path=args.data_module_save_path,
             checkpoint_path=args.checkpoint_path,
-            poi_file_ending="_pred.json",
+            poi_file_ending="pred.json",
             split=args.split,
             save_path=prediction_files_path,
             return_paths=True, 

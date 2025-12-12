@@ -24,13 +24,20 @@ def get_poi_metadata(poi_file):
     }
     return meta_data
 
-def compare_meta_data(meta_a, meta_b, tolerance=1e-6):
+def compare_meta_data(meta_a, meta_b, tolerance=1e-6, shape_tolerance=1):
     """Compares two metadata dictionaries with numerical tolerance for floating point values and returns differences."""
     diffs = {}
     for key in meta_a.keys():
         val_a = meta_a[key]
         val_b = meta_b[key]
         
+        # Special handling for shape: allow 1 voxel difference
+        if key == "shape":
+            if isinstance(val_a, (list, tuple, np.ndarray)) and isinstance(val_b, (list, tuple, np.ndarray)):
+                if not np.allclose(val_a, val_b, atol=shape_tolerance, rtol=0):
+                    diffs[key] = (val_a, val_b)
+            continue
+
         # Handle numpy arrays
         if isinstance(val_a, np.ndarray) or isinstance(val_b, np.ndarray):
             # Check if array contains numeric values
@@ -68,15 +75,14 @@ def compare_meta_data(meta_a, meta_b, tolerance=1e-6):
     return diffs
 
 
-def create_poi_df(data_path, method_name):
+def create_poi_df(data_path, method_name, load_full_spine=True):
     """
-    param poi_path: path to dictionary with POIs 
-    return: 
-        {
-            'vertebra': <string>,
-            'poi': <string>,
-            'coords': np.array([x, y, z])
-        }
+    Returns:
+    --------
+    poi_df : pd.DataFrame
+        DataFrame with columns: subject, vertebra, poi_idx, coords_{method_name}
+    meta_df : pd.DataFrame
+        DataFrame with columns: subject, meta_{method_name}
     """
 
     poi_dict = {
@@ -91,44 +97,93 @@ def create_poi_df(data_path, method_name):
         f"meta_{method_name}": []
     }
 
-    subjects_list = [
-        name for name in os.listdir(data_path)
-        if os.path.isdir(os.path.join(data_path, name))
-    ]
+    if load_full_spine:
+        subjects_list = [
+            name for name in os.listdir(data_path)
+            if os.path.isdir(os.path.join(data_path, name))
+        ]
 
-    for subject in subjects_list:
-        poi_path = os.path.join(data_path, subject, "poi_predicted.json")
+        for subject in subjects_list:
+            poi_path = os.path.join(data_path, subject, "poi_predicted.json")
 
-        if not os.path.exists(poi_path):
-            print(f"POI file not found for subject {subject} at {poi_path}, skipping.")
-            continue
+            if not os.path.exists(poi_path):
+                print(f"POI file not found for subject {subject} at {poi_path}, skipping.")
+                continue
 
-        poi = POI.load(poi_path)
+            poi = POI.load(poi_path)
 
-        # save metadata
-        meta = get_poi_metadata(poi)
-        meta_dict["subject"].append(subject)
-        meta_dict[f"meta_{method_name}"].append(meta)
+            # save metadata
+            meta = get_poi_metadata(poi)
+            meta_dict["subject"].append(subject)
+            meta_dict[f"meta_{method_name}"].append(meta)
 
-        # save POI coordinates
-        for vert, poi_id, coords in poi.items(): 
-            poi_dict["subject"].append(subject)
-            poi_dict["vertebra"].append(vert)
-            poi_dict["poi_idx"].append(poi_id)
-            poi_dict[f"coords_{method_name}"].append(np.array(coords))
+            # save POI coordinates
+            for vert, poi_id, coords in poi.items(): 
+                poi_dict["subject"].append(subject)
+                poi_dict["vertebra"].append(vert)
+                poi_dict["poi_idx"].append(poi_id)
+                poi_dict[f"coords_{method_name}"].append(np.array(coords))
+    else:
+        # New logic: individual POI files per vertebra
+        # Get all JSON files matching pattern: <subject>_<vertebra>_pred.json
+        poi_files = [
+            f for f in os.listdir(data_path)
+            if f.endswith("_pred.json")
+        ]
+
+        # Group files by subject to save metadata once per subject
+        subject_files = {}
+        for poi_file in poi_files:
+            # Parse filename: <subject>_<vertebra>_pred.json
+            parts = poi_file.replace("_pred.json", "").split("_")
+            if len(parts) >= 2:
+                vertebra = parts[-1]
+                subject = "_".join(parts[:-1])
+                
+                if subject not in subject_files:
+                    subject_files[subject] = []
+                subject_files[subject].append((poi_file, vertebra))
+
+        # Process each subject
+        for subject, files in subject_files.items():
+            metadata_saved = False
+            
+            for poi_file, vertebra in files:
+                poi_path = os.path.join(data_path, poi_file)
+
+                if not os.path.exists(poi_path):
+                    print(f"POI file not found at {poi_path}, skipping.")
+                    continue
+
+                poi = POI.load(poi_path)
+
+                # Save metadata once per subject (from first file)
+                if not metadata_saved:
+                    meta = get_poi_metadata(poi)
+                    meta_dict["subject"].append(subject)
+                    meta_dict[f"meta_{method_name}"].append(meta)
+                    metadata_saved = True
+
+                # Save POI coordinates
+                for vert, poi_id, coords in poi.items():
+                    poi_dict["subject"].append(subject)
+                    poi_dict["vertebra"].append(vert)
+                    poi_dict["poi_idx"].append(poi_id)
+                    poi_dict[f"coords_{method_name}"].append(np.array(coords))
+
 
     poi_df = pd.DataFrame(poi_dict)
     meta_df = pd.DataFrame(meta_dict)
     return poi_df, meta_df
 
-def join_poi_dfs(path_method_list):
+def join_poi_dfs(path_method_list, load_full_spine=True):
 
     df_list = []
     meta_df_list = []
     method_names = [method_name for (_, method_name) in path_method_list]
 
     for (data_path, method_name) in path_method_list:
-        poi_df, meta_df = create_poi_df(data_path, method_name)
+        poi_df, meta_df = create_poi_df(data_path, method_name, load_full_spine=load_full_spine)
         
         df_list.append(poi_df)
         meta_df_list.append(meta_df)
@@ -329,27 +384,35 @@ def local_to_global_poi(data_path):
 
 
 if __name__ == "__main__":
+    #path_method_list = [
+    #    ("predictions/verse19-deterministic", "deter"),
+    #    ("predictions/verse19-inferenced/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude", "dl-NoVert"),
+    #    ("predictions/verse19-inferenced/subreg-project_gt-no_freeze-SADenseNet-standard_architecture-excel_outliers_exclude", "dl-standard"),
+    #]
+
     path_method_list = [
-        ("predictions/verse19-deterministic", "deter"),
-        ("predictions/verse19-inferenced/subreg-project_gt-no_freeze-SADenseNet-NoVertPatchTransformer-excel_outliers_exclude", "dl-NoVert"),
-        ("predictions/verse19-inferenced/subreg-project_gt-no_freeze-SADenseNet-standard_architecture-excel_outliers_exclude", "dl-standard"),
+        #("predictions/compare_eval_inference/eval/subreg_standard_excel_outliers_exclude_version0_epoch60_test-batch_size1/prediction_files-no_proj", "eval-1"),
+        #("predictions/compare_eval_inference/eval/subreg_standard_excel_outliers_exclude_version0_epoch60_test/prediction_files-no_proj", "eval"),
+        
+        #("predictions/compare_eval_inference/eval/subreg_standard_excel_outliers_exclude_version0_epoch60_test/prediction_files-no_proj", "eval"),
+        #("predictions/compare_eval_inference/inference/subreg-standard-excel_outliers_exclude-version0_epoch60-test/cutouts-preproccessed", "inference")
     ]
-    save_dir = "predictions/analysis_compare"
+    save_dir = "predictions/compare_eval_inference"
 
     #local_to_global_poi("predictions/verse19-deterministic")
 
     
-    df, incompatible_subjects_info = join_poi_dfs(path_method_list)
+    df, incompatible_subjects_info = join_poi_dfs(path_method_list, load_full_spine=False)
     
     with open(os.path.join(save_dir, 'incompatible_subjects.json'), 'w') as f:
         json.dump(incompatible_subjects_info, f, indent=2, default=str)
 
 
     method_name_list = [m for (_, m) in path_method_list]
-    df = calc_center_and_distances(df, method_name_list)
+    #df = calc_center_and_distances(df, method_name_list)
     df = calc_distance_between_methods(df, method_name_list)
 
-    df = calc_distance_to_average(df, "deter", ["dl-NoVert", "dl-standard"])
+    #df = calc_distance_to_average(df, "deter", ["dl-NoVert", "dl-standard"])
 
     print(df)
 
