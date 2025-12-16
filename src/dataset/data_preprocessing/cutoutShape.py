@@ -177,8 +177,9 @@ def print_all_subjects():
     print_list("test subjects", test_subjects)
 
 
+
 if __name__ == "__main__":
-    find_max_shape()
+    #find_max_shape()
     #rescale_cutouts((0.75, 0.75, 0.75))
 
     #copy_and_update_master_df(
@@ -189,4 +190,4 @@ if __name__ == "__main__":
     #mask_seg()
 
 
-    #print_all_subjects()
+    print_all_subjects()
