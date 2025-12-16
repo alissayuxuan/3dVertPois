@@ -116,11 +116,15 @@ class PoiDataset(Dataset):
         elif self.input_data_type == "ct_raw":
             ct, _ = self.preprocess_nifti(ct_path, is_img=True)
             data_dict["input"] = ct
-        elif self.input_data_type == "surface_msk":
-            surface_msk, _ = self.preprocess_nifti(surface_msk_path, is_img=False)
-            data_dict["input"] = surface_msk * mask
+        #elif self.input_data_type == "surface_msk":
+        #    surface_msk, _ = self.preprocess_nifti(surface_msk_path, is_img=False)
+        #    data_dict["input"] = surface_msk * mask
         else:
             raise ValueError(f"Unknown input data type: {self.input_data_type}")
+
+        surface_msk, _ = self.preprocess_nifti(surface_msk_path, is_img=False)
+        surface_msk = surface_msk * mask
+
 
         # Load the BIDS objects
         # ct = NII.load(ct_path, seg = False)
@@ -217,10 +221,10 @@ class PoiDataset(Dataset):
 
         data_dict["loss_mask"] = loss_mask.bool()
 
-        transformed_mask = data_dict["input"] > 0
-        surface = compute_surface(transformed_mask, iterations=self.iterations)
+        #transformed_mask = data_dict["input"] > 0
+        #surface = compute_surface(transformed_mask, iterations=self.iterations)
 
-        data_dict["surface"] = surface
+        data_dict["surface"] = surface_msk#surface
         data_dict["subject"] = str(subject)
         data_dict["vertebra"] = vertebra
         data_dict["zoom"] = torch.tensor(self.zoom).float()

@@ -288,7 +288,7 @@ def process_container(
                 )
 
                 surface_mask_cropped = None
-                surfcae_subreg_cropped = None
+                surface_subreg_cropped = None
                 if compute_surface_mask and surface_mask is not None and surface_subreg is not None:
                     surface_mask_cropped = surface_mask.apply_crop(
                         ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
