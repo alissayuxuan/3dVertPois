@@ -356,7 +356,7 @@ def create_prediction_poi_files(
     dm_path,
     model_path,
     save_dir,
-    project_to_surface=False,
+    project_to_surface=True,
 ):
     # Load data module parameters
     dm_params = json.load(open(dm_path, "r"))
@@ -377,12 +377,11 @@ def create_prediction_poi_files(
     elif input_data_type == "ct":
         input_data = get_ct(container)
     elif input_data_type == "surface_msk":
-        input_data = vert_msk.compute_surface_mask(connectivity=1, dilated_surface=False)
+        input_data = vert_msk.compute_surface_mask(connectivity=3, dilated_surface=False)
     else:
         raise ValueError(f"Unknown input data type: {input_data_type}")
     # gt_poi_path = get_poi(container)
-    surface = input_data if input_data_type == "surface_msk" else vert_msk.compute_surface_mask(connectivity=1, dilated_surface=False)
-
+    surface = input_data if input_data_type == "surface_msk" else vert_msk.compute_surface_mask(connectivity=3, dilated_surface=False)
     if vert_msk is None or input_data is None:
         print(f"Skip Subject: {sub} - not all data available")
         return
@@ -585,21 +584,23 @@ def create_prediction_poi_files(
 
 if __name__ == "__main__":
 
+    # bgi = BIDS_Global_info(
+    #    datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-verse19"],
+    #    parents=["derivatives"],
+    # )
     bgi = BIDS_Global_info(
-        datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-verse19"],
+        datasets=["/DATA/NAS/datasets_processed/CT_spine/dataset-verse-challenge/dataset-verse19training/"],
         parents=["derivatives"],
     )
-    # bgi = BIDS_Global_info(
-    #    datasets=["/DATA/NAS/datasets_processed/CT_spine/dataset-poi-gruber"],
-    #    parents=["derivatives_seg"],
-    # )
     project_to_surface = True
 
-    model_dir_root = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/ablation_study/dataloader/training/include_pois/"
-    model_dir = "subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude-L1"
-    model_checkpoint_name = "version_1/checkpoints/sad-pt-epoch=84-fine_mean_distance_val=1.59"
+    model_dir_root = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/include_pois-cc3-exclude6/"
+    model_dir = "subreg-project_gt-no_freeze-surface-cc3-exclude6"
+    model_checkpoint_name = "version_1/checkpoints/sad-pt-epoch=122-fine_mean_distance_val=1.58"
 
-    save_dir = f"/DATA/NAS/datasets_processed/CT_spine/dataset-verse19/derivatives_inference_poi_{model_dir}"
+    save_dir = (
+        f"/DATA/NAS/datasets_processed/CT_spine/dataset-verse-challenge/dataset-verse19training/derivatives_inference_poi_{model_dir}"
+    )
     if project_to_surface:
         save_dir += "_proj"
     # dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
@@ -623,15 +624,15 @@ if __name__ == "__main__":
 
         # gt_poi_path = get_poi(container)
 
-        if vert_msk is None or subreg_msk is None:
+        if vert_msk is None:  # or subreg_msk is None:
             print(f"Skip Subject: {sub} - not all data available")
             continue
 
-        if vert_msk.shape != subreg_msk.shape:
-            print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and subreg {subreg_msk.shape} shapes don't match")
-            continue
+        # if vert_msk.shape != subreg_msk.shape:
+        #    print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and subreg {subreg_msk.shape} shapes don't match")
+        #    continue
 
-        vert_msk.assert_affine(other=subreg_msk)
+        # vert_msk.assert_affine(other=subreg_msk)
         # print("Original msk meta", vert_msk)
 
         create_prediction_poi_files(

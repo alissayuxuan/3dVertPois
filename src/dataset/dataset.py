@@ -108,7 +108,10 @@ class PoiDataset(Dataset):
         # surface_msk, _ = self.preprocess_nifti(surface_msk_path, is_img=False)
 
         if self.input_data_type == "vertseg":
-            data_dict["input"] = vertseg * mask
+            v = vertseg * mask
+            # binarize v
+            v[v > 0] = 1
+            data_dict["input"] = v
         elif self.input_data_type == "subreg":
             data_dict["input"] = subreg * mask
         elif self.input_data_type == "ct":

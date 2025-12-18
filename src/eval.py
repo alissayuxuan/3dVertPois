@@ -591,7 +591,7 @@ def compute_overall_metrics(df):
     return metrics_df
 
 
-def compute_poi_wise_metrics(df):
+def compute_poi_wise_metrics(df, project_pred=False):
     # Group by poi_idx and calculate metrics for refined_proj_error
     if project_pred:
         grouped = df.groupby("poi_idx")["refined_proj_error"]
@@ -937,7 +937,7 @@ if __name__ == "__main__":
         "--checkpoint_path",
         type=str,
         help="Path to the saved checkpoint",
-        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/include_pois-cc1-exclude6/subreg-project_gt-no_freeze-surface/version_1/checkpoints/sad-pt-epoch=93-fine_mean_distance_val=1.68.ckpt",
+        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/include_pois-cc3-exclude6/subreg-project_gt-no_freeze-surface-cc3-exclude6/version_1/checkpoints/sad-pt-epoch=122-fine_mean_distance_val=1.58.ckpt",
     )
     parser.add_argument(
         "--split",
@@ -1027,9 +1027,8 @@ if __name__ == "__main__":
     """
 
     ### Create Prediction files
-    prediction_files_path = (
-        os.path.join(args.save_path, "prediction_files") if args.project else os.path.join(args.save_path, "prediction_files-no_proj")
-    )
+    prediction_files_path_proj = os.path.join(args.save_path, "prediction_files")
+    prediction_files_path = os.path.join(args.save_path, "prediction_files-no_proj")
     os.makedirs(prediction_files_path, exist_ok=True)
     os.makedirs(prediction_files_path_proj, exist_ok=True)
 
