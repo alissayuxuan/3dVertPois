@@ -73,7 +73,7 @@ def get_gruber_poi(container) -> POI:
         return None
 
     poi_candidate = poi_query.candidates[0]
-    print(f"Loading POI from: {poi_candidate}")
+    print(f"Loading POI from: {poi_candidate.file['json']}")
 
     try:
         poi = POI.load(poi_candidate.file["json"])
@@ -88,6 +88,8 @@ def get_ct(container) -> NII:
     ct_query.filter_format("ct")
     ct_query.filter_filetype("nii.gz")  # only nifti files
     ct_candidate = ct_query.candidates[0]
+
+    print(f"Loading CT from: {ct_candidate.file['nii.gz']}")
 
     try:
         ct = ct_candidate.open_nii()
@@ -104,6 +106,8 @@ def get_subreg(container) -> NII:
     subreg_query.filter("seg", "subreg")
     subreg_candidate = subreg_query.candidates[0]
 
+    print(f"Loading subreg from: {subreg_candidate.file['nii.gz']}")
+
     try:
         subreg = subreg_candidate.open_nii()
         return subreg
@@ -118,6 +122,8 @@ def get_vertseg(container) -> NII:
     vertseg_query.filter_filetype("nii.gz")  # only nifti files
     vertseg_query.filter("seg", "vert")
     vertseg_candidate = vertseg_query.candidates[0]
+
+    print(f"Loading vertseg from: {vertseg_candidate.file['nii.gz']}")
 
     try:
         vertseg = vertseg_candidate.open_nii()
@@ -196,6 +202,8 @@ def process_container(
     compute_surface_mask: bool = False,
     include_neighbouring_vertebrae: bool = False,
 ):
+    if "WS-25" not in subject:
+        return []
 
     print(f"Processing Subject: {subject}")
     poi, ct, subreg, vertseg = get_files_fn(container)
@@ -208,14 +216,14 @@ def process_container(
 
     surface_mask = None
     surface_subreg = None
-    if compute_surface_mask:
-        try:
-            surface_mask = vertseg.compute_surface_mask(connectivity=1, dilated_surface=False)
-            surface_subreg = subreg.compute_surface_mask(connectivity=1, dilated_surface=False)
-        except Exception as e:
-            print(f"Error computing surface mask for subject {subject}: {str(e)}")
-            surface_mask = None
-            surface_subreg = None
+    # if compute_surface_mask:
+    #    try:
+    #        surface_mask = vertseg.compute_surface_mask(connectivity=3, dilated_surface=False)
+    #        surface_subreg = subreg.compute_surface_mask(connectivity=3, dilated_surface=False)
+    #    except Exception as e:
+    #        print(f"Error computing surface mask for subject {subject}: {str(e)}")
+    #        surface_mask = None
+    #        surface_subreg = None
 
     vertebrae = {key[0] for key in poi.keys()}
     vertseg_arr = vertseg.get_array()
@@ -268,10 +276,6 @@ def process_container(
             vertseg_path = os.path.join(save_path, subject, str(vert), "vertseg.nii.gz")
             poi_path = os.path.join(save_path, subject, str(vert), "poi.json")
 
-            if compute_surface_mask and surface_mask is not None and surface_subreg is not None:
-                surface_mask_path = os.path.join(save_path, subject, str(vert), "surface_msk.nii.gz")
-                surface_subreg_path = os.path.join(save_path, subject, str(vert), "surface_subreg.nii.gz")
-
             # create directories if they do not exist
             if not os.path.exists(os.path.join(save_path, subject, str(vert))):
                 os.makedirs(os.path.join(save_path, subject, str(vert)))
@@ -282,13 +286,13 @@ def process_container(
                 vertseg_cropped = vertseg.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
                 poi_cropped = poi.apply_crop(o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
 
-                surface_mask_cropped = None
-                surfcae_subreg_cropped = None
-                if compute_surface_mask and surface_mask is not None and surface_subreg is not None:
-                    surface_mask_cropped = surface_mask.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
-                    surface_subreg_cropped = surface_subreg.apply_crop(
-                        ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-                    )
+                # surface_mask_cropped = None
+                # surfcae_subreg_cropped = None
+                # if compute_surface_mask and surface_mask is not None and surface_subreg is not None:
+                #    surface_mask_cropped = surface_mask.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
+                #    surface_subreg_cropped = surface_subreg.apply_crop(
+                #        ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
+                #    )
 
             except Exception as e:
                 print(f"Error processing {subject}: {str(e)}")
@@ -304,19 +308,32 @@ def process_container(
                 vertseg_cropped.rescale_(rescale_zoom)
                 poi_cropped.rescale_(rescale_zoom)
 
-                if compute_surface_mask and surface_mask_cropped is not None and surface_subreg_cropped is not None:
-                    surface_mask_cropped.rescale_(rescale_zoom)
-                    surface_subreg_cropped.rescale_(rescale_zoom)
+                # if compute_surface_mask and surface_mask_cropped is not None and surface_subreg_cropped is not None:
+                #    surface_mask_cropped.rescale_(rescale_zoom)
+                #    surface_subreg_cropped.rescale_(rescale_zoom)
 
             ct_cropped.save(ct_path, verbose=False)
             subreg_cropped.save(subreg_path, verbose=False)
             vertseg_cropped.save(vertseg_path, verbose=False)
             poi_cropped.save(poi_path, verbose=False)
 
-            if compute_surface_mask and surface_mask_cropped is not None and surface_subreg_cropped is not None:
-                surface_mask_cropped.save(surface_mask_path, verbose=False)
-                surface_subreg_cropped.save(surface_subreg_path, verbose=False)
+            if compute_surface_mask:
+                try:
+                    surface_mask = vertseg_cropped.compute_surface_mask(connectivity=1, dilated_surface=False)
+                    surface_subreg = subreg_cropped.compute_surface_mask(connectivity=1, dilated_surface=False)
+                except Exception as e:
+                    pass
 
+                if compute_surface_mask and surface_mask is not None and surface_subreg is not None:
+                    surface_mask_path = os.path.join(save_path, subject, str(vert), "surface_msk.nii.gz")
+                    surface_subreg_path = os.path.join(save_path, subject, str(vert), "surface_subreg.nii.gz")
+                    surface_mask.save(surface_mask_path, verbose=False)
+                    surface_subreg.save(surface_subreg_path, verbose=False)
+
+            # if compute_surface_mask and surface_mask_cropped is not None and surface_subreg_cropped is not None:
+            #    surface_mask_cropped.save(surface_mask_path, verbose=False)
+            #    surface_subreg_cropped.save(surface_subreg_path, verbose=False)
+            #
             # Save the slice indices as json to reconstruct the original POI file (there probably is a more BIDS-like approach to this)
             slice_indices = {
                 "x_min": int(x_min),
@@ -387,19 +404,27 @@ def prepare_data(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--data_path", type=str, help="The path to the BIDS dataset", required=True)
+    parser.add_argument(
+        "--data_path",
+        type=str,
+        help="The path to the BIDS dataset",
+        # required=True,
+        default="/DATA/NAS/datasets_processed/CT_spine/dataset-poi-gruber",
+    )
     parser.add_argument(
         "--derivatives_name",
         type=str,
         help="The name of the derivatives folder",
-        required=True,
+        # required=True,
         nargs="+",
+        default=["derivatives_seg", "derivatives_poi_new2g"],
     )
     parser.add_argument(
         "--save_path",
         type=str,
         help="The path to save the prepared data",
-        required=True,
+        # required=True,
+        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/dataset/data_preprocessing/cutout-folder/cutouts-cc3-new/",
     )
     parser.add_argument(
         "--no_rescale",
@@ -410,7 +435,7 @@ if __name__ == "__main__":
         "--n_workers",
         type=int,
         help="The number of workers to use for parallel processing",
-        default=8,
+        default=1,
     )
 
     parser.add_argument(
@@ -426,6 +451,7 @@ if __name__ == "__main__":
         "--compute_surface_mask",
         action="store_true",
         help="Whether to compute the surface mask for the vertebrae",
+        default=True,
     )
 
     parser.add_argument(
@@ -435,7 +461,7 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    print(args.derivatives_name)
+    print(args)
 
     parents = ["rawdata", args.derivatives_name] if not isinstance(args.derivatives_name, list) else ["rawdata"] + args.derivatives_name
 

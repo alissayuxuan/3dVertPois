@@ -6,10 +6,9 @@ from typing import TypeVar
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-#from BIDS import BIDS_Global_info
+# from BIDS import BIDS_Global_info
 from TPTBox import BIDS_Global_info
 import json
-
 
 
 from pqdm.processes import pqdm
@@ -156,7 +155,6 @@ class POIDataModule(pl.LightningDataModule):
                 iterations=self.surface_erosion_iterations,
             )
 
-
         elif self.dataset == "GruberNeighbor":  # NEU
             self.train_dataset = GruberNeighborDataset(  
                 self.train_df,
@@ -205,6 +203,17 @@ class POIDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             shuffle=True,
             #collate_fn=custom_collate_fn
+        )
+
+    def train_noaug_dataloader(self):
+        train_2_dataset = self.train_dataset
+        train_2_dataset.flip_prob = 0.0
+        train_2_dataset.transforms = None
+        return DataLoader(
+            dataset=train_2_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=False,
         )
 
     def val_dataloader(self):

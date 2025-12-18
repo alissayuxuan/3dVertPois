@@ -164,6 +164,8 @@ def create_prediction_poi_files(
         val_dl = data_module.val_dataloader()
     elif split == "test":
         val_dl = data_module.test_dataloader()
+    elif split == "train":
+        val_dl = data_module.train_noaug_dataloader()
     else:
         raise ValueError(f"Invalid split: {split}")
 
@@ -359,6 +361,8 @@ def run_predictions(
         val_dl = data_module.val_dataloader()
     elif split == "test":
         val_dl = data_module.test_dataloader()
+    elif split == "train":
+        val_dl = data_module.train_noaug_dataloader()
     else:
         raise ValueError(f"Invalid split: {split}")
 
@@ -398,8 +402,13 @@ def run_predictions(
         if neighbor:
             n_pois_per_vert_batch = batch["n_pois_per_vertebra"]
 
+        debug = False
+        # print(subject_batch, vertebra_batch, target_indices_batch)
+        if "WS-16" in subject_batch and 23 in vertebra_batch:
+            debug = True
+
         if project_gt:
-            target_batch, _ = surface_project_coords(target_batch, batch["surface"])
+            target_batch, _ = surface_project_coords(target_batch, batch["surface"], debug=False)
 
         coarse_preds_projected_batch, coarse_pred_proj_distances_batch = surface_project_coords(coarse_preds_batch, batch["surface"])
         refined_preds_projected_batch, refined_preds_proj_distances_batch = surface_project_coords(refined_preds_batch, batch["surface"])
@@ -922,14 +931,24 @@ if __name__ == "__main__":
         help="Path to the saved DataModule configuration",
         default="",
     )
-    parser.add_argument("--checkpoint_path", type=str, help="Path to the saved checkpoint")
+    parser.add_argument(
+        "--checkpoint_path",
+        type=str,
+        help="Path to the saved checkpoint",
+        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/include_pois-cc1-exclude6/subreg-project_gt-no_freeze-surface/version_1/checkpoints/sad-pt-epoch=93-fine_mean_distance_val=1.68.ckpt",
+    )
     parser.add_argument(
         "--split",
         type=str,
         default="val",
         help="Dataset split to evaluate on (val/test)",
     )
-    parser.add_argument("--save_path", type=str, help="Path to save the evaluation results")
+    parser.add_argument(
+        "--save_path",
+        type=str,
+        help="Path to save the evaluation results",
+        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/ablation_study/hendrik/val_dummy/subreg-project_gt-no_freeze-surface/",
+    )
     parser.add_argument("--neighbor", action="store_true", help="Whether neighbor predictions were made")
 
     parser.add_argument("--project", action="store_true", help="Whether the final predictions should be projected to the surface.")
@@ -937,11 +956,22 @@ if __name__ == "__main__":
     parser.add_argument("--save_gt_proj", action="store_true", help="Whether to save projected GT POI files.")
 
     args = parser.parse_args()
+    args.project = True  # REMOVE
+    args.save_gt_proj = True  # REMOVE
 
     os.makedirs(args.save_path, exist_ok=True)
 
     if args.data_module_save_path == "":
-        args.data_module_save_path = str(Path(args.checkpoint_path).parent.parent.joinpath("data_module_params.json"))
+        t = Path(args.checkpoint_path)
+        i = 0
+        while i < 3:
+            if t.joinpath("data_module_params.json").exists():
+                args.data_module_save_path = str(t.joinpath("data_module_params.json"))
+                break
+            t = t.parent
+            i += 1
+            # Path(args.checkpoint_path).parent.parent.joinpath("data_module_params.json"))
+        # args.data_module_save_path = str(Path(args.checkpoint_path).parent.parent.joinpath("data_module_params.json"))
 
     ### Create DataFrame with prediction information
     prediction_df = create_prediction_df(
@@ -980,32 +1010,31 @@ if __name__ == "__main__":
         outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_proj_error_higher_10.csv"))
         print("Outliers (refined_proj_error > 10) saved")
 
-    else:
-        ### Compute POI-wise metrics
-        poi_metrics_df = compute_poi_wise_metrics(prediction_df)
-        poi_metrics_df.to_csv(os.path.join(args.save_path, "poi_metrics.csv"))
-        print("POI-wise metrics saved")
+    ### Compute POI-wise metrics
+    poi_metrics_df = compute_poi_wise_metrics(prediction_df)
+    poi_metrics_df.to_csv(os.path.join(args.save_path, "poi_metrics.csv"))
+    print("POI-wise metrics saved")
 
-        ### Compute vertebra-wise metrics
-        vert_metrics_df = compute_vert_wise_metrics(prediction_df)
-        vert_metrics_df.to_csv(os.path.join(args.save_path, "vertebra_metrics.csv"))
-        print("Vertebra-wise metrics saved")
+    ### Compute vertebra-wise metrics
+    vert_metrics_df = compute_vert_wise_metrics(prediction_df)
+    vert_metrics_df.to_csv(os.path.join(args.save_path, "vertebra_metrics.csv"))
+    print("Vertebra-wise metrics saved")
 
-        ### Compute subject-wise metrics
-        sub_metrics_df = compute_sub_wise_metrics(prediction_df)
-        sub_metrics_df.to_csv(os.path.join(args.save_path, "subject_metrics.csv"))
-        print("Subject-wise metrics saved")
+    ### Compute subject-wise metrics
+    sub_metrics_df = compute_sub_wise_metrics(prediction_df)
+    sub_metrics_df.to_csv(os.path.join(args.save_path, "subject_metrics.csv"))
+    print("Subject-wise metrics saved")
 
-        ### Find Outliers
-        outlier_df = filter_high_refined_error_pois(prediction_df, 10)
-        outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_error_higher_10.csv"))
-        print("Outliers (refined_error > 10) saved")
+    ### Find Outliers
+    outlier_df = filter_high_refined_error_pois(prediction_df, 10)
+    outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_error_higher_10.csv"))
+    print("Outliers (refined_error > 10) saved")
 
     ### Create Prediction files
-    prediction_files_path = (
-        os.path.join(args.save_path, "prediction_files") if args.project else os.path.join(args.save_path, "prediction_files-no_proj")
-    )
+    prediction_files_path_proj = os.path.join(args.save_path, "prediction_files")
+    prediction_files_path = os.path.join(args.save_path, "prediction_files-no_proj")
     os.makedirs(prediction_files_path, exist_ok=True)
+    os.makedirs(prediction_files_path_proj, exist_ok=True)
 
     if args.neighbor:
         # Generate predictions and get paths
@@ -1027,7 +1056,17 @@ if __name__ == "__main__":
             split=args.split,
             save_path=prediction_files_path,
             return_paths=True,
-            project=args.project,
+            project=False,
+            save_gt_proj=args.save_gt_proj,
+        )
+        poi_paths_dict = create_prediction_poi_files(
+            data_module_save_path=args.data_module_save_path,
+            checkpoint_path=args.checkpoint_path,
+            poi_file_ending="_pred.json",
+            split=args.split,
+            save_path=prediction_files_path_proj,
+            return_paths=True,
+            project=True,
             save_gt_proj=args.save_gt_proj,
         )
     print(f"Saved predictions and ground truths to: {prediction_files_path}")

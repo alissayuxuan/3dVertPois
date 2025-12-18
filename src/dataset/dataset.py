@@ -55,7 +55,9 @@ class PoiDataset(Dataset):
     def __len__(self):
         return len(self.master_df)
 
-    def preprocess_nifti(self, nii_path, is_img=False):
+    def preprocess_nifti(self, nii_path, is_img=False, verbose=False):
+        if verbose:
+            print(f"Loading from {nii_path}")
         nii = NII.load(nii_path, seg=not is_img)
         nii.rescale_and_reorient_(axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False)
         if is_img:
@@ -75,7 +77,9 @@ class PoiDataset(Dataset):
         row = self.master_df.iloc[index]
         subject = row["subject"]
         vertebra = row["vertebra"]
-        file_dir = row["file_dir"]
+        file_dir = row["file_dir"].replace(
+            "dataset/data_preprocessing/", "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/dataset/data_preprocessing/"
+        )
 
         # If the master_dir has a column bad_poi_list, use this to create a loss mask
         if "bad_poi_list" in self.master_df.columns:
@@ -117,7 +121,11 @@ class PoiDataset(Dataset):
             ct, _ = self.preprocess_nifti(ct_path, is_img=True)
             data_dict["input"] = ct
         elif self.input_data_type == "surface_msk":
-            surface_msk, _ = self.preprocess_nifti(surface_msk_path, is_img=False)
+            surface_msk, _ = self.preprocess_nifti(
+                surface_msk_path,
+                is_img=False,
+                verbose=False,
+            )
             data_dict["input"] = surface_msk * mask
         else:
             raise ValueError(f"Unknown input data type: {self.input_data_type}")
