@@ -3,12 +3,13 @@ import os
 
 import torch
 import numpy as np
+
 # from BIDS import NII, POI
 from TPTBox import NII
 from TPTBox.core.poi import POI
 from torch.utils.data import Dataset
 
-from transforms.transforms import Compose, LandMarksRandHorizontalFlip # was src.transforms.transforms
+from transforms.transforms import Compose, LandMarksRandHorizontalFlip  # was src.transforms.transforms
 from utils.dataloading_utils import compute_surface, get_gt_pois, pad_array_to_shape
 
 
@@ -39,17 +40,13 @@ class PoiDataset(Dataset):
         self.poi_indices = poi_indices
         self.transform = Compose(transforms) if transforms else None
         if flip_prob > 0:
-            self.transform = Compose(
-                [self.transform, LandMarksRandHorizontalFlip(flip_prob, poi_flip_pairs)]
-            )
+            self.transform = Compose([self.transform, LandMarksRandHorizontalFlip(flip_prob, poi_flip_pairs)])
         self.include_com = include_com
         self.poi_flip_pairs = poi_flip_pairs
         self.flip_prob = flip_prob
         self.poi_file_ending = poi_file_ending
         self.poi_idx_to_list_idx = {poi: idx for idx, poi in enumerate(poi_indices)}
-        self.vert_idx_to_list_idx = {
-            vert: idx for idx, vert in enumerate(include_vert_list)
-        }
+        self.vert_idx_to_list_idx = {vert: idx for idx, vert in enumerate(include_vert_list)}
         self.iterations = iterations
 
     def __len__(self):
@@ -129,6 +126,9 @@ class PoiDataset(Dataset):
             data_dict["input"] = surface_msk * mask
         else:
             raise ValueError(f"Unknown input data type: {self.input_data_type}")
+
+        surface_msk, _ = self.preprocess_nifti(surface_msk_path, is_img=False)
+        surface_msk = surface_msk * mask
 
         # Load the BIDS objects
         # ct = NII.load(ct_path, seg = False)
@@ -212,23 +212,17 @@ class PoiDataset(Dataset):
         # missing pois from the ground truth and bad pois
         loss_mask = torch.ones_like(data_dict["target"][:, 0])
         loss_mask[outside_poi_indices] = 0
-        bad_poi_list_idx = [
-            self.poi_idx_to_list_idx[bad_poi.item()]
-            for bad_poi in bad_poi_list
-            if bad_poi.item() in self.poi_indices
-        ]
+        bad_poi_list_idx = [self.poi_idx_to_list_idx[bad_poi.item()] for bad_poi in bad_poi_list if bad_poi.item() in self.poi_indices]
         loss_mask[bad_poi_list_idx] = 0
-        missing_poi_list_idx = [
-            self.poi_idx_to_list_idx[missing_poi.item()] for missing_poi in missing_pois
-        ]
+        missing_poi_list_idx = [self.poi_idx_to_list_idx[missing_poi.item()] for missing_poi in missing_pois]
         loss_mask[missing_poi_list_idx] = 0
 
         data_dict["loss_mask"] = loss_mask.bool()
 
-        transformed_mask = data_dict["input"] > 0
-        surface = compute_surface(transformed_mask, iterations=self.iterations)
+        # transformed_mask = data_dict["input"] > 0
+        # surface = compute_surface(transformed_mask, iterations=self.iterations)
 
-        data_dict["surface"] = surface
+        data_dict["surface"] = surface_msk  # surface
         data_dict["subject"] = str(subject)
         data_dict["vertebra"] = vertebra
         data_dict["zoom"] = torch.tensor(self.zoom).float()
@@ -237,9 +231,7 @@ class PoiDataset(Dataset):
         data_dict["msk_path"] = msk_path
         data_dict["subreg_path"] = subreg_path
         data_dict["poi_path"] = poi_path
-        data_dict["poi_list_idx"] = torch.tensor(
-            [self.poi_idx_to_list_idx[poi.item()] for poi in poi_indices]
-        )
+        data_dict["poi_list_idx"] = torch.tensor([self.poi_idx_to_list_idx[poi.item()] for poi in poi_indices])
         data_dict["vert_list_idx"] = torch.tensor([self.vert_idx_to_list_idx[vertebra]])
 
         return data_dict
@@ -268,41 +260,40 @@ class GruberDataset(PoiDataset):
                 else (
                     [
                         81,
-                        82, #
-                        83, 
+                        82,  #
+                        83,
                         84,
                         85,
                         86,
                         87,
                         88,
-                        89, #
+                        89,  #
                         101,
                         102,
                         103,
                         104,
-                        105, #
-                        106, #
-                        107, #
-                        108, #
+                        105,  #
+                        106,  #
+                        107,  #
+                        108,  #
                         109,
                         110,
                         111,
                         112,
-                        113, #
-                        114, #
-                        115, #
-                        116, #
+                        113,  #
+                        114,  #
+                        115,  #
+                        116,  #
                         117,
                         118,
                         119,
                         120,
-                        121, #
-                        122, #
-                        123, #
-                        124, #
+                        121,  #
+                        122,  #
+                        123,  #
+                        124,  #
                         125,
                         127,
-
                         41,
                         42,
                         43,
@@ -317,38 +308,38 @@ class GruberDataset(PoiDataset):
                     if include_com
                     else [
                         81,
-                        82, #
-                        83, 
+                        82,  #
+                        83,
                         84,
                         85,
                         86,
                         87,
                         88,
-                        89, #
+                        89,  #
                         101,
                         102,
                         103,
                         104,
-                        105, #
-                        106, #
-                        107, #
-                        108, #
+                        105,  #
+                        106,  #
+                        107,  #
+                        108,  #
                         109,
                         110,
                         111,
                         112,
-                        113, #
-                        114, #
-                        115, #
-                        116, #
+                        113,  #
+                        114,  #
+                        115,  #
+                        116,  #
                         117,
                         118,
                         119,
                         120,
-                        121, #
-                        122, #
-                        123, #
-                        124, #
+                        121,  #
+                        122,  #
+                        123,  #
+                        124,  #
                         125,
                         127,
                     ]
@@ -391,10 +382,10 @@ class GruberDataset(PoiDataset):
                 103: 103,
                 102: 102,
                 104: 104,
-                105: 105, #
-                106: 106, #
-                107: 107, #
-                108: 108, #
+                105: 105,  #
+                106: 106,  #
+                107: 107,  #
+                108: 108,  #
                 125: 125,
                 127: 127,
                 # Flipped left to right
@@ -406,10 +397,10 @@ class GruberDataset(PoiDataset):
                 111: 119,
                 110: 118,
                 112: 120,
-                113: 121, #
-                114: 122, #
-                115: 123, #
-                116: 124, #
+                113: 121,  #
+                114: 122,  #
+                115: 123,  #
+                116: 124,  #
                 # Flipped right to left
                 82: 83,
                 85: 84,
@@ -420,7 +411,7 @@ class GruberDataset(PoiDataset):
                 119: 111,
                 120: 112,
                 121: 113,
-                122: 114, 
+                122: 114,
                 123: 115,
                 124: 116,
                 # Center of mass, does not need to be flipped
@@ -446,6 +437,7 @@ class GruberDataset(PoiDataset):
             poi_file_ending=poi_file_ending,
             iterations=iterations,
         )
+
 
 class PoiNeighborDataset(Dataset):
     def __init__(
@@ -474,17 +466,13 @@ class PoiNeighborDataset(Dataset):
         self.poi_indices = poi_indices
         self.transform = Compose(transforms) if transforms else None
         if flip_prob > 0:
-            self.transform = Compose(
-                [self.transform, LandMarksRandHorizontalFlip(flip_prob, poi_flip_pairs)]
-            )
+            self.transform = Compose([self.transform, LandMarksRandHorizontalFlip(flip_prob, poi_flip_pairs)])
         self.include_com = include_com
         self.poi_flip_pairs = poi_flip_pairs
         self.flip_prob = flip_prob
         self.poi_file_ending = poi_file_ending
         self.poi_idx_to_list_idx = {poi: idx for idx, poi in enumerate(poi_indices)}
-        self.vert_idx_to_list_idx = {
-            vert: idx for idx, vert in enumerate(include_vert_list)
-        }
+        self.vert_idx_to_list_idx = {vert: idx for idx, vert in enumerate(include_vert_list)}
         self.iterations = iterations
 
     def __len__(self):
@@ -498,19 +486,14 @@ class PoiNeighborDataset(Dataset):
 
         loss_mask = torch.ones(len(self.poi_indices), dtype=torch.float)
 
-        missing_poi_list_idx = [
-            self.poi_idx_to_list_idx[missing_poi.item()] for missing_poi in missing_pois
-        ]
-        loss_mask[missing_poi_list_idx] = 0 
+        missing_poi_list_idx = [self.poi_idx_to_list_idx[missing_poi.item()] for missing_poi in missing_pois]
+        loss_mask[missing_poi_list_idx] = 0
 
         if "bad_poi_list" not in self.master_df.columns or vertebra == 0:
             bad_poi_list = torch.tensor([], dtype=torch.int)
 
         else:
-            vert_row = self.master_df[
-                (self.master_df["subject"] == subject) &
-                (self.master_df["vertebra"] == vertebra)
-            ]   
+            vert_row = self.master_df[(self.master_df["subject"] == subject) & (self.master_df["vertebra"] == vertebra)]
 
             if len(vert_row) == 0:
                 bad_poi_list = torch.tensor([], dtype=torch.int)
@@ -520,15 +503,11 @@ class PoiNeighborDataset(Dataset):
                 bad_poi_list = [int(poi) for poi in bad_poi_list]
                 bad_poi_list = torch.tensor(bad_poi_list)
 
-        bad_poi_list_idx = [
-            self.poi_idx_to_list_idx[bad_poi.item()]
-            for bad_poi in bad_poi_list
-            if bad_poi.item() in self.poi_indices
-        ]
+        bad_poi_list_idx = [self.poi_idx_to_list_idx[bad_poi.item()] for bad_poi in bad_poi_list if bad_poi.item() in self.poi_indices]
         loss_mask[bad_poi_list_idx] = 0
 
         return pois, loss_mask
-    
+
     def __getitem__(self, index):
         data_dict = {}
 
@@ -546,41 +525,27 @@ class PoiNeighborDataset(Dataset):
         poi_path = os.path.join(file_dir, self.poi_file_ending)
 
         # Load the BIDS objects
-        ct = NII.load(ct_path, seg = False)
+        ct = NII.load(ct_path, seg=False)
         subreg = NII.load(subreg_path, seg=True)
         vertseg = NII.load(msk_path, seg=True)
         surface_msk = NII.load(surface_msk_path, seg=True)
         poi = POI.load(poi_path)
 
-        #zoom = (1, 1, 1)
+        # zoom = (1, 1, 1)
 
-        ct.rescale_and_reorient_(
-            axcodes_to=('L', 'A', 'S'), voxel_spacing = self.zoom, verbose = False
-        )
-        subreg.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
-        )
-        vertseg.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
-        )
-        surface_msk.rescale_and_reorient_(
-            axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False
-        )
-        poi.reorient_(axcodes_to=("L", "A", "S"), verbose=False).rescale_(
-            self.zoom, verbose=False
-        )
+        ct.rescale_and_reorient_(axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False)
+        subreg.rescale_and_reorient_(axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False)
+        vertseg.rescale_and_reorient_(axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False)
+        surface_msk.rescale_and_reorient_(axcodes_to=("L", "A", "S"), voxel_spacing=self.zoom, verbose=False)
+        poi.reorient_(axcodes_to=("L", "A", "S"), verbose=False).rescale_(self.zoom, verbose=False)
 
         ct.normalize_ct(min_out=0, max_out=1, inplace=True)
 
         # Define neighbor vertebrae
-        neighbor_top = vertebra - 1 if vertebra > 1 else 0 # 0 = dummy (no top/bottom neighbor)
-        neighbor_bottom = vertebra + 1 if vertebra < 24 else 0 
+        neighbor_top = vertebra - 1 if vertebra > 1 else 0  # 0 = dummy (no top/bottom neighbor)
+        neighbor_bottom = vertebra + 1 if vertebra < 24 else 0
 
-        all_vert = [
-            ("current", vertebra),
-            ("top", neighbor_top),
-            ("bottom", neighbor_bottom)
-        ]
+        all_vert = [("current", vertebra), ("top", neighbor_top), ("bottom", neighbor_bottom)]
 
         # Filter out dummy for seg mask
         actual_vert = [vert for _, vert in all_vert if vert != 0]
@@ -598,24 +563,23 @@ class PoiNeighborDataset(Dataset):
         subreg = subreg * mask
         vertseg = vertseg * mask
         surface_msk = surface_msk * mask
-        
+
         # Padding and offset
         subreg, offset = pad_array_to_shape(subreg, self.input_shape)
         vertseg, _ = pad_array_to_shape(vertseg, self.input_shape)
         surface_msk, _ = pad_array_to_shape(surface_msk, self.input_shape)
         ct, _ = pad_array_to_shape(ct, self.input_shape)
 
-
         # process each vertebra separately
         all_pois = []
         all_loss_masks = []
 
         for label, vert in all_vert:
-            if vert == 0: # dummy
+            if vert == 0:  # dummy
                 vert_pois = torch.full((len(self.poi_indices), 3), -1)
                 vert_loss_mask = torch.zeros(len(self.poi_indices), dtype=torch.float)
 
-            else: # real
+            else:  # real
                 vert_pois, vert_loss_mask = self._process_single_vert(poi, subject, vert)
 
             all_pois.append(vert_pois)
@@ -626,7 +590,7 @@ class PoiNeighborDataset(Dataset):
         combined_loss_mask = torch.cat(all_loss_masks, dim=0)
 
         # add global offset
-        combined_pois = combined_pois + torch.tensor(offset)    
+        combined_pois = combined_pois + torch.tensor(offset)
 
         # Convert subreg, vertseg and surface_msk to tensors
         ct = torch.from_numpy(ct.astype(float))
@@ -640,12 +604,11 @@ class PoiNeighborDataset(Dataset):
         vertseg = vertseg.unsqueeze(0)
         surface_msk = surface_msk.unsqueeze(0)
 
-
-        if self.input_data_type == "vertseg":  
-            data_dict["input"] = vertseg  
-        elif self.input_data_type == "subreg":   
-            data_dict["input"] = subreg  
-        elif self.input_data_type == "ct":  
+        if self.input_data_type == "vertseg":
+            data_dict["input"] = vertseg
+        elif self.input_data_type == "subreg":
+            data_dict["input"] = subreg
+        elif self.input_data_type == "ct":
             data_dict["input"] = ct
         elif self.input_data_type == "surface_msk":
             data_dict["input"] = surface_msk
@@ -672,11 +635,10 @@ class PoiNeighborDataset(Dataset):
             | (data_dict["target"][:, 2] < 0)
             | (data_dict["target"][:, 2] > max_z)
         )
-        
-        combined_loss_mask[outside_poi_indices] = 0
-        
-        data_dict["loss_mask"] = combined_loss_mask.bool()
 
+        combined_loss_mask[outside_poi_indices] = 0
+
+        data_dict["loss_mask"] = combined_loss_mask.bool()
 
         transformed_mask = data_dict["input"] > 0
         surface = compute_surface(transformed_mask, iterations=self.iterations)
@@ -690,15 +652,14 @@ class PoiNeighborDataset(Dataset):
         data_dict["msk_path"] = msk_path
         data_dict["subreg_path"] = subreg_path
         data_dict["poi_path"] = poi_path
-        data_dict["poi_list_idx"] = torch.tensor(
-            [self.poi_idx_to_list_idx[poi.item()] for poi in repeat_poi_indices]
-        )
+        data_dict["poi_list_idx"] = torch.tensor([self.poi_idx_to_list_idx[poi.item()] for poi in repeat_poi_indices])
         data_dict["vert_list_idx"] = torch.tensor([self.vert_idx_to_list_idx[vertebra]])
 
         data_dict["current_vertebra"] = vertebra
         data_dict["n_pois_per_vertebra"] = len(self.poi_indices)
 
         return data_dict
+
 
 class GruberNeighborDataset(PoiNeighborDataset):
     def __init__(
@@ -723,41 +684,40 @@ class GruberNeighborDataset(PoiNeighborDataset):
                 else (
                     [
                         81,
-                        82, 
-                        83, 
+                        82,
+                        83,
                         84,
                         85,
                         86,
                         87,
                         88,
-                        89, 
+                        89,
                         101,
                         102,
                         103,
                         104,
-                        105, 
-                        106, 
-                        107, 
-                        108, 
+                        105,
+                        106,
+                        107,
+                        108,
                         109,
                         110,
                         111,
                         112,
-                        113, 
-                        114, 
-                        115, 
-                        116, 
+                        113,
+                        114,
+                        115,
+                        116,
                         117,
                         118,
                         119,
                         120,
-                        121, 
-                        122, 
-                        123, 
-                        124, 
+                        121,
+                        122,
+                        123,
+                        124,
                         125,
                         127,
-
                         41,
                         42,
                         43,
@@ -772,38 +732,38 @@ class GruberNeighborDataset(PoiNeighborDataset):
                     if include_com
                     else [
                         81,
-                        82, 
-                        83, 
+                        82,
+                        83,
                         84,
                         85,
                         86,
                         87,
                         88,
-                        89, 
+                        89,
                         101,
                         102,
                         103,
                         104,
-                        105, 
-                        106, 
-                        107, 
-                        108, 
+                        105,
+                        106,
+                        107,
+                        108,
                         109,
                         110,
                         111,
                         112,
-                        113, 
-                        114, 
-                        115, 
-                        116, 
+                        113,
+                        114,
+                        115,
+                        116,
                         117,
                         118,
                         119,
                         120,
-                        121, 
-                        122, 
-                        123, 
-                        124, 
+                        121,
+                        122,
+                        123,
+                        124,
                         125,
                         127,
                     ]
@@ -841,7 +801,7 @@ class GruberNeighborDataset(PoiNeighborDataset):
             ),
             poi_flip_pairs={
                 # no flips
-                0:0,
+                0: 0,
                 41: 41,
                 42: 42,
                 43: 43,
@@ -853,40 +813,40 @@ class GruberNeighborDataset(PoiNeighborDataset):
                 49: 49,
                 50: 50,
                 81: 81,
-                82: 82, 
-                83: 83, 
+                82: 82,
+                83: 83,
                 84: 84,
                 85: 85,
                 86: 86,
                 87: 87,
                 88: 88,
-                89: 89, 
+                89: 89,
                 101: 101,
                 102: 102,
                 103: 103,
                 104: 104,
-                105: 105, 
-                106: 106, 
-                107: 107, 
-                108: 108, 
+                105: 105,
+                106: 106,
+                107: 107,
+                108: 108,
                 109: 109,
                 110: 110,
                 111: 111,
                 112: 112,
-                113: 113, 
-                114: 114, 
-                115: 115, 
-                116: 116, 
+                113: 113,
+                114: 114,
+                115: 115,
+                116: 116,
                 117: 117,
                 118: 118,
                 119: 119,
                 120: 120,
-                121: 121, 
-                122: 122, 
-                123: 123, 
-                124: 124, 
+                121: 121,
+                122: 122,
+                123: 123,
+                124: 124,
                 125: 125,
-                127: 127,                
+                127: 127,
             },
             input_data_type=input_data_type,
             input_shape=input_shape,

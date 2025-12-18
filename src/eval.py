@@ -172,6 +172,27 @@ def create_prediction_poi_files(
     for batch in val_dl:
         # Bring all tensors to device
         batch = {k: v.to(poi_module.device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+
+        first_batch = True
+
+        if first_batch:
+            # === DEBUG CODE ===
+            print("\n=== EVAL PIPELINE DEBUG ===")
+            print(f"Subject: {batch['subject']}, Vertebra: {batch['vertebra'].item()}")
+            print(f"Input shape: {batch['input'].shape}")
+            print(f"Input mean: {batch['input'].mean().item():.6f}")
+            print(f"Input std: {batch['input'].std().item():.6f}")
+            print(f"Input min: {batch['input'].min().item():.6f}")
+            print(f"Input max: {batch['input'].max().item():.6f}")
+            print(f"Input sum: {batch['input'].sum().item():.6f}")
+            if "surface" in batch:
+                print(f"Surface sum: {batch['surface'].sum().item():.6f}")
+            if "offset" in batch:
+                print(f"Offset: {batch['offset']}")
+            print("=========================\n")
+            # === END DEBUG ===
+            first_batch = False
+
         batch = poi_module(batch)
 
         subject_batch = batch["subject"]
@@ -567,75 +588,56 @@ def compute_overall_metrics(df):
 
     return metrics_df
 
-
-def compute_poi_wise_metrics_proj(df):
-    # Group by poi_idx and calculate metrics for refined_proj_error
-    grouped = df.groupby("poi_idx")["refined_proj_error"]
-    metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
-    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
-
     return metrics_df
 
 
 def compute_poi_wise_metrics(df):
     # Group by poi_idx and calculate metrics for refined_proj_error
-    grouped = df.groupby("poi_idx")["refined_error"]
+    if project_pred:
+        grouped = df.groupby("poi_idx")["refined_proj_error"]
+    else:
+        grouped = df.groupby("poi_idx")["refined_error"]
     metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
     metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
 
     return metrics_df
 
 
-def compute_vert_wise_metrics_proj(df):
+def compute_vert_wise_metrics(df, project_pred=False):
     # Group by vertebra and calculate metrics for refined_proj_error
-    grouped = df.groupby("vertebra")["refined_proj_error"]
+    if project_pred:
+        grouped = df.groupby("vertebra")["refined_proj_error"]
+    else:
+        grouped = df.groupby("vertebra")["refined_error"]
     metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
     metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
 
     return metrics_df
 
 
-def compute_vert_wise_metrics(df):
+def compute_sub_wise_metrics(df, project_pred=False):
     # Group by vertebra and calculate metrics for refined_proj_error
-    grouped = df.groupby("vertebra")["refined_error"]
+    if project_pred:
+        grouped = df.groupby("subject")["refined_proj_error"]
+    else:
+        grouped = df.groupby("subject")["refined_error"]
     metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
     metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
 
     return metrics_df
 
 
-def compute_sub_wise_metrics_proj(df):
-    # Group by vertebra and calculate metrics for refined_proj_error
-    grouped = df.groupby("subject")["refined_proj_error"]
-    metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
-    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
-
-    return metrics_df
-
-
-def compute_sub_wise_metrics(df):
-    # Group by vertebra and calculate metrics for refined_proj_error
-    grouped = df.groupby("subject")["refined_error"]
-    metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
-    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
-
-    return metrics_df
-
-
-def filter_high_refined_proj_error_pois(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
+def filter_high_refined_error_pois(df, threshold, project_pred=False):
     """
     filters all subjects with vertebra and poi_idx, where refined_proj_error > threshold
     """
-    filtered_df = df[df["refined_proj_error"] > threshold]
-    return filtered_df[["subject", "vertebra", "poi_idx", "refined_proj_error"]].reset_index(drop=True)
+    if project_pred:
+        filtered_df = df[df["refined_proj_error"] > threshold]
+        return filtered_df[["subject", "vertebra", "poi_idx", "refined_proj_error"]].reset_index(drop=True)
 
-
-def filter_high_refined_error_pois(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
-    """
-    filters all subjects with vertebra and poi_idx, where refined_error > threshold
-    """
-    filtered_df = df[df["refined_error"] > threshold]
-    return filtered_df[["subject", "vertebra", "poi_idx", "refined_error"]].reset_index(drop=True)
+    else:
+        filtered_df = df[df["refined_error"] > threshold]
+        return filtered_df[["subject", "vertebra", "poi_idx", "refined_error"]].reset_index(drop=True)
 
 
 def create_neighbor_prediction_poi_files(
@@ -983,56 +985,51 @@ if __name__ == "__main__":
     print("Prediction DataFrame saved")
 
     # prediction_df = load_and_filter_csv(prediction_df)
+    # prediction_df = load_and_filter_csv(prediction_df)
 
     ### Compute overall metrics
     metrics_df = compute_overall_metrics(prediction_df)
     metrics_df.to_csv(os.path.join(args.save_path, "overall_metrics.csv"))
     print("Overal metrics saved")
 
-    if args.project:
-        ### Compute POI-wise metrics projected
-        poi_metrics_proj_df = compute_poi_wise_metrics_proj(prediction_df)
-        poi_metrics_proj_df.to_csv(os.path.join(args.save_path, "poi_metrics_projected.csv"))
-        print("POI-wise projected metrics saved")
-
-        ### Compute vertebra-wise metrics projected
-        vert_metrics_proj_df = compute_vert_wise_metrics_proj(prediction_df)
-        vert_metrics_proj_df.to_csv(os.path.join(args.save_path, "vertebra_metrics_projected.csv"))
-        print("Vertebra-wise projected metrics saved")
-
-        ### Compute subject-wise metrics projected
-        sub_metrics_proj_df = compute_sub_wise_metrics_proj(prediction_df)
-        sub_metrics_proj_df.to_csv(os.path.join(args.save_path, "subject_metrics_projected.csv"))
-        print("Subject-wise projected metrics saved")
-
-        ### Find Outliers
-        outlier_df = filter_high_refined_proj_error_pois(prediction_df, 10)
-        outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_proj_error_higher_10.csv"))
-        print("Outliers (refined_proj_error > 10) saved")
-
     ### Compute POI-wise metrics
-    poi_metrics_df = compute_poi_wise_metrics(prediction_df)
+    poi_metrics_df = compute_poi_wise_metrics(prediction_df, args.project)
     poi_metrics_df.to_csv(os.path.join(args.save_path, "poi_metrics.csv"))
     print("POI-wise metrics saved")
 
     ### Compute vertebra-wise metrics
-    vert_metrics_df = compute_vert_wise_metrics(prediction_df)
+    vert_metrics_df = compute_vert_wise_metrics(prediction_df, args.project)
     vert_metrics_df.to_csv(os.path.join(args.save_path, "vertebra_metrics.csv"))
     print("Vertebra-wise metrics saved")
 
     ### Compute subject-wise metrics
-    sub_metrics_df = compute_sub_wise_metrics(prediction_df)
+    sub_metrics_df = compute_sub_wise_metrics(prediction_df, args.project)
     sub_metrics_df.to_csv(os.path.join(args.save_path, "subject_metrics.csv"))
     print("Subject-wise metrics saved")
 
     ### Find Outliers
-    outlier_df = filter_high_refined_error_pois(prediction_df, 10)
+    outlier_df = filter_high_refined_error_pois(prediction_df, 10, args.project)
     outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_error_higher_10.csv"))
     print("Outliers (refined_error > 10) saved")
 
+    """
+    save_path = "experiments/experiment_evaluation/k_fold/fold_6/val"
+
+    results_df = pd.read_csv("experiments/experiment_evaluation/k_fold/fold_6/val/results.csv")
+
+    outlier_df = filter_high_refined_error_pois(results_df, 6, False)
+    outlier_df.to_csv(os.path.join(save_path, "outliers_refined_error_higher_6.csv"))
+    print("Outliers (refined_error > 6) saved")
+
+    outlier_proj_df = filter_high_refined_error_pois(results_df, 6, True)
+    outlier_proj_df.to_csv(os.path.join(save_path, "outliers_refined_proj_error_higher_6.csv"))
+    print("Outliers (refined_proj_error > 6) saved")
+    """
+
     ### Create Prediction files
-    prediction_files_path_proj = os.path.join(args.save_path, "prediction_files")
-    prediction_files_path = os.path.join(args.save_path, "prediction_files-no_proj")
+    prediction_files_path = (
+        os.path.join(args.save_path, "prediction_files") if args.project else os.path.join(args.save_path, "prediction_files-no_proj")
+    )
     os.makedirs(prediction_files_path, exist_ok=True)
     os.makedirs(prediction_files_path_proj, exist_ok=True)
 
@@ -1041,7 +1038,7 @@ if __name__ == "__main__":
         poi_paths_dict = create_neighbor_prediction_poi_files(
             data_module_save_path=args.data_module_save_path,
             checkpoint_path=args.checkpoint_path,
-            poi_file_ending="_pred.json",
+            poi_file_ending="pred.json",
             split=args.split,
             save_path=prediction_files_path,
             return_paths=True,
@@ -1052,7 +1049,7 @@ if __name__ == "__main__":
         poi_paths_dict = create_prediction_poi_files(
             data_module_save_path=args.data_module_save_path,
             checkpoint_path=args.checkpoint_path,
-            poi_file_ending="_pred.json",
+            poi_file_ending="pred.json",
             split=args.split,
             save_path=prediction_files_path,
             return_paths=True,
