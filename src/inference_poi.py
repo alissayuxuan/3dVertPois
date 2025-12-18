@@ -28,99 +28,10 @@ from torch.utils.data import Dataset
 
 import eval as ev
 from prepare_data import get_bounding_box
-from utils.dataloading_utils import compute_surface, pad_array_to_shape
+from utils.dataloading_utils import compute_surface, pad_array_to_shape, get_ct, get_subreg, get_vertseg
 from utils.misc import surface_project_coords
 from torch.utils.data.dataloader import default_collate
-
-
-def get_subreg(container) -> NII:
-    subreg_query = container.new_query(flatten=True)
-    subreg_query.filter_format("msk")
-    subreg_query.filter_filetype("nii.gz")  # only nifti files
-    subreg_query.filter("seg", "subreg")
-    if not subreg_query.candidates:
-        print("ERROR: No subreg candidates found!")
-        return None
-    subreg_candidate = subreg_query.candidates[0]
-
-    try:
-        subreg = subreg_candidate.open_nii()
-        return subreg
-    except Exception as e:
-        print(f"Error opening subreg: {str(e)}")
-        return None
-
-
-def get_vertseg(container) -> NII:
-    vertseg_query = container.new_query(flatten=True)
-    vertseg_query.filter_format("msk")
-    vertseg_query.filter_filetype("nii.gz")  # only nifti files
-    vertseg_query.filter("seg", "vert")
-    if not vertseg_query.candidates:
-        print("ERROR: No vertseg candidate found!")
-        return None
-    vertseg_candidate = vertseg_query.candidates[0]
-
-    try:
-        vertseg = vertseg_candidate.open_nii()
-        return vertseg
-    except Exception as e:
-        print(f"Error opening vertseg: {str(e)}")
-        return None
-
-
-def get_poi(container):
-    poi_query = container.new_query(flatten=True)
-    poi_query.filter_format("poi")
-    if not poi_query.candidates:
-        return None
-    poi_candidate = poi_query.candidates[0]
-    return str(poi_candidate.file["json"])
-
-
-def combine_centroids(data_list):
-    # Extract the first dictionary for comparison
-    first_entry = data_list[0]
-
-    # Define the expected values for comparison
-    expected_subject = first_entry["subject"]
-    expected_shape = first_entry["original_shape"]
-    expected_zoom = first_entry["original_zoom"]
-    expected_orientation = first_entry["original_orientation"]
-    expected_rotation = first_entry["original_rotation"]  # ALISSA
-    expected_origin = first_entry["original_origin"]  # ALISSA
-
-    # Initialize a defaultdict for combining centroids
-    combined_centroids = {}
-
-    # Iterate through each entry in the list
-    for entry in data_list:
-        # Assert that subject, shape, zoom, and orientation match the expected values
-        assert entry["subject"] == expected_subject, "Subjects do not match."
-        assert entry["original_shape"] == expected_shape, "Original shapes do not match."
-        assert entry["original_zoom"] == expected_zoom, "Original zooms do not match."
-        assert entry["original_orientation"] == expected_orientation, "Original orientations do not match."
-
-        assert np.allclose(entry["original_rotation"], expected_rotation, rtol=1e-10), "Original rotations do not match."
-
-        # Combine the centroids
-        for v_idx, p_idx, c in entry["centroids"].items():
-            combined_centroids[v_idx, p_idx] = c
-
-    # Convert combined_centroids to a regular dict
-    combined_centroids = dict(combined_centroids)
-
-    # Return the common attributes and the combined centroids
-    poi_file = POI(
-        centroids=combined_centroids,
-        orientation=expected_orientation,
-        zoom=expected_zoom,
-        shape=expected_shape,
-        rotation=expected_rotation,  # ALISSA
-        origin=expected_origin,  # ALISSA
-    )
-
-    return expected_subject, poi_file
+from eval import combine_centroids
 
 
 class GruberInferenceDataset(Dataset):
@@ -187,7 +98,9 @@ class GruberInferenceDataset(Dataset):
         row = self.master_df.iloc[index]
         vertebra = row["vert"]
         vert_path = row["vert_path"]
-        subreg_path = row["subreg_path"]
+        input_data_path = row["input_data_path"]
+        surface_path = row["surface_path"]
+        # subreg_path = row["subreg_path"]
         x_min = row["x_min"]
         y_min = row["y_min"]
         z_min = row["z_min"]
@@ -206,56 +119,68 @@ class GruberInferenceDataset(Dataset):
 
         subject = row["subject"]
 
-        subreg = NII.load(subreg_path, seg=True)
+        if self.input_data_type == "ct":
+            input_data = NII.load(input_data_path, seg=False)
+            input_data.normalize_ct(min_out=0, max_out=1, inplace=True)  # Here correct??
+        else:
+            input_data = NII.load(input_data_path, seg=True)
         vertseg = NII.load(vert_path, seg=True)
+        surface = NII.load(surface_path, seg=True)
+        surface.extract_label_(surface.unique())
 
-        assert subreg.shape == vertseg.shape
-        assert subreg.orientation == vertseg.orientation
-        assert subreg.orientation == ("L", "A", "S")
-        assert subreg.zoom == vertseg.zoom
+        assert input_data.shape == vertseg.shape
+        assert input_data.orientation == vertseg.orientation
+        assert input_data.orientation == ("L", "A", "S")
+        assert input_data.zoom == vertseg.zoom
         # assert subreg.zoom == (1, 1, 1)
 
-        print("zoom in __getitem__: ", subreg.zoom)
+        print("zoom in __getitem__: ", input_data.zoom)
 
-        subreg = subreg.get_array()
+        input_data = input_data.get_array()
         vertseg = vertseg.get_array()
+        surface = surface.get_array()
         mask = vertseg == vertebra
 
         # ct = ct * mask
-        subreg = subreg * mask
+        input_data = input_data * mask
+        surface = surface * mask
 
         ###
-        if any(s > t for s, t in zip(subreg.shape, self.input_shape)):
-            print(f"Skipping subject {subject} vertebra {vertebra} (shape {subreg.shape} > {self.input_shape})")
+        if any(s > t for s, t in zip(input_data.shape, self.input_shape)):
+            print(f"Skipping subject {subject} vertebra {vertebra} (shape {input_data.shape} > {self.input_shape})")
             return None
         elif any(s > t for s, t in zip(vertseg.shape, self.input_shape)):
             print(f"Skipping subject {subject} vertebra {vertebra} (shape {vertseg.shape} > {self.input_shape})")
             return None
         ###
 
-        subreg, offset = pad_array_to_shape(subreg, self.input_shape)
+        input_data, offset = pad_array_to_shape(input_data, self.input_shape)
         vertseg, _ = pad_array_to_shape(vertseg, self.input_shape)
+        surface, _ = pad_array_to_shape(surface, self.input_shape)
 
         # Convert subreg and vertseg to tensors
-        subreg = torch.from_numpy(subreg.astype(float))
+        input_data = torch.from_numpy(input_data.astype(float))
         vertseg = torch.from_numpy(vertseg.astype(float))
+        surface = torch.from_numpy(surface.astype(float))
 
         # Add channel dimension
-        subreg = subreg.unsqueeze(0)
+        input_data = input_data.unsqueeze(0)
         vertseg = vertseg.unsqueeze(0)
+        surface = surface.unsqueeze(0)
 
         # Uses default iterations of 1, must be changed if model was trained with more iterations ("thicker" surface)
-        surface = compute_surface(subreg)
+        # surface = compute_surface(input_data)
 
-        if self.input_data_type == "vertseg":
-            data_dict["input"] = vertseg
-        elif self.input_data_type == "subreg":
-            data_dict["input"] = subreg
-        # elif self.input_data_type == "ct":
-        #    data_dict["input"] = ct
-        elif self.input_data_type == "surface_msk":
-            data_dict["input"] = surface
+        # if self.input_data_type == "vertseg":
+        #    data_dict["input"] = vertseg
+        # elif self.input_data_type == "subreg":
+        #    data_dict["input"] = input_data
+        ## elif self.input_data_type == "ct":
+        ##    data_dict["input"] = ct
+        # elif self.input_data_type == "surface_msk":
+        #    data_dict["input"] = surface
 
+        data_dict["input"] = input_data
         data_dict["surface"] = surface
         data_dict["vertebra"] = vertebra
         data_dict["padding_offset"] = torch.tensor(offset).float()
@@ -279,7 +204,8 @@ class GruberInferenceDataset(Dataset):
         data_dict["subject"] = subject
 
         data_dict["vert_path"] = vert_path
-        data_dict["subreg_path"] = subreg_path
+        data_dict["input_data_path"] = input_data_path
+        # data_dict["subreg_path"] = subreg_path
 
         return data_dict
 
@@ -294,7 +220,8 @@ def safe_collate(batch):
 def preprocess_segmentation_masks(
     subject,
     vert_msk: NII,
-    subreg_msk: NII,
+    input_data: NII | None,
+    input_data_type: str,
     vert_list,
     zoom=(1, 1, 1),
 ):
@@ -332,7 +259,8 @@ def preprocess_segmentation_masks(
     vert_msk = vert_msk.reorient(("L", "A", "S"), verbose=True)
     original_zoom = vert_msk.zoom  # update original zoom after reorientation
     original_shape = vert_msk.shape  # update original shape after reorientation
-    subreg_msk.reorient_(("L", "A", "S"))
+    if input_data is not None:
+        input_data.reorient_(("L", "A", "S"))
 
     # Load the data array
     vertseg_arr = vert_msk.get_array()
@@ -344,20 +272,34 @@ def preprocess_segmentation_masks(
         # This uses the standard margin of 5 voxels around the vertebra in each direction. When the model is trained with a different margin, this should be adjusted!
         x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(vertseg_arr, vert)
 
-        subreg_path = os.path.join(temp_dir, subject, f"vert_{vert}-subreg.nii.gz")
+        input_data_path = os.path.join(temp_dir, subject, f"vert_{vert}-input.nii.gz")
         vert_path = os.path.join(temp_dir, subject, f"vert_{vert}-vertseg.nii.gz")
+        surface_path = os.path.join(temp_dir, subject, f"vert_{vert}-surface.nii.gz")
 
-        subreg_cropped = subreg_msk.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
-
+        if input_data is not None:
+            input_data_cropped = input_data.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
+            # print("Cropped input data from shape", input_data.shape, "to", input_data_cropped.shape) if first else None
         vert_cropped = vert_msk.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
+        # urface_cropped = surface.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
         print("Cropped from shape", vert_msk.shape, "to", vert_cropped.shape) if first else None
 
         # rescale the cutouts to zoom mm resolution
         vert_cropped.rescale_(zoom, verbose=first)
-        subreg_cropped.rescale_(zoom)
+        if input_data is not None:
+            input_data_cropped.rescale_(zoom)
+        # input_data_cropped.rescale_(zoom)
 
         vert_cropped.save(vert_path, verbose=False)
-        subreg_cropped.save(subreg_path, verbose=False)
+        # input_data_cropped.save(input_data_path, verbose=False)
+        surface = vert_cropped.compute_surface_mask(connectivity=3)
+        surface.save(surface_path, verbose=False)
+        if input_data is not None:
+            input_data_cropped.save(input_data_path, verbose=False)
+
+        if input_data_type == "vertseg":
+            input_data_path = vert_path
+        elif input_data_type == "surface_msk":
+            input_data_path = surface_path
 
         # Get preprocessed parameters
         preprocessed_origin = vert_cropped.origin
@@ -392,7 +334,8 @@ def preprocess_segmentation_masks(
                 "z_min": int(z_min),
                 "z_max": int(z_max),
                 "vert_path": vert_path,
-                "subreg_path": subreg_path,
+                "input_data_path": input_data_path,
+                "surface_path": surface_path,
                 "preprocessed_orientation": preprocessed_orientation,
                 "preprocessed_zoom": preprocessed_zoom,
                 "preprocessed_rotation": preprocessed_rotation,
@@ -419,7 +362,7 @@ def preprocess_segmentation_masks(
 def create_prediction_poi_files(
     subject,
     vert_msk,
-    subreg_msk,
+    # subreg_msk,
     dm_path,
     model_path,
     save_dir,
@@ -434,8 +377,19 @@ def create_prediction_poi_files(
     zoom = dm_params.get("zoom", (1, 1, 1))
     print("zoom: ", zoom)
 
+    if input_data_type == "vertseg":
+        input_data = vert_msk
+    elif input_data_type == "subreg":
+        input_data = get_subreg(container)
+    elif input_data_type == "ct":
+        input_data = get_ct(container)
+    elif input_data_type == "surface_msk":
+        input_data = None
+    else:
+        raise ValueError(f"Unknown input data type: {input_data_type}")
+
     # preprocess segmentation masks and then save the info in a master_df ( create a /tmp)
-    master_df, temp_dir = preprocess_segmentation_masks(subject, vert_msk, subreg_msk, vert_list, zoom)
+    master_df, temp_dir = preprocess_segmentation_masks(subject, vert_msk, input_data, input_data_type, vert_list, zoom)
 
     print(f"inferencing subject: {subject}")
     # get data_module and create dataset
@@ -512,7 +466,8 @@ def create_prediction_poi_files(
 
         # get segmentation mask path
         vert_path = batch["vert_path"][0]
-        subreg_path = batch["subreg_path"][0]
+        # subreg_path = batch["subreg_path"][0]
+        input_data_path = batch["input_data_path"][0]
 
         # Create the new POI file
         print("np_to_ctd input-zoom: ", preprocessed_zoom)
@@ -543,17 +498,18 @@ def create_prediction_poi_files(
 
         # copy segmentation masks
         vertseg_save_path = ctd_save_path.replace("_pred.json", "_vertseg.nii.gz")
-        subreg_save_path = ctd_save_path.replace("_pred.json", "_subreg.nii.gz")
+        input_data_save_path = ctd_save_path.replace("_pred.json", f"_{input_data_type}.nii.gz")
+        # subreg_save_path = ctd_save_path.replace("_pred.json", "_subreg.nii.gz")
 
         if os.path.exists(vert_path):
             shutil.copy(vert_path, vertseg_save_path)
         else:
             print(f"⚠️ Segmentation file not found: {vert_path}")
 
-        if os.path.exists(subreg_path):
-            shutil.copy(subreg_path, subreg_save_path)
+        if os.path.exists(input_data_path):
+            shutil.copy(input_data_path, input_data_save_path)
         else:
-            print(f"⚠️ Segmentation file not found: {subreg_path}")
+            print(f"⚠️ Segmentation file not found: {input_data_path}")
 
         unpadded_refined_preds_ctd.rescale_(original_zoom, verbose=first)
 
@@ -583,6 +539,7 @@ def create_prediction_poi_files(
 
     sub, pois = combine_centroids(partial_centroids)
 
+    os.makedirs(os.path.join(save_dir, subject), exist_ok=True)
     pois.save(os.path.join(save_dir, sub, "poi_predicted.json"))
     pois.to_global().save_mrk(os.path.join(save_dir, sub, "poi_predicted_global.json"))
 
@@ -595,21 +552,22 @@ def create_prediction_poi_files(
 
 if __name__ == "__main__":
 
+    # bgi = BIDS_Global_info(
+    #    datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder-test"],
+    #    parents=["derivatives"],
+    # )
+    dataset = "/DATA/NAS/datasets_processed/CT_spine/dataset-verse-challenge/dataset-verse19training/"
     bgi = BIDS_Global_info(
-        datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder-test"],
+        datasets=[dataset],
         parents=["derivatives"],
     )
-    # bgi = BIDS_Global_info(
-    #    datasets=["/DATA/NAS/datasets_processed/CT_spine/dataset-poi-gruber"],
-    #    parents=["derivatives_seg"],
-    # )
     project_to_surface = True
 
-    model_dir_root = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/ablation_study/dataloader/training/include_pois/"
-    model_dir = "subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude-L1"
-    model_checkpoint_name = "version_1/checkpoints/sad-pt-epoch=84-fine_mean_distance_val=1.59"
+    model_dir_root = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/include_pois-cc3-exclude6/"
+    model_dir = "subreg-project_gt-no_freeze-surface-cc3-exclude6"
+    model_checkpoint_name = "version_1/checkpoints/sad-pt-epoch=122-fine_mean_distance_val=1.58"
 
-    save_dir = f"/DATA/NAS/datasets_processed/CT_spine/dataset-verse19/derivatives_inference_poi_{model_dir}"
+    save_dir = f"{dataset}/derivatives_inference_poi_{model_dir}"
     if project_to_surface:
         save_dir += "_proj"
     # dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
@@ -633,13 +591,13 @@ if __name__ == "__main__":
 
         # gt_poi_path = get_poi(container)
 
-        if vert_msk is None or subreg_msk is None:
+        if vert_msk is None:  # or subreg_msk is None:
             print(f"Skip Subject: {sub} - not all data available")
             continue
 
-        if vert_msk.shape != subreg_msk.shape:
-            print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and subreg {subreg_msk.shape} shapes don't match")
-            continue
+        # if vert_msk.shape != subreg_msk.shape:
+        #    print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and subreg {subreg_msk.shape} shapes don't match")
+        #    continue
 
         vert_msk.assert_affine(other=subreg_msk)
         # print("Original msk meta", vert_msk)
@@ -647,7 +605,7 @@ if __name__ == "__main__":
         create_prediction_poi_files(
             sub,
             vert_msk,
-            subreg_msk,
+            # subreg_msk,
             dm_path,
             model_path,
             save_dir,

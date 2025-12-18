@@ -4,8 +4,8 @@ from typing import Callable
 
 import numpy as np
 import torch
-#from BIDS import NII, POI
-#from BIDS.bids_files import Subject_Container
+# from BIDS import NII, POI
+# from BIDS.bids_files import Subject_Container
 from TPTBox import NII, Subject_Container
 from TPTBox.core.poi import POI
 
@@ -423,6 +423,15 @@ def get_gruber_registration_poi(container):
     return new_poi
 
 
+def get_poi(container) -> POI:
+    poi_query = container.new_query(flatten=True)
+    poi_query.filter_format("poi")
+    if not poi_query.candidates:
+        return None
+    poi_candidate = poi_query.candidates[0]
+    return str(poi_candidate.file["json"])
+
+
 def get_ct(container) -> NII:
     ct_query = container.new_query(flatten=True)
     ct_query.filter_format("ct")
@@ -438,10 +447,18 @@ def get_subreg(container) -> NII:
     subreg_query.filter_format("msk")
     subreg_query.filter_filetype("nii.gz")  # only nifti files
     subreg_query.filter("seg", "subreg")
+
+    if not subreg_query.candidates:
+        print("ERROR: No subreg candidates found!")
+        return None
     subreg_candidate = subreg_query.candidates[0]
 
-    subreg = subreg_candidate.open_nii()
-    return subreg
+    try:
+        subreg = subreg_candidate.open_nii()
+        return subreg
+    except Exception as e:
+        print(f"Error opening subreg: {str(e)}")
+        return None
 
 
 def get_vertseg(container) -> NII:
@@ -449,10 +466,17 @@ def get_vertseg(container) -> NII:
     vertseg_query.filter_format("msk")
     vertseg_query.filter_filetype("nii.gz")  # only nifti files
     vertseg_query.filter("seg", "vert")
+    if not vertseg_query.candidates:
+        print("ERROR: No vertseg candidate found!")
+        return None
     vertseg_candidate = vertseg_query.candidates[0]
 
-    vertseg = vertseg_candidate.open_nii()
-    return vertseg
+    try:
+        vertseg = vertseg_candidate.open_nii()
+        return vertseg
+    except Exception as e:
+        print(f"Error opening vertseg: {str(e)}")
+        return None
 
 
 def get_files(
