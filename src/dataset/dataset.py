@@ -105,6 +105,8 @@ class PoiDataset(Dataset):
         subreg, offset = self.preprocess_nifti(subreg_path, is_img=False)
         vertseg, _ = self.preprocess_nifti(msk_path, is_img=False)
         mask = vertseg == vertebra
+
+        surface = compute_surface(mask, iterations=self.iterations)
         # surface_msk, _ = self.preprocess_nifti(surface_msk_path, is_img=False)
 
         if self.input_data_type == "vertseg":
@@ -121,17 +123,17 @@ class PoiDataset(Dataset):
             ct, _ = self.preprocess_nifti(ct_path, is_img=True)
             data_dict["input"] = ct
         elif self.input_data_type == "surface_msk":
-            surface_msk, _ = self.preprocess_nifti(
-                surface_msk_path,
-                is_img=False,
-                verbose=False,
-            )
-            data_dict["input"] = surface_msk * mask
+            # surface_msk, _ = self.preprocess_nifti(
+            #    surface_msk_path,
+            #    is_img=False,
+            #    verbose=False,
+            # )
+            data_dict["input"] = surface * mask
         else:
             raise ValueError(f"Unknown input data type: {self.input_data_type}")
 
-        surface_msk, _ = self.preprocess_nifti(surface_msk_path, is_img=False)
-        surface_msk = surface_msk * mask
+        # surface_msk, _ = self.preprocess_nifti(surface_msk_path, is_img=False)
+        # surface_msk = surface_msk * mask
 
         # Load the BIDS objects
         # ct = NII.load(ct_path, seg = False)
@@ -222,10 +224,7 @@ class PoiDataset(Dataset):
 
         data_dict["loss_mask"] = loss_mask.bool()
 
-        # transformed_mask = data_dict["input"] > 0
-        # surface = compute_surface(transformed_mask, iterations=self.iterations)
-
-        data_dict["surface"] = surface_msk  # surface
+        data_dict["surface"] = surface  # surface_msk  # surface
         data_dict["subject"] = str(subject)
         data_dict["vertebra"] = vertebra
         data_dict["zoom"] = torch.tensor(self.zoom).float()
@@ -376,6 +375,7 @@ class GruberDataset(PoiDataset):
                     23,
                     24,
                     25,
+                    28,
                 ]
             ),
             poi_flip_pairs={

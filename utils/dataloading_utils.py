@@ -4,8 +4,8 @@ from typing import Callable
 
 import numpy as np
 import torch
-#from BIDS import NII, POI
-#from BIDS.bids_files import Subject_Container
+# from BIDS import NII, POI
+# from BIDS.bids_files import Subject_Container
 from TPTBox import NII, Subject_Container
 from TPTBox.core.poi import POI
 
@@ -461,7 +461,7 @@ def get_subreg(container) -> NII:
         return None
 
 
-def get_vertseg(container) -> NII:
+def get_vertseg_bfile(container):
     vertseg_query = container.new_query(flatten=True)
     vertseg_query.filter_format("msk")
     vertseg_query.filter_filetype("nii.gz")  # only nifti files
@@ -470,6 +470,11 @@ def get_vertseg(container) -> NII:
         print("ERROR: No vertseg candidate found!")
         return None
     vertseg_candidate = vertseg_query.candidates[0]
+    return vertseg_candidate
+
+
+def get_vertseg(container) -> NII:
+    vertseg_candidate = get_vertseg_bfile(container)
 
     try:
         vertseg = vertseg_candidate.open_nii()

@@ -16,7 +16,7 @@ import ast
 import json
 import os
 import shutil  # For file operations
-
+from pathlib import Path
 
 import pandas as pd
 import torch
@@ -28,7 +28,7 @@ from torch.utils.data import Dataset
 
 import eval as ev
 from prepare_data import get_bounding_box
-from utils.dataloading_utils import get_subreg, get_vertseg, get_ct, get_poi, compute_surface, pad_array_to_shape
+from utils.dataloading_utils import get_subreg, get_vertseg, get_ct, get_poi, compute_surface, pad_array_to_shape, get_vertseg_bfile
 from utils.misc import surface_project_coords
 from torch.utils.data.dataloader import default_collate
 
@@ -126,6 +126,7 @@ class GruberInferenceDataset(Dataset):
             input_data = NII.load(input_data_path, seg=True)
         vertseg = NII.load(vert_path, seg=True)
         surface = NII.load(surface_path, seg=True)
+        surface.extract_label_(surface.unique())
 
         assert input_data.shape == vertseg.shape
         assert input_data.orientation == vertseg.orientation
@@ -355,7 +356,9 @@ def create_prediction_poi_files(
     # input_data,
     dm_path,
     model_path,
-    save_dir,
+    vert_out,
+    poi_out,
+    poi_global_out,
     project_to_surface=True,
 ):
     # Load data module parameters
@@ -383,11 +386,11 @@ def create_prediction_poi_files(
     # gt_poi_path = get_poi(container)
     surface = input_data if input_data_type == "surface_msk" else vert_msk.compute_surface_mask(connectivity=3, dilated_surface=False)
     if vert_msk is None or input_data is None:
-        print(f"Skip Subject: {sub} - not all data available")
+        print(f"Skip Subject: {subject} - not all data available")
         return
 
     if vert_msk.shape != input_data.shape:
-        print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and input_data {input_data.shape} shapes don't match")
+        print(f"Skip Subject: {subject} - vertseg {vert_msk.shape} and input_data {input_data.shape} shapes don't match")
         return
 
     vert_msk.assert_affine(other=input_data)
@@ -511,22 +514,21 @@ def create_prediction_poi_files(
         print("unpadded_refined_preds_ctd: ", unpadded_refined_preds_ctd) if first else None
 
         # subject_dir = os.path.join(save_dir, str(subject), "cutouts-preproccessed")
-        subject_dir = os.path.join(save_dir, "cutouts-preproccessed")
-
-        os.makedirs(subject_dir, exist_ok=True)
+        subject_dir: Path = vert_out.parent.joinpath("cutouts-preproccessed")
+        subject_dir.mkdir(parents=True, exist_ok=True)
 
         # save POI and Segmentation masks (cutouts)
-        ctd_save_path = os.path.join(subject_dir, str(subject) + "_" + str(vertebra) + "_pred.json")
-        ctd_global_save_path = ctd_save_path.replace("_pred.json", "_pred_global.json")
+        ctd_save_path = subject_dir.joinpath(str(subject) + "_" + str(vertebra) + "_pred.json")
+        ctd_global_save_path = Path(str(ctd_save_path).replace("_pred.json", "_pred_global.json"))
 
         unpadded_refined_preds_ctd.save(ctd_save_path, verbose=False)
         unpadded_refined_preds_ctd_poi = POI.load(ctd_save_path)
         unpadded_refined_preds_ctd_poi.to_global().save_mrk(ctd_global_save_path)
 
         # copy segmentation masks
-        vertseg_save_path = ctd_save_path.replace("_pred.json", "_vertseg.nii.gz")
+        vertseg_save_path = str(ctd_save_path).replace("_pred.json", "_vertseg.nii.gz")
         # subreg_save_path = ctd_save_path.replace("_pred.json", "_subreg.nii.gz")
-        input_data_save_path = ctd_save_path.replace("_pred.json", f"_{input_data_type}.nii.gz")
+        input_data_save_path = str(ctd_save_path).replace("_pred.json", f"_{input_data_type}.nii.gz")
 
         if os.path.exists(vert_path):
             shutil.copy(vert_path, vertseg_save_path)
@@ -571,12 +573,15 @@ def create_prediction_poi_files(
 
     sub, pois = ev.combine_centroids(partial_centroids)
 
-    os.makedirs(os.path.join(save_dir, subject), exist_ok=True)
-    pois.save(os.path.join(save_dir, sub, "poi_predicted.json"))
-    pois.to_global().save_mrk(os.path.join(save_dir, sub, "poi_predicted_global.json"))
+    # os.makedirs(os.path.join(save_dir, subject), exist_ok=True)
+    pois.save(poi_out)  # os.path.join(save_dir, sub, "poi_predicted.json"))
+    pois.to_global().save_mrk(
+        poi_global_out,
+        split_by_region=True,
+    )  # os.path.join(save_dir, sub, "poi_predicted_global.json"))
 
     # vert_msk_path
-    vert_msk.save(os.path.join(save_dir, sub, "vertseg.nii.gz"))
+    vert_msk.save(vert_out)  # os.path.join(save_dir, sub, "vertseg.nii.gz"))
 
     # Clear the temporary directory
     os.system(f"rm -r {temp_dir}")
@@ -588,59 +593,100 @@ if __name__ == "__main__":
     #    datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-verse19"],
     #    parents=["derivatives"],
     # )
-    bgi = BIDS_Global_info(
-        datasets=["/DATA/NAS/datasets_processed/CT_spine/dataset-verse-challenge/dataset-verse19training/"],
-        parents=["derivatives"],
-    )
-    project_to_surface = True
 
-    model_dir_root = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/include_pois-cc3-exclude6/"
-    model_dir = "subreg-project_gt-no_freeze-surface-cc3-exclude6"
-    model_checkpoint_name = "version_1/checkpoints/sad-pt-epoch=122-fine_mean_distance_val=1.58"
+    ds_names = [
+        "dataset-verse19training_1mmiso",
+        "dataset-verse19validation_1mmiso",
+        "dataset-verse19test_1mmiso",
+        "dataset-verse20training_1mmiso",
+        "dataset-verse20validation_1mmiso",
+        "dataset-verse20test_1mmiso",
+    ]
 
-    save_dir = (
-        f"/DATA/NAS/datasets_processed/CT_spine/dataset-verse-challenge/dataset-verse19training/derivatives_inference_poi_{model_dir}"
-    )
-    if project_to_surface:
-        save_dir += "_proj"
-    # dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
-    # model_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=74-fine_mean_distance_val=1.77.ckpt"
+    for ds_name in ds_names:
 
-    dm_path = f"{model_dir_root}{model_dir}/version_1/data_module_params.json"
-    model_path = f"{model_dir_root}{model_dir}/{model_checkpoint_name}"
-
-    if not model_path.endswith(".ckpt"):
-        model_path += ".ckpt"
-
-    inference_subjects = 0
-
-    for sub, container in bgi.enumerate_subjects():
-        # if not "verse004" in sub:
-        #    continue
-        print(f"Subject: {sub}")
-
-        vert_msk = get_vertseg(container)
-        subreg_msk = get_subreg(container)
-
-        # gt_poi_path = get_poi(container)
-
-        if vert_msk is None:  # or subreg_msk is None:
-            print(f"Skip Subject: {sub} - not all data available")
-            continue
-
-        # if vert_msk.shape != subreg_msk.shape:
-        #    print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and subreg {subreg_msk.shape} shapes don't match")
-        #    continue
-
-        # vert_msk.assert_affine(other=subreg_msk)
-        # print("Original msk meta", vert_msk)
-
-        create_prediction_poi_files(
-            sub,
-            # vert_msk,
-            # subreg_msk,
-            dm_path,
-            model_path,
-            save_dir,
-            project_to_surface=project_to_surface,
+        ds_path = f"/DATA/NAS/datasets_processed/CT_spine/dataset-verse-challenge/{ds_name}/"
+        bgi = BIDS_Global_info(
+            datasets=[ds_path],
+            parents=["derivatives"],
         )
+        project_to_surface = True
+
+        model_dir_root = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/include_pois-cc3-exclude6/"
+
+        # SURFACE
+        # model_dir = "subreg-project_gt-no_freeze-surface-cc3-exclude6"
+        # version = 1
+        # model_checkpoint_name = f"version_{version}/checkpoints/sad-pt-epoch=122-fine_mean_distance_val=1.58"
+
+        model_dir = "subreg-project_gt-no_freeze-vertseg-cc3-exclude6"
+        version = 0
+        model_checkpoint_name = f"version_{version}/checkpoints/sad-pt-epoch=138-fine_mean_distance_val=2.25"
+
+        der_out = f"derivatives_inference_poi_{model_dir}"
+        # save_dir = f"{ds_path}/{der_out}"
+        if project_to_surface:
+            der_out += "_proj"
+        # dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
+        # model_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=74-fine_mean_distance_val=1.77.ckpt"
+
+        dm_path = f"{model_dir_root}{model_dir}/version_{version}/data_module_params.json"
+        model_path = f"{model_dir_root}{model_dir}/{model_checkpoint_name}"
+
+        if not model_path.endswith(".ckpt"):
+            model_path += ".ckpt"
+
+        inference_subjects = 0
+
+        for sub, container in bgi.enumerate_subjects():
+            # if not "verse004" in sub:
+            #    continue
+            print(f"Subject: {sub}")
+
+            vert_msk_ref = get_vertseg_bfile(container)
+            subreg_msk = get_subreg(container)
+
+            if vert_msk_ref is None:
+                print(f"Skip Subject: {sub} - vertseg not found")
+                continue
+
+            vert_out = vert_msk_ref.get_changed_path(info={"seg": "vert"}, parent=der_out)
+            poi_out = vert_msk_ref.get_changed_path(bids_format="poi", info={"mod": "ct", "seg": "vert"}, file_type="json", parent=der_out)
+            poi_global_out = vert_msk_ref.get_changed_path(
+                bids_format="poi", info={"mod": "ct", "seg": "vert", "space": "global"}, file_type="mrk.json", parent=der_out
+            )
+
+            if poi_global_out.exists() and poi_out.exists():
+                print(f"Skip Subject: {sub} - output POI files already exist")
+                continue
+
+            try:
+                vert_msk = vert_msk_ref.open_nii()
+            except Exception as e:
+                print(f"Error opening vertseg: {str(e)}")
+                vert_msk = None
+
+            # gt_poi_path = get_poi(container)
+
+            if vert_msk is None:  # or subreg_msk is None:
+                print(f"Skip Subject: {sub} - not all data available")
+                continue
+
+            # if vert_msk.shape != subreg_msk.shape:
+            #    print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and subreg {subreg_msk.shape} shapes don't match")
+            #    continue
+
+            # vert_msk.assert_affine(other=subreg_msk)
+            # print("Original msk meta", vert_msk)
+
+            create_prediction_poi_files(
+                sub,
+                # vert_msk,
+                # subreg_msk,
+                dm_path,
+                model_path,
+                vert_out,
+                poi_out,
+                poi_global_out,
+                project_to_surface=project_to_surface,
+            )
