@@ -556,58 +556,70 @@ if __name__ == "__main__":
     #    datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder-test"],
     #    parents=["derivatives"],
     # )
-    dataset = "/DATA/NAS/datasets_processed/CT_spine/dataset-verse-challenge/dataset-verse19training/"
-    bgi = BIDS_Global_info(
-        datasets=[dataset],
-        parents=["derivatives"],
-    )
-    project_to_surface = True
+    ds_names = [
+        "dataset-verse19training_1mmiso",
+        "dataset-verse20training_1mmiso",
+        "dataset-verse19validation_1mmiso",
+        "dataset-verse20validation_1mmiso",
+        "dataset-verse19test_1mmiso",
+        "dataset-verse20test_1mmiso",
+    ]
+    DER_MSK = "derivatives_combined"
 
-    model_dir_root = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/include_pois-cc3-exclude6/"
-    model_dir = "subreg-project_gt-no_freeze-surface-cc3-exclude6"
-    model_checkpoint_name = "version_1/checkpoints/sad-pt-epoch=122-fine_mean_distance_val=1.58"
-
-    save_dir = f"{dataset}/derivatives_inference_poi_{model_dir}"
-    if project_to_surface:
-        save_dir += "_proj"
-    # dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
-    # model_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=74-fine_mean_distance_val=1.77.ckpt"
-
-    dm_path = f"{model_dir_root}{model_dir}/version_1/data_module_params.json"
-    model_path = f"{model_dir_root}{model_dir}/{model_checkpoint_name}"
-
-    if not model_path.endswith(".ckpt"):
-        model_path += ".ckpt"
-
-    inference_subjects = 0
-
-    for sub, container in bgi.enumerate_subjects():
-        # if not "verse004" in sub:
-        #    continue
-        print(f"Subject: {sub}")
-
-        vert_msk = get_vertseg(container)
-        subreg_msk = get_subreg(container)
-
-        # gt_poi_path = get_poi(container)
-
-        if vert_msk is None:  # or subreg_msk is None:
-            print(f"Skip Subject: {sub} - not all data available")
-            continue
-
-        # if vert_msk.shape != subreg_msk.shape:
-        #    print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and subreg {subreg_msk.shape} shapes don't match")
-        #    continue
-
-        vert_msk.assert_affine(other=subreg_msk)
-        # print("Original msk meta", vert_msk)
-
-        create_prediction_poi_files(
-            sub,
-            vert_msk,
-            # subreg_msk,
-            dm_path,
-            model_path,
-            save_dir,
-            project_to_surface=project_to_surface,
+    for ds_name in ds_names:
+        ds_path = f"/DATA/NAS/datasets_processed/CT_spine/dataset-verse-challenge/{ds_name}/"
+        bgi = BIDS_Global_info(
+            datasets=[ds_path],
+            parents=[DER_MSK],
         )
+        project_to_surface = True
+
+        model_dir_root = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/include_pois-cc3-exclude6/"
+        model_dir = "subreg-project_gt-no_freeze-surface-cc3-exclude6"
+        model_version = 1
+        model_checkpoint_name = "checkpoints/sad-pt-epoch=122-fine_mean_distance_val=1.58"
+
+        save_dir = f"{ds_path}/derivatives_poi_{model_dir}"
+        if project_to_surface:
+            save_dir += "_sproj"
+        # dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
+        # model_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=74-fine_mean_distance_val=1.77.ckpt"
+
+        dm_path = f"{model_dir_root}{model_dir}/version_{model_version}/data_module_params.json"
+        model_path = f"{model_dir_root}{model_dir}/version_{model_version}/{model_checkpoint_name}"
+
+        if not model_path.endswith(".ckpt"):
+            model_path += ".ckpt"
+
+        inference_subjects = 0
+
+        for sub, container in bgi.enumerate_subjects():
+            # if not "verse004" in sub:
+            #    continue
+            print(f"Subject: {sub}")
+
+            vert_msk = get_vertseg(container)
+            subreg_msk = get_subreg(container)
+
+            # gt_poi_path = get_poi(container)
+
+            if vert_msk is None:  # or subreg_msk is None:
+                print(f"Skip Subject: {sub} - not all data available")
+                continue
+
+            # if vert_msk.shape != subreg_msk.shape:
+            #    print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and subreg {subreg_msk.shape} shapes don't match")
+            #    continue
+
+            vert_msk.assert_affine(other=subreg_msk)
+            # print("Original msk meta", vert_msk)
+
+            create_prediction_poi_files(
+                sub,
+                vert_msk,
+                # subreg_msk,
+                dm_path,
+                model_path,
+                save_dir,
+                project_to_surface=project_to_surface,
+            )
