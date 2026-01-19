@@ -20,6 +20,11 @@ wheels/
 *.egg 
 *.manifest 
 *.spec 
+*.nii.gz
+src/archive/
+src/archive/*
+src/dataset/data_preprocessing/cutout-folder/
+src/dataset/data_preprocessing/cutout-folder/*
 
 # Log files
 pip-log.txt

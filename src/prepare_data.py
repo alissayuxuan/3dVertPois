@@ -10,7 +10,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from TPTBox import NII, BIDS_Global_info
+from TPTBox import NII, BIDS_Global_info, np_utils
 from TPTBox.core.poi import POI
 from TPTBox import Subject_Container
 from pqdm.processes import pqdm
@@ -148,7 +148,7 @@ def get_files(
     )
 
 
-def get_bounding_box(mask, vert, margin=5):
+def get_bounding_box(mask, vert):
     """Get the bounding box of a given vertebra in a mask.
 
     Args:
@@ -166,6 +166,7 @@ def get_bounding_box(mask, vert, margin=5):
     if len(indices[0]) == 0:
         raise ValueError(f"Vertebra {vert} not found in the mask.")
 
+    margin = 0
     x_min = np.min(indices[0]) - margin
     x_max = np.max(indices[0]) + margin
     y_min = np.min(indices[1]) - margin
@@ -202,15 +203,15 @@ def process_container(
     compute_surface_mask: bool = False,
     include_neighbouring_vertebrae: bool = False,
 ):
-    if "WS-25" not in subject:
-        return []
+    # if "WS-25" not in subject and "WS-05" not in subject and "WS-22" not in subject and "WS-46" not in subject:
+    #    return []
 
     print(f"Processing Subject: {subject}")
     poi, ct, subreg, vertseg = get_files_fn(container)
 
     # reorient data to same orientation
     ct.reorient_(("L", "A", "S"))
-    subreg.reorient_(("L", "A", "S"))
+    subreg.reorient_(("L", "A", "S")).map_labels_({50: 49}, verbose=False)
     vertseg.reorient_(("L", "A", "S"))
     poi.reorient_(axcodes_to=vertseg.orientation, _shape=vertseg.shape)
 
@@ -234,41 +235,42 @@ def process_container(
         vert = vertebrae[index]
         if vert in vertseg_arr:  # vertebra found in segmentation mask
 
-            # TODO: muss ich schauen ob die nachbarn in vertseg_arr sind? wenn nicht was dann?
-            if include_neighbouring_vertebrae:
-                vert_neighbours = [vert]
-                if index > 0:
-                    vert_neighbours.insert(0, vertebrae[index - 1])
-                if index < len(vertebrae) - 1:
-                    vert_neighbours.append(vertebrae[index + 1])
-
-                print(f"Vertebra {vert} neighbours: {vert_neighbours}")
-
-                # Initialize bounding box limits
-                x_min, x_max = np.inf, -np.inf
-                y_min, y_max = np.inf, -np.inf
-                z_min, z_max = np.inf, -np.inf
-
-                for v in vert_neighbours:
-                    try:
-                        bounds = get_bounding_box(vertseg_arr, v)
-                    except ValueError as e:
-                        print(f"Error getting bounding box for vertebra {v}: {str(e)}")
-                        continue
-
-                    x_min = min(x_min, bounds[0])
-                    x_max = max(x_max, bounds[1])
-                    y_min = min(y_min, bounds[2])
-                    y_max = max(y_max, bounds[3])
-                    z_min = min(z_min, bounds[4])
-                    z_max = max(z_max, bounds[5])
-
-            else:
-                try:
-                    x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(vertseg_arr, vert)
-                except ValueError as e:
-                    print(f"Error getting bounding box for vertebra {vert}: {str(e)}")
-                    continue
+            ## TODO: muss ich schauen ob die nachbarn in vertseg_arr sind? wenn nicht was dann?
+            # if include_neighbouring_vertebrae:
+            #    vert_neighbours = [vert]
+            #    if index > 0:
+            #        vert_neighbours.insert(0, vertebrae[index - 1])
+            #    if index < len(vertebrae) - 1:
+            #        vert_neighbours.append(vertebrae[index + 1])
+            #
+            #    print(f"Vertebra {vert} neighbours: {vert_neighbours}")
+            #
+            #    # Initialize bounding box limits
+            #    x_min, x_max = np.inf, -np.inf
+            #    y_min, y_max = np.inf, -np.inf
+            #    z_min, z_max = np.inf, -np.inf
+            #
+            #    for v in vert_neighbours:
+            #        try:
+            #            bounds = np_utils.calc
+            #
+            #        except ValueError as e:
+            #            print(f"Error getting bounding box for vertebra {v}: {str(e)}")
+            #            continue
+            #
+            #        x_min = min(x_min, bounds[0])
+            #        x_max = max(x_max, bounds[1])
+            #        y_min = min(y_min, bounds[2])
+            #        y_max = max(y_max, bounds[3])
+            #        z_min = min(z_min, bounds[4])
+            #        z_max = max(z_max, bounds[5])
+            #
+            # else:
+            #    try:
+            #        x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(vertseg_arr, vert)
+            #    except ValueError as e:
+            #        print(f"Error getting bounding box for vertebra {vert}: {str(e)}")
+            #        continue
 
             # defines output paths for cropped files
             ct_path = os.path.join(save_path, subject, str(vert), "ct.nii.gz")
@@ -280,11 +282,26 @@ def process_container(
             if not os.path.exists(os.path.join(save_path, subject, str(vert))):
                 os.makedirs(os.path.join(save_path, subject, str(vert)))
 
+            if rescale_zoom:
+                ct.rescale_(rescale_zoom)
+                subreg.rescale_(rescale_zoom)
+                vertseg.rescale_(rescale_zoom)
+                poi.rescale_(rescale_zoom)
+
             try:
-                ct_cropped = ct.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
-                subreg_cropped = subreg.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
-                vertseg_cropped = vertseg.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
-                poi_cropped = poi.apply_crop(o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
+                com = np_utils.np_center_of_mass(vertseg.extract_label(vert).get_seg_array())[1]
+                ct_cropped, crop, padding = np_utils.np_calc_crop_around_centerpoint(
+                    (round(com[0]), round(com[1]), round(com[2])), ct.get_array(), cutout_size=(128, 128, 144)
+                )
+                ct_cropped = ct.apply_crop(crop).apply_pad(padding, verbose=False)
+                subreg_cropped = subreg.apply_crop(crop).apply_pad(padding, verbose=False)
+                vertseg_cropped = vertseg.apply_crop(crop).apply_pad(padding, verbose=False)
+                poi_cropped = poi.apply_crop(crop).resample_from_to(vertseg_cropped)
+
+                # ct_cropped = ct.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
+                # subreg_cropped = subreg.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
+                # vertseg_cropped = vertseg.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
+                # poi_cropped = poi.apply_crop(o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))
 
                 # surface_mask_cropped = None
                 # surfcae_subreg_cropped = None
@@ -295,18 +312,12 @@ def process_container(
                 #    )
 
             except Exception as e:
-                print(f"Error processing {subject}: {str(e)}")
-                print(f"Crop dimensions: x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}, z_min={z_min}, z_max={z_max}")
-                print(f"ex_slice: {(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))}")
+                print(f"Error processing {subject}, vert={vert}: {str(e)}")
+                print(f"Crop dimensions: crop={crop}, padding={padding}")
+                # print(f"Crop dimensions: x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}, z_min={z_min}, z_max={z_max}")
+                # print(f"ex_slice: {(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))}")
                 print(f"ct shape: {ct.shape},\n subreg shape: {subreg.shape},\n vertseg shape: {vertseg.shape}, poi shape: {poi.shape}")
                 raise
-
-            if rescale_zoom:
-
-                ct_cropped.rescale_(rescale_zoom)
-                subreg_cropped.rescale_(rescale_zoom)
-                vertseg_cropped.rescale_(rescale_zoom)
-                poi_cropped.rescale_(rescale_zoom)
 
                 # if compute_surface_mask and surface_mask_cropped is not None and surface_subreg_cropped is not None:
                 #    surface_mask_cropped.rescale_(rescale_zoom)
@@ -319,8 +330,8 @@ def process_container(
 
             if compute_surface_mask:
                 try:
-                    surface_mask = vertseg_cropped.compute_surface_mask(connectivity=1, dilated_surface=False)
-                    surface_subreg = subreg_cropped.compute_surface_mask(connectivity=1, dilated_surface=False)
+                    surface_mask = vertseg_cropped.compute_surface_mask(connectivity=3, dilated_surface=False)
+                    surface_subreg = subreg_cropped.compute_surface_mask(connectivity=3, dilated_surface=False)
                 except Exception as e:
                     pass
 
@@ -335,20 +346,20 @@ def process_container(
             #    surface_subreg_cropped.save(surface_subreg_path, verbose=False)
             #
             # Save the slice indices as json to reconstruct the original POI file (there probably is a more BIDS-like approach to this)
-            slice_indices = {
-                "x_min": int(x_min),
-                "x_max": int(x_max),
-                "y_min": int(y_min),
-                "y_max": int(y_max),
-                "z_min": int(z_min),
-                "z_max": int(z_max),
-            }
-            with open(
-                os.path.join(save_path, subject, str(vert), "cutout_slice_indices.json"),
-                "w",
-                encoding="utf-8",
-            ) as f:
-                json.dump(slice_indices, f)
+            # slice_indices = {
+            #    "x_min": int(x_min),
+            #    "x_max": int(x_max),
+            #    "y_min": int(y_min),
+            #    "y_max": int(y_max),
+            #    "z_min": int(z_min),
+            #    "z_max": int(z_max),
+            # }
+            # with open(
+            #    os.path.join(save_path, subject, str(vert), "cutout_slice_indices.json"),
+            #    "w",
+            #    encoding="utf-8",
+            # ) as f:
+            #    json.dump(slice_indices, f)
 
             summary.append(
                 {
@@ -424,7 +435,7 @@ if __name__ == "__main__":
         type=str,
         help="The path to save the prepared data",
         # required=True,
-        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/dataset/data_preprocessing/cutout-folder/cutouts-cc3-new/",
+        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/dataset/data_preprocessing/cutout-folder/cutouts-new/",
     )
     parser.add_argument(
         "--no_rescale",

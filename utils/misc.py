@@ -37,6 +37,26 @@ def one_hot_encode_batch(batch_tensor: torch.Tensor) -> torch.Tensor:
     return batch_tensor
 
 
+def surface_project_poi(poi: POI, surface_nii: NII):
+    # convert poi to coordinates tensor
+    coord_keys = []
+    coords_list = []
+    for r, s, c in poi.items():
+        coord_keys.append((r, s))
+        coords_list.append(c)
+    # surface_nii to torch tensor
+    surface_tensor = torch.from_numpy(surface_nii.get_array()).unsqueeze(0).to(torch.float32)  # (1,D,H,W)
+    # run surface_project_coords
+    coords_tensor = torch.from_numpy(np.asarray(coords_list)).unsqueeze(0).to(torch.float32)  # (1,N,3)
+    projected_coords, _ = surface_project_coords(coords_tensor, surface_tensor)  # (1,N,3)
+    # transfer back
+    projected_poi = poi.make_empty_POI()
+    for i, (r, s) in enumerate(coord_keys):
+        projected_poi[r, s] = projected_coords[0, i].cpu().numpy()
+    # return
+    return projected_poi
+
+
 def surface_project_coords(coordinates, surface, debug=False):
     return surface_project_coords_marchingcubes(coordinates, surface, debug=debug)
 

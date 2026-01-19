@@ -19,7 +19,7 @@ import os
 import pandas as pd
 import torch
 import numpy as np
-#from BIDS import NII, POI, BIDS_Global_info
+# from BIDS import NII, POI, BIDS_Global_info
 from TPTBox import NII, BIDS_Global_info
 from TPTBox.core.poi import POI
 from torch.utils.data import Dataset
@@ -107,154 +107,6 @@ def combine_centroids(data_list):
 
     return expected_subject, poi_file
 
-
-class GruberInferenceDataset(Dataset):
-    def __init__(
-        self,
-        master_df,
-        input_shape,
-        include_vert_list,
-        poi_indices=[
-            81,
-            82, #
-            83, 
-            84,
-            85,
-            86,
-            87,
-            88,
-            89, #
-            101,
-            102,
-            103,
-            104,
-            105, #
-            106, #
-            107, #
-            108, #
-            109,
-            110,
-            111,
-            112,
-            113, #
-            114, #
-            115, #
-            116, #
-            117,
-            118,
-            119,
-            120,
-            121, #
-            122, #
-            123, #
-            124, #
-            125,
-            127,
-            #134,
-            #136,
-            #141,
-            #142,
-            #143,
-            #144,
-            #149,
-            #151,
-        ],
-    ):
-        self.master_df = master_df
-        self.input_shape = input_shape
-        self.poi_indices = torch.tensor(poi_indices)
-        self.poi_idx_to_list_idx = {poi: idx for idx, poi in enumerate(poi_indices)}
-        self.vert_idx_to_list_idx = {
-            vert: idx for idx, vert in enumerate(include_vert_list)
-        }
-
-    def __len__(self):
-        return len(self.master_df)
-
-    def __getitem__(self, index):
-        data_dict = {}
-
-        # Read the row from the master dataframe
-        row = self.master_df.iloc[index]
-        vertebra = row["vert"]
-        vert_path = row["vert_path"]
-        subreg_path = row["subreg_path"]
-        x_min = row["x_min"]
-        y_min = row["y_min"]
-        z_min = row["z_min"]
-        original_orientation = row["original_orientation"]
-        original_zoom = row["original_zoom"]
-        original_shape = row["original_shape"]
-        original_rotation = row["original_rotation"] #ALISSA
-        original_origin = row["original_origin"] 
-        preprocessed_orientation = row["preprocessed_orientation"]
-        preprocessed_zoom = row["preprocessed_zoom"]
-        preprocessed_rotation = row["preprocessed_rotation"]
-        preprocessed_origin = row["preprocessed_origin"] #ALISSA
-        subject = row["subject"]
-
-        subreg = NII.load(subreg_path, seg=True)
-        vertseg = NII.load(vert_path, seg=True)
-
-        assert subreg.shape == vertseg.shape
-        assert subreg.orientation == vertseg.orientation
-        assert subreg.orientation == ("L", "A", "S")
-        assert subreg.zoom == vertseg.zoom
-        assert subreg.zoom == (1, 1, 1)
-
-        subreg = subreg.get_array()
-        vertseg = vertseg.get_array()
-        mask = vertseg == vertebra
-
-        # ct = ct * mask
-        subreg = subreg * mask
-
-
-        ###        
-        if any(s > t for s, t in zip(subreg.shape, self.input_shape)):
-            print(f"Skipping subject {subject} vertebra {vertebra} (shape {subreg.shape} > {self.input_shape})")
-            return None        
-        elif any(s > t for s, t in zip(vertseg.shape, self.input_shape)):
-            print(f"Skipping subject {subject} vertebra {vertebra} (shape {vertseg.shape} > {self.input_shape})")
-            return None
-        ###
-
-        subreg, offset = pad_array_to_shape(subreg, self.input_shape)
-        vertseg, _ = pad_array_to_shape(vertseg, self.input_shape)
-
-        # Convert subreg and vertseg to tensors
-        subreg = torch.from_numpy(subreg.astype(float))
-        vertseg = torch.from_numpy(vertseg.astype(float))
-
-        # Add channel dimension
-        subreg = subreg.unsqueeze(0)
-        vertseg = vertseg.unsqueeze(0)
-
-        # Uses default iterations of 1, must be changed if model was trained with more iterations ("thicker" surface)
-        surface = compute_surface(subreg)
-
-        data_dict["input"] = vertseg#subreg
-        data_dict["surface"] = surface
-        data_dict["vertebra"] = vertebra
-        data_dict["padding_offset"] = torch.tensor(offset).float()
-        data_dict["poi_indices"] = self.poi_indices
-        data_dict["poi_list_idx"] = torch.tensor(
-            [self.poi_idx_to_list_idx[poi.item()] for poi in self.poi_indices]
-        )
-        data_dict["vert_list_idx"] = torch.tensor([self.vert_idx_to_list_idx[vertebra]])
-        data_dict["cutout_offset"] = torch.tensor([x_min, y_min, z_min])
-        data_dict["original_orientation"] = str(original_orientation)
-        data_dict["original_zoom"] = original_zoom
-        data_dict["original_shape"] = original_shape
-        data_dict["original_rotation"] = original_rotation #ALISSA
-        data_dict["original_origin"] = original_origin#row["original_origin"]
-        data_dict["preprocessed_orientation"] = str(preprocessed_orientation)
-        data_dict["preprocessed_zoom"] = preprocessed_zoom
-        data_dict["preprocessed_rotation"] = preprocessed_rotation
-        data_dict["preprocessed_origin"] = preprocessed_origin #ALISSA
-        data_dict["subject"] = subject
-
-        return data_dict
 
 def safe_collate(batch):
     batch = [b for b in batch if b is not None]
@@ -580,5 +432,3 @@ if __name__ == "__main__":
             save_dir,
             gt_poi_path
         ) 
-    
-

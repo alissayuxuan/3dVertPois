@@ -479,6 +479,18 @@ def get_vertseg(container) -> NII:
         return None
 
 
+def get_vertseg_bfile(container):
+    vertseg_query = container.new_query(flatten=True)
+    vertseg_query.filter_format("msk")
+    vertseg_query.filter_filetype("nii.gz")  # only nifti files
+    vertseg_query.filter("seg", "vert")
+    if not vertseg_query.candidates:
+        print("ERROR: No vertseg candidate found!")
+        return None
+    vertseg_candidate = vertseg_query.candidates[0]
+    return vertseg_candidate
+
+
 def get_files(
     container,
     get_poi: callable,
