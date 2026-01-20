@@ -63,6 +63,8 @@ def _proc(name, subject, der_out: str):
             for v in vert_nii.unique():
                 if v == 0:
                     continue
+                if v not in poi.keys_region():
+                    continue
                 vpoi = poi.extract_region(v)
                 surface_nii = vert_nii.extract_label(v).compute_surface_mask(connectivity=1, dilated_surface=False)
                 det_poi = surface_project_poi(vpoi, surface_nii=surface_nii)
@@ -103,11 +105,11 @@ if __name__ == "__main__":
             parents=[DER_IN, DER_MSK],
         )
 
-        # Parallel(n_jobs=10, backend="threading")(
-        #    delayed(_proc)(name, subject, der_out) for name, subject in bgi.enumerate_subjects(sort=True)
-        # )
-        for name, subject in bgi.enumerate_subjects(sort=True):
-            _proc(name, subject, der_out)
+        Parallel(n_jobs=5, backend="threading")(
+            delayed(_proc)(name, subject, der_out) for name, subject in bgi.enumerate_subjects(sort=True)
+        )
+        # for name, subject in bgi.enumerate_subjects(sort=True):
+        #    _proc(name, subject, der_out)
         # break
 
         if len(SKIPPED_SUBJECTS) > 0:
