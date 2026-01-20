@@ -569,10 +569,20 @@ class PoiNeighborDataset(Dataset):
         # )
 
         # ct.normalize_ct(min_out=0, max_out=1, inplace=True)
+        vertseg_label = vertseg.unique()
 
         # Define neighbor vertebrae
-        neighbor_top = vertebra - 1 if vertebra > 1 else 0  # 0 = dummy (no top/bottom neighbor)
-        neighbor_bottom = vertebra + 1 if vertebra < 24 else 0
+        neighbor_top = vertebra - 1 if vertebra > 1 and vertebra - 1 in vertseg_label else 0  # 0 = dummy (no top/bottom neighbor)
+        neighbor_bottom = vertebra + 1 if vertebra < 24 and vertebra + 1 in vertseg_label else 0
+
+        # AUGMENTATION: Random labeldrop of neighbor vertebrae for data augmentation
+        if torch.rand(1).item() < 0.1:
+            if torch.rand(1).item() < 0.5:
+                # top
+                neighbor_top = 0
+            else:
+                # bottom
+                neighbor_bottom = 0
 
         all_vert = [("current", vertebra), ("top", neighbor_top), ("bottom", neighbor_bottom)]
 
