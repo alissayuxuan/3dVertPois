@@ -130,7 +130,7 @@ def _proc(name, subject, der_out: str):
             det_poi = det_poi.round(2)
             det_poi.save(out_det)
 
-            det_poi.to_global().save_mrk(out_det_global)
+            det_poi.to_global().save_mrk(out_det_global, split_by_region=True)
 
             # det_poi_nii = det_poi.make_point_cloud_nii()[1]
             # det_poi_nii.save(out_det.parent.joinpath("nifty.nii.gz"))
@@ -160,13 +160,14 @@ if __name__ == "__main__":
             parents=["derivatives_combined"],
         )
 
-        der_out = "derivatives_poi_deterministic"
+        der_out = "derivatives_poi_deterministic-new"
 
-        # for name, subject in bids_ds.enumerate_subjects(sort=True):
         Parallel(n_jobs=10, backend="threading")(
             delayed(_proc)(name, subject, der_out) for name, subject in bgi.enumerate_subjects(sort=True)
         )
         # for name, subject in bgi.enumerate_subjects(sort=True):
+        # if "601" not in name:
+        #    continue
         #    _proc(name, subject, der_out)
         #    break
 

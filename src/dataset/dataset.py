@@ -14,6 +14,7 @@ from utils.dataloading_utils import compute_surface, get_gt_pois, pad_array_to_s
 
 
 class PoiDataset(Dataset):
+
     def __init__(
         self,
         master_df,
@@ -28,6 +29,8 @@ class PoiDataset(Dataset):
         include_com=False,
         poi_file_ending="poi.json",
         iterations=1,
+        show_neighbors=False,
+        neighbor_drop_prob=0.05,
     ):
 
         # If master_df has a column use_sample, filter on it
@@ -48,6 +51,8 @@ class PoiDataset(Dataset):
         self.poi_idx_to_list_idx = {poi: idx for idx, poi in enumerate(poi_indices)}
         self.vert_idx_to_list_idx = {vert: idx for idx, vert in enumerate(include_vert_list)}
         self.iterations = iterations
+        self.show_neighbors = show_neighbors
+        self.neighbor_drop_prob = neighbor_drop_prob
 
     def __len__(self):
         return len(self.master_df)
@@ -104,7 +109,30 @@ class PoiDataset(Dataset):
         # ct, offset = self.preprocess_nifti(ct_path, is_img=True)
         subreg, offset = self.preprocess_nifti(subreg_path, is_img=False)
         vertseg, _ = self.preprocess_nifti(msk_path, is_img=False)
-        mask = vertseg == vertebra
+
+        if self.show_neighbors:
+            vertseg_label = vertseg.unique()
+            # Define neighbor vertebrae
+            neighbor_top = vertebra - 1 if vertebra > 1 and vertebra - 1 in vertseg_label else 0  # 0 = dummy (no top/bottom neighbor)
+            neighbor_bottom = vertebra + 1 if vertebra < 24 and vertebra + 1 in vertseg_label else 0
+
+            # AUGMENTATION: Random labeldrop of neighbor vertebrae for data augmentation
+            if torch.rand(1).item() < self.neighbor_drop_prob:
+                if torch.rand(1).item() < 0.5:
+                    # top
+                    neighbor_top = 0
+                else:
+                    # bottom
+                    neighbor_bottom = 0
+
+            all_vert = [("current", vertebra), ("top", neighbor_top), ("bottom", neighbor_bottom)]
+
+            # Filter out dummy for seg mask
+            actual_vert = [vert for _, vert in all_vert if vert != 0]
+
+            mask = np.isin(vertseg, actual_vert)
+        else:
+            mask = vertseg == vertebra
         # surface_msk, _ = self.preprocess_nifti(surface_msk_path, is_img=False)
 
         if self.input_data_type == "vertseg":
@@ -217,6 +245,8 @@ class PoiDataset(Dataset):
         data_dict["loss_mask"] = loss_mask.bool()
 
         transformed_mask = data_dict["input"] > 0
+        if self.show_neighbors:
+            transformed_mask *= vertseg == vertebra
         surface = compute_surface(transformed_mask, iterations=self.iterations)
 
         data_dict["surface"] = surface
@@ -235,6 +265,7 @@ class PoiDataset(Dataset):
 
 
 class GruberDataset(PoiDataset):
+
     def __init__(
         self,
         master_df,
@@ -248,6 +279,8 @@ class GruberDataset(PoiDataset):
         include_vert_list=None,
         poi_file_ending="poi.json",
         iterations=1,
+        show_neighbors=False,
+        neighbor_drop_prob=0.05,
     ):
         super().__init__(
             master_df,
@@ -433,10 +466,13 @@ class GruberDataset(PoiDataset):
             include_com=include_com,
             poi_file_ending=poi_file_ending,
             iterations=iterations,
+            show_neighbors=show_neighbors,
+            neighbor_drop_prob=neighbor_drop_prob,
         )
 
 
 class PoiNeighborDataset(Dataset):
+
     def __init__(
         self,
         master_df,
@@ -451,6 +487,7 @@ class PoiNeighborDataset(Dataset):
         include_com=False,
         poi_file_ending="poi.json",
         iterations=1,
+        neighbor_drop_prob=0.05,
     ):
 
         # If master_df has a column use_sample, filter on it
@@ -471,6 +508,7 @@ class PoiNeighborDataset(Dataset):
         self.poi_idx_to_list_idx = {poi: idx for idx, poi in enumerate(poi_indices)}
         self.vert_idx_to_list_idx = {vert: idx for idx, vert in enumerate(include_vert_list)}
         self.iterations = iterations
+        self.neighbor_drop_prob = neighbor_drop_prob
 
     def __len__(self):
         return len(self.master_df)
@@ -576,7 +614,7 @@ class PoiNeighborDataset(Dataset):
         neighbor_bottom = vertebra + 1 if vertebra < 24 and vertebra + 1 in vertseg_label else 0
 
         # AUGMENTATION: Random labeldrop of neighbor vertebrae for data augmentation
-        if torch.rand(1).item() < 0.1:
+        if torch.rand(1).item() < self.neighbor_drop_prob:
             if torch.rand(1).item() < 0.5:
                 # top
                 neighbor_top = 0
@@ -721,6 +759,7 @@ class PoiNeighborDataset(Dataset):
 
 
 class GruberNeighborDataset(PoiNeighborDataset):
+
     def __init__(
         self,
         master_df,
@@ -734,6 +773,7 @@ class GruberNeighborDataset(PoiNeighborDataset):
         include_vert_list=None,
         poi_file_ending="poi.json",
         iterations=1,
+        neighbor_drop_prob=0.05,
     ):
         super().__init__(
             master_df,
@@ -915,4 +955,5 @@ class GruberNeighborDataset(PoiNeighborDataset):
             include_com=include_com,
             poi_file_ending=poi_file_ending,
             iterations=iterations,
+            neighbor_drop_prob=neighbor_drop_prob,
         )

@@ -17,13 +17,15 @@ import json
 import os
 import shutil  # For file operations
 from pathlib import Path
+from dataclasses import dataclass, field
 
 import pandas as pd
 import torch
 import numpy as np
 
-from TPTBox import NII, BIDS_Global_info, BIDS_FILE, np_utils
+from TPTBox import NII, BIDS_Global_info, BIDS_FILE, np_utils, v_idx_order
 from TPTBox.core.poi import POI
+from TypeSaveArgParse import Class_to_ArgParse
 from torch.utils.data import Dataset
 
 import eval as ev
@@ -32,6 +34,7 @@ from utils.dataloading_utils import compute_surface, pad_array_to_shape, get_ct,
 from utils.misc import surface_project_coords
 from torch.utils.data.dataloader import default_collate
 from eval import combine_centroids
+from model_sel import TrainedModelInfo
 
 
 class GruberInferenceDataset(Dataset):
@@ -262,6 +265,7 @@ class GruberInferenceNeighborDataset(Dataset):
         self.zoom = zoom
         self.poi_indices = torch.tensor(poi_indices)
         self.poi_idx_to_list_idx = {poi: idx for idx, poi in enumerate(poi_indices)}
+        self.include_vert_list = include_vert_list
         self.vert_idx_to_list_idx = {vert: idx for idx, vert in enumerate(include_vert_list)}
 
     def __len__(self):
@@ -317,8 +321,11 @@ class GruberInferenceNeighborDataset(Dataset):
         surface = surface.get_array()
 
         # extract neighbors
-        neighbor_top = vertebra - 1  # 0 = dummy (no top/bottom neighbor)
-        neighbor_bottom = vertebra + 1 if vertebra < 24 else 0
+        v_idx = self.include_vert_list.index(vertebra)
+        neighbor_top = self.include_vert_list[v_idx - 1] if v_idx > 0 else 0  # 0 = dummy (no top/bottom neighbor)
+        neighbor_bottom = self.include_vert_list[v_idx + 1] if v_idx < len(self.include_vert_list) - 1 else 0
+        # neighbor_top = neighbor_top if neighbor_top in vertseg else 0
+        # neighbor_bottom = neighbor_bottom if neighbor_bottom in vertseg else 0
 
         all_vert = [
             ("current", vertebra),
@@ -422,6 +429,7 @@ def preprocess_segmentation_masks(
     input_data_type: str,
     vert_list,
     zoom=(1, 1, 1),
+    tmp_name: str = "tmp",
 ):
     """
     Preprocess segmentation masks and create a master dataframe.
@@ -446,12 +454,13 @@ def preprocess_segmentation_masks(
     )
 
     # Create temp directory
-    temp_dir = "tmp/"
+    temp_dir = f"/DATA/NAS/ongoing_projects/hendrik/poi_prediction/tmp/{tmp_name}/"
+    # os.path.join("tmp", tmp_name)
     os.makedirs(os.path.join(temp_dir, subject), exist_ok=True)
 
     # Get vertebrae that are both in the vert_list and in the vert mask
     msk_vert_list = vert_msk.unique()
-    vertebrae = [v for v in vert_list if v in msk_vert_list]
+    vertebrae = sorted([v for v in vert_list if v in msk_vert_list], key=lambda x: v_idx_order.index(x))
 
     # Bring the masks to standard orientation. Zoom is applied AFTER cutting out the vertebrae
     vert_msk = vert_msk.reorient(("L", "A", "S"), verbose=True).map_labels_({50: 49}, verbose=False)
@@ -588,7 +597,7 @@ def create_prediction_poi_files(
     print(dm_params)
     input_shape = dm_params["input_shape"]
     input_data_type = dm_params["input_data_type"]
-    vert_list = dm_params["include_vert_list"]
+    vert_list = sorted(dm_params["include_vert_list"], key=lambda x: v_idx_order.index(x))
     poi_indices = dm_params["include_poi_list"]
     zoom = dm_params.get("zoom", (1, 1, 1))
     print("zoom: ", zoom)
@@ -615,7 +624,15 @@ def create_prediction_poi_files(
         return
 
     # preprocess segmentation masks and then save the info in a master_df ( create a /tmp)
-    master_df, temp_dir = preprocess_segmentation_masks(subject, vert_msk, input_data, input_data_type, vert_list, zoom)
+    master_df, temp_dir = preprocess_segmentation_masks(
+        subject,
+        vert_msk,
+        input_data,
+        input_data_type,
+        vert_list,
+        zoom,
+        tmp_name="tmp_" + vert_out.name,
+    )
 
     print(f"inferencing subject: {subject}")
     use_neighbor = dm_params["dataset"] == "GruberNeighbor"
@@ -827,32 +844,36 @@ def create_prediction_poi_files(
     os.system(f"rm -r {temp_dir}")
 
 
+@dataclass
+class InferenceConfig(Class_to_ArgParse):
+    datasets: list[str] = field(
+        default_factory=lambda: [
+            "dataset-verse19training_1mmiso",
+            "dataset-verse20training_1mmiso",
+            "dataset-verse19validation_1mmiso",
+            "dataset-verse20validation_1mmiso",
+            "dataset-verse19test_1mmiso",
+            "dataset-verse20test_1mmiso",
+        ]
+    )
+    der_msk: str = "derivatives_combined"
+    der_out_base: str = "TEST_derivatives_poi_"
+    model_info: TrainedModelInfo = TrainedModelInfo.GRUBER_N_SURFACE_NEIGHAUG
+
+
 if __name__ == "__main__":
 
     # bgi = BIDS_Global_info(
     #    datasets=["/home/student/alissa/3dVertPois/src/dataset/data_preprocessing/dataset-folder-test"],
     #    parents=["derivatives"],
     # )
-    ds_names = [
-        # "dataset-verse19training_1mmiso",
-        # "dataset-verse20training_1mmiso",
-        "dataset-verse19validation_1mmiso",
-        # "dataset-verse20validation_1mmiso",
-        # "dataset-verse19test_1mmiso",
-        # "dataset-verse20test_1mmiso",
-    ]
-    DER_MSK = "derivatives_combined"
+    opt = InferenceConfig().get_opt()
+    ds_names = opt.datasets
+    DER_MSK = opt.der_msk
 
-    # MODEL BEST
-    model_dir_root = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/largefov_pois-cc3-exclude6/"
-    model_dir = "surface_project-gt_cc3-exclude6"
-    model_version = 0
-    model_checkpoint_name = "sad-pt-epoch=131-fine_mean_distance_val=1.50"
+    model_info = opt.model_info  # TrainedModelInfo.GRUBER_S_SURFACE
+    model_dir = model_info.model_dir
 
-    # MODEL
-    model_dir = "surface-neighbor-project_gt_cc3-exclude6"
-    model_version = 1
-    model_checkpoint_name = "sad-pt-epoch=88-fine_mean_distance_val=2.34"
     #
     project_to_surface = False
 
@@ -864,14 +885,14 @@ if __name__ == "__main__":
             parents=[DER_MSK],
         )
 
-        der_out = f"TEST_derivatives_poi_{model_dir}"
+        der_out = f"{opt.der_out_base}{model_dir}-v{model_info.version}"
         if project_to_surface:
             der_out += "_sproj"
         # dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
         # model_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/checkpoints/sad-pt-epoch=74-fine_mean_distance_val=1.77.ckpt"
 
-        dm_path = f"{model_dir_root}{model_dir}/version_{model_version}/data_module_params.json"
-        model_path = f"{model_dir_root}{model_dir}/version_{model_version}/checkpoints/{model_checkpoint_name}"
+        dm_path = model_info.data_module_params_path
+        model_path = model_info.model_path
 
         if not model_path.endswith(".ckpt"):
             model_path += ".ckpt"
@@ -879,7 +900,7 @@ if __name__ == "__main__":
         inference_subjects = 0
 
         for sub, container in bgi.enumerate_subjects():
-            # if not "verse004" in sub:
+            # if not "601" in sub:
             #    continue
             print(f"Subject: {sub}")
 

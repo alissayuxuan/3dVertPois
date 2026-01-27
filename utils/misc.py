@@ -37,6 +37,20 @@ def one_hot_encode_batch(batch_tensor: torch.Tensor) -> torch.Tensor:
     return batch_tensor
 
 
+def surface_project_poi_vert_wise(poi: POI, surface_nii: NII):
+    poi_new = poi.make_empty_POI()
+    for v in poi.keys_region():
+        assert v in surface_nii.unique(), f"Surface NII does not contain vertebra {v}"
+
+        # extract surface for this vertebra
+        surf_v_nii = surface_nii.extract_label(v)
+        poi_v = poi.extract_region(v)
+        poi_v_proj = surface_project_poi(poi_v, surf_v_nii)
+        for r, s, c in poi_v_proj.items():
+            poi_new[r, s] = c
+    return poi_new
+
+
 def surface_project_poi(poi: POI, surface_nii: NII):
     # convert poi to coordinates tensor
     coord_keys = []
@@ -322,7 +336,7 @@ def surface_project_coords_marchingcubes(
 
         if debug:
             np_to_bids_nii(mask_np).save("/DATA/NAS/ongoing_projects/hendrik/poi_prediction/test_mask_np.nii.gz")
-        mask_np = np_fill_holes(mask_np)
+        # mask_np = np_fill_holes(mask_np)
         if debug:
             np_to_bids_nii(mask_np).save("/DATA/NAS/ongoing_projects/hendrik/poi_prediction/test_mask_np_filled.nii.gz")
         (verts,) = (extract_surface_vertices(mask_np, level=level),)

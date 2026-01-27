@@ -55,7 +55,7 @@ def _proc(name, subject, der_out: str):
             # out_det.parent.mkdir(parents=True, exist_ok=True)
             #####
             if out_det.exists():
-                logger.print("Outputs already exist")
+                logger.print(f"{out_det.name}: Outputs already exist")
                 continue
 
             poi = poi_ref.open_poi()
@@ -75,7 +75,7 @@ def _proc(name, subject, der_out: str):
                     poi[(v, s)] = det_poi[(v, s)]
             # det_poi = det_poi.round(3)
             poi.save(out_det)
-            poi.to_global().save_mrk(out_det_global)
+            poi.to_global().save_mrk(out_det_global, split_by_region=True)
 
     except Exception as e:
         logger.print(f"[SKIP] Error at {name}: {e}", Log_Type.FAIL)
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     ]
 
     DER_MSK = "derivatives_combined"
-    DER_IN = "derivatives_poi_surface_project-gt_cc3-exclude6"  # "derivatives_poi_deterministic"
+    DER_IN = "derivatives_poi_surface_project-gt_cc3-exclude6-v0"  # "derivatives_poi_deterministic"
     der_out = DER_IN + "_sproj"
 
     for ds_name in ds_names:
@@ -104,6 +104,8 @@ if __name__ == "__main__":
             datasets=[ds_path],
             parents=[DER_IN, DER_MSK],
         )
+
+        logger.print("Processing dataset:", ds_name, Log_Type.STAGE)
 
         Parallel(n_jobs=5, backend="threading")(
             delayed(_proc)(name, subject, der_out) for name, subject in bgi.enumerate_subjects(sort=True)

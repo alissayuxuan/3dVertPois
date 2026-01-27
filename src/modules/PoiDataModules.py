@@ -29,6 +29,7 @@ PoiType = TypeVar("PoiType", bound=PoiDataset)
 
 
 class POIDataModule(pl.LightningDataModule):
+
     def __init__(
         self,
         dataset: str,
@@ -48,6 +49,8 @@ class POIDataModule(pl.LightningDataModule):
         num_workers: int = 0,
         poi_file_ending: str = "poi.json",
         surface_erosion_iterations: int = 1,
+        show_neighbors: bool = False,
+        neighbor_drop_prob: float = 0.05,
     ):
         super().__init__()
         self.dataset = dataset
@@ -67,6 +70,8 @@ class POIDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
         self.transform_config = transform_config
         self.surface_erosion_iterations = surface_erosion_iterations
+        self.show_neighbors = show_neighbors
+        self.neighbor_drop_prob = neighbor_drop_prob
         self.save_hyperparameters()
 
     def prepare_data(
@@ -127,6 +132,8 @@ class POIDataModule(pl.LightningDataModule):
                 flip_prob=self.flip_prob,
                 poi_file_ending=self.poi_file_ending,
                 iterations=self.surface_erosion_iterations,
+                show_neighbors=self.show_neighbors,
+                neighbor_drop_prob=self.neighbor_drop_prob,
             )
             self.val_dataset = GruberDataset(
                 self.val_df,
@@ -140,6 +147,8 @@ class POIDataModule(pl.LightningDataModule):
                 flip_prob=0.0,
                 poi_file_ending=self.poi_file_ending,
                 iterations=self.surface_erosion_iterations,
+                show_neighbors=self.show_neighbors,
+                neighbor_drop_prob=self.neighbor_drop_prob,
             )
             self.test_dataset = GruberDataset(
                 self.test_df,
@@ -153,10 +162,12 @@ class POIDataModule(pl.LightningDataModule):
                 flip_prob=0.0,
                 poi_file_ending=self.poi_file_ending,
                 iterations=self.surface_erosion_iterations,
+                show_neighbors=self.show_neighbors,
+                neighbor_drop_prob=self.neighbor_drop_prob,
             )
 
         elif self.dataset == "GruberNeighbor":  # NEU
-            self.train_dataset = GruberNeighborDataset(  
+            self.train_dataset = GruberNeighborDataset(
                 self.train_df,
                 input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
@@ -168,6 +179,7 @@ class POIDataModule(pl.LightningDataModule):
                 flip_prob=0.0,  # Explizit deaktiviert
                 poi_file_ending=self.poi_file_ending,
                 iterations=self.surface_erosion_iterations,
+                neighbor_drop_prob=self.neighbor_drop_prob,
             )
             self.val_dataset = GruberNeighborDataset(
                 self.val_df,
@@ -181,6 +193,7 @@ class POIDataModule(pl.LightningDataModule):
                 flip_prob=0.0,
                 poi_file_ending=self.poi_file_ending,
                 iterations=self.surface_erosion_iterations,
+                neighbor_drop_prob=self.neighbor_drop_prob,
             )
             self.test_dataset = GruberNeighborDataset(
                 self.test_df,
@@ -194,6 +207,7 @@ class POIDataModule(pl.LightningDataModule):
                 flip_prob=0.0,
                 poi_file_ending=self.poi_file_ending,
                 iterations=self.surface_erosion_iterations,
+                neighbor_drop_prob=self.neighbor_drop_prob,
             )
 
     def train_dataloader(self):
@@ -235,6 +249,7 @@ class POIDataModule(pl.LightningDataModule):
 
 
 class GruberDataModule(POIDataModule):
+
     def __init__(
         self,
         master_df: PathLike,
@@ -253,6 +268,8 @@ class GruberDataModule(POIDataModule):
         num_workers: int = 0,
         poi_file_ending: str = "poi.json",
         surface_erosion_iterations: int = 1,
+        show_neighbors: bool = False,
+        neighbor_drop_prob: float = 0.05,
     ):
         super().__init__(
             dataset="Gruber",
@@ -272,6 +289,8 @@ class GruberDataModule(POIDataModule):
             num_workers=num_workers,
             poi_file_ending=poi_file_ending,
             surface_erosion_iterations=surface_erosion_iterations,
+            show_neighbors=show_neighbors,
+            neighbor_drop_prob=neighbor_drop_prob,
         )
 
     def prepare_data(
