@@ -1,0 +1,357 @@
+import sys
+from pathlib import Path
+
+file = Path(__file__).resolve()
+sys.path.append(str(file.parents[1]))
+sys.path.append(str(file.parents[2]))
+from pathlib import Path
+from TPTBox import No_Logger, Log_Type, NII, BIDS_FILE, POI, Location
+from TPTBox.core.vert_constants import COORDINATE
+from joblib import Parallel, delayed
+from panoptica import Metric
+from utils.filepaths import search_path_single, search_path
+import numpy as np
+from utils.misc import surface_project_poi
+from utils.vertebra_rotation import rotate_3darray, calc_orientation_from_poi
+from report_utils import LogicReport, SPATIAL_LOGIC_CONSTRAINTS_DICT, SUBREGION_CONSTRAINT_DICT, poi_touches_subreg, save_logic_report
+from dataclasses import dataclass, field
+from TypeSaveArgParse import Class_to_ArgParse
+from tqdm import tqdm
+
+logger = No_Logger(prefix="verse_cseg")
+
+
+def make_single_vert_poi_report(
+    c: COORDINATE,
+    c_proj: COORDINATE,
+    subject_id: str,
+    vert: int,
+    poi_loc: Location,
+    other_poi: POI,
+    #
+    orig_subreg_crop: NII,
+    c_orig: COORDINATE,
+    c_orig_proj: COORDINATE,
+):
+    report_lines: list[LogicReport] = []
+
+    surface_dist = np.linalg.norm(np.asarray(c) - np.asarray(c_proj))
+    if surface_dist > 4:
+        report_lines.append(
+            LogicReport(
+                subject_name=subject_id,
+                vertebra=vert,
+                location=poi_loc,
+                relevant_data={"surface_distance_mm": surface_dist},
+                description="Large surface distance",
+            )
+        )
+
+    # check if projected poi touches allowed subregion
+    allowed_subreg = SUBREGION_CONSTRAINT_DICT.get(poi_loc.value, None)
+    try:
+        touched_subreg = poi_touches_subreg(c_orig_proj, orig_subreg_crop)
+    except IndexError:
+        logger.print(
+            f"{subject_id}-v={vert}-{poi_loc, poi_loc.value}: Projected POI coordinate {c_orig_proj} does not touch subreg mask with shape {orig_subreg_crop.shape}",
+            Log_Type.WARNING,
+        )
+        touched_subreg = None
+    if allowed_subreg is not None and touched_subreg not in allowed_subreg:
+        report_lines.append(
+            LogicReport(
+                subject_name=subject_id,
+                vertebra=vert,
+                location=poi_loc,
+                relevant_data={"touched_subregion": touched_subreg},
+                description=f"Projected POI touches invalid subregion, allowed {allowed_subreg}",
+            )
+        )
+
+    # check spatial logic constraints
+    spatial_lc_list = SPATIAL_LOGIC_CONSTRAINTS_DICT.get(poi_loc.value, [])
+    for lc in spatial_lc_list:
+        loc1 = poi_loc
+        loc2 = lc.location2
+        axis = lc.axis
+        c1 = other_poi[vert, loc1]
+        axis_idx = other_poi.get_axis(axis)
+
+        if not isinstance(loc2, list):
+            loc2 = [loc2]
+        for loc2 in loc2:
+            c2 = other_poi[vert, loc2]
+            coord_diff = np.asarray(c1) - np.asarray(c2)
+            # negate if different direction
+            if axis != other_poi.orientation[axis_idx]:
+                coord_diff[axis_idx] = -coord_diff[axis_idx]
+            if coord_diff[axis_idx] <= 0:
+                report_lines.append(
+                    LogicReport(
+                        subject_name=subject_id,
+                        vertebra=vert,
+                        location=poi_loc,
+                        relevant_data={
+                            "axis": (axis, axis_idx),
+                            "coord1": c1[axis_idx],
+                            "loc2": loc2,
+                            "coord2": c2[axis_idx],
+                            "coord_diff": coord_diff.tolist(),
+                        },
+                        description=f"Spatial logic constraint violated: {lc}",
+                    )
+                )
+    return report_lines
+
+
+def make_poi_report(
+    poi_ref: POI,
+    poi_ref_proj: POI | None,
+    subject_id: str,
+    vert_msk: NII,
+    subreg_msk: NII,
+    debug: bool = False,
+    do_rotate_around_corpus: bool = True,
+    ignore_poi: list[Location] = [],
+    # surface_msk: NII,
+) -> list[LogicReport]:
+    report_lines: list[LogicReport] = []
+
+    first_v = True
+
+    for vert in tqdm(poi_ref.keys_region(), desc="Processing vertebrae", unit="vertebra"):
+        # if vert not in [10, 28]:
+        #    continue
+        v_msk = vert_msk.extract_label(vert)
+
+        v_poi = poi_ref.extract_region(vert)
+        if poi_ref_proj is None:
+            surface_msk = v_msk.compute_surface_mask(connectivity=3, dilated_surface=False)
+            v_poi_proj = surface_project_poi(v_poi, surface_msk)
+        else:
+            v_poi_proj = poi_ref_proj.extract_region(vert)
+
+        crop = v_msk.compute_crop(dist=16)
+        # crop = v_poi.
+        v_msk_crop = v_msk.apply_crop(crop)
+        if debug:
+            v_msk_crop.save(
+                f"/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/debug/{subject_id}-v{vert}_vmsk_crop.nii.gz"
+            )
+
+        # project everything
+        # surf_crop = v_msk_crop.compute_surface_mask(connectivity=3, dilated_surface=False)
+
+        subreg_crop = subreg_msk.apply_crop(crop) * v_msk_crop
+        poi_crop = v_poi.apply_crop(crop)
+        poi_proj_crop = v_poi_proj.apply_crop(crop)
+
+        if do_rotate_around_corpus:
+            R, corpus_com, rel_to_corpus, PIR_angle_degrees = calc_orientation_from_poi(poi_crop, vert)
+            # print("rel_to_corpus", rel_to_corpus)
+            # print("R", R)
+            # v_msk_crop = v_msk_crop.set_array(rotate_3darray(v_msk_crop.get_array(), R, center=corpus_com))
+            # subreg_crop = subreg_crop.set_array(rotate_3darray(subreg_crop.get_array(), R, center=corpus_com))
+            if debug:
+                v_r_msk_crop = v_msk_crop.set_array(rotate_3darray(v_msk_crop.get_array(), R, center=corpus_com))
+                v_r_msk_crop.save(
+                    f"/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/debug/{subject_id}-v{vert}_vmsk_crop_rotated.nii.gz"
+                )
+            #
+            # surf_crop = v_msk_crop.compute_surface_mask(connectivity=3, dilated_surface=False)
+            # if debug:
+            #    surf_crop.save(
+            #        f"/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/debug/{subject_id}-v{vert}_surf_crop_rotated.nii.gz"
+            #    )
+            # surf_crop = surface_msk.apply_crop(crop) * v_msk_crop
+
+            # apply_rotation_fun = lambda x, y, z: tuple(R.dot(np.asarray((x, y, z))))
+            # center_of_shape = np.asarray([float(v_msk_crop.shape[0] / 2), float(v_msk_crop.shape[1] / 2), float(v_msk_crop.shape[2] / 2)])
+
+            def apply_rotation_fun(x, y, z) -> COORDINATE:
+                coord = np.subtract(np.asarray((x, y, z)), corpus_com)
+                rotated_coord = np.dot(coord, R)
+                rotated_coord = np.add(rotated_coord, corpus_com)
+                return tuple(rotated_coord)
+
+            poi_r_crop = poi_crop.apply_all(apply_rotation_fun)
+            poi_r_proj_crop = poi_proj_crop.apply_all(apply_rotation_fun)
+            # poi_r_proj_crop = surface_project_poi(poi_r_proj_crop, surf_crop)
+        else:
+            poi_r_crop = poi_crop
+            poi_r_proj_crop = poi_proj_crop
+        # poi_proj_crop = surface_project_poi(poi_proj_crop, surf_crop)
+
+        for poi_loc_val in poi_ref.keys_subregion():
+            poi_loc = Location(poi_loc_val)
+            if poi_loc in ignore_poi:
+                continue
+
+            c = poi_r_crop[vert, poi_loc]
+            c_proj = poi_r_proj_crop[vert, poi_loc]
+            print(poi_loc.value, poi_proj_crop[vert, poi_loc], c, c_proj) if first_v and debug else None
+
+            new_reports = make_single_vert_poi_report(
+                c,
+                c_proj,
+                subject_id,
+                vert,
+                poi_loc,
+                poi_r_proj_crop,
+                subreg_crop,
+                poi_crop[vert, poi_loc],
+                poi_proj_crop[vert, poi_loc],
+            )
+            if new_reports is not None:
+                report_lines.extend(new_reports)
+
+        first_v = False
+    return report_lines
+
+
+def _proc(subject: Path, ds_dir: Path, opt):
+    subject_id = subject.name
+    if not subject.is_dir():
+        return
+
+    # find all rawdata ct files
+    img_paths = search_path(ds_dir / opt.rawdata / subject_id, f"{subject_id}*_ct.nii.gz")
+    assert len(img_paths) > 0, f"No CT image found for subject {subject_id}"
+    for img_path in img_paths:
+        subject_ct_id = img_path.name.split(".")[0]
+        #
+        out_excel = opt.out_root.joinpath(opt.der_poi_mainpred, ds_dir.name, f"{subject_ct_id}_poi_report.xlsx")
+        if out_excel.exists():
+            logger.print(f"{subject_ct_id}: POI report already exists, skipping: {out_excel}", Log_Type.WARNING)
+            continue
+        out_excel.parent.mkdir(parents=True, exist_ok=True)
+        #
+
+        # logger.print("Subject:", subject_ct_id)
+        # img_path = search_path_single(ds_dir / RAWDATA / subject_id, f"{subject_id}*_ct.nii.gz")
+        img_bidsf = BIDS_FILE(img_path, dataset=ds_dir)
+        vert_path = img_bidsf.get_changed_path(file_type="nii.gz", bids_format="msk", info={"seg": "vert"}, parent=opt.der_vert)
+        # VERT MASK IS NOT MODIFIED, so just copy
+        assert vert_path.exists(), f"{subject_ct_id}: Original vert mask does not exist: {vert_path}"
+        subreg_path = img_bidsf.get_changed_path(file_type="nii.gz", bids_format="msk", info={"seg": "subreg"}, parent=opt.der_subreg)
+        assert subreg_path.exists(), f"{subject_ct_id}: NO subreg mask exists: {subreg_path}"
+
+        # load both masks
+        subreg_nii = NII.load(subreg_path, seg=True).reorient_()
+        subreg_nii.map_labels_({51: 49, 50: 49}, verbose=False)
+        vert_nii = NII.load(vert_path, seg=True).reorient_()
+        subreg_nii.assert_affine(other=vert_nii, verbose=logger, raise_error=True)
+
+        poi_ref_path = img_bidsf.get_changed_path(
+            file_type="json", bids_format="poi", info={"seg": "vert", "mod": "ct"}, parent=opt.der_poi_mainpred
+        )
+        poi_proj_ref_path = img_bidsf.get_changed_path(
+            file_type="json", bids_format="poi", info={"seg": "vert", "mod": "ct"}, parent=opt.der_poi_mainpred + "_sproj"
+        )
+        assert poi_ref_path.exists(), f"{subject_ct_id}: Main POI prediction file does not exist: {poi_ref_path}"
+        poi_ref = POI.load(poi_ref_path).reorient_()
+        if poi_proj_ref_path.exists():
+            poi_ref_proj = POI.load(poi_proj_ref_path).reorient_()
+        else:
+            poi_ref_proj = None
+
+        poi_4_rotation = search_path_single(ds_dir / opt.der_direction / subject_id, f"**/{subject_ct_id.split('_')[0]}*_seg-vert*poi.json")
+        if poi_4_rotation.exists():
+            poi_4_rotation = POI.load(poi_4_rotation).reorient_()
+            for v in poi_ref.keys_region():
+                for loc in [
+                    Location.Vertebra_Direction_Inferior,
+                    Location.Vertebra_Direction_Posterior,
+                    Location.Vertebra_Direction_Right,
+                    Location.Vertebra_Corpus,
+                ]:
+                    assert (v, loc) in poi_4_rotation, f"{subject_ct_id}: POI for rotation missing location {loc} in vertebra {v}"
+                    if (v, loc) not in poi_ref:
+                        poi_ref[v, loc] = poi_4_rotation[v, loc]
+
+        report_lines = make_poi_report(
+            poi_ref,
+            poi_ref_proj,
+            subject_ct_id,
+            vert_nii,
+            subreg_nii,
+            ignore_poi=opt.ignore_poi,
+        )
+
+        if len(report_lines) > 0:
+            logger.print(f"{subject_ct_id}: Saving {len(report_lines)} issues to {out_excel}", Log_Type.SAVE)
+        save_logic_report(report_lines, out_excel)
+
+
+@dataclass
+class InferenceConfig(Class_to_ArgParse):
+    root: Path = Path("/DATA/NAS/datasets_processed/CT_spine/dataset-verse-challenge/")
+    rawdata: str = "rawdata"
+    der_subreg: str = "derivatives_combined"  # "derivatives_subreg"
+    der_vert: str = "derivatives_combined"
+    der_poi_mainpred: str = "derivatives_poi_surface-neighbor-neighaug-project_gt_cc3-exclude6-v2"
+    der_direction: str = "derivatives_poi_deterministic"
+
+    out_root: Path = Path("/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis")
+
+    ignore_poi: list[Location] = field(
+        default_factory=lambda: [
+            Location.Vertebra_Direction_Inferior,
+            Location.Vertebra_Direction_Posterior,
+            Location.Vertebra_Direction_Right,
+            Location.Vertebra_Corpus,
+        ]
+    )
+    datasets: list[str] = field(
+        default_factory=lambda: [
+            "dataset-verse19training_1mmiso",
+            "dataset-verse20training_1mmiso",
+            "dataset-verse19validation_1mmiso",
+            "dataset-verse20validation_1mmiso",
+            "dataset-verse19test_1mmiso",
+            "dataset-verse20test_1mmiso",
+        ]
+    )
+
+    num_threads: int = 8
+    cprofile_this: bool = False
+
+
+if __name__ == "__main__":
+    import cProfile
+
+    opt = InferenceConfig.get_opt()
+    if opt.cprofile_this:
+        opt.num_threads = 1  # avoid multithreading issues with cprofile
+
+    for ds_dir in opt.root.iterdir():
+        if not ds_dir.is_dir():
+            continue
+        if not ds_dir.name.startswith("dataset-"):
+            continue
+
+        if ds_dir.name not in opt.datasets:
+            continue
+
+        # has rawdata folder
+        raw_dir = ds_dir.joinpath(opt.rawdata)
+        assert raw_dir.exists(), f"No rawdata dir in dataset dir: {ds_dir}"
+
+        logger.print("Processing dataset dir:", ds_dir.name, Log_Type.STAGE)
+
+        subjects = list(raw_dir.iterdir())
+
+        if not opt.cprofile_this:
+            Parallel(n_jobs=opt.num_threads)(delayed(_proc)(subject, ds_dir, opt) for subject in subjects)
+        else:
+            for subject in subjects:
+                if "601" not in subject.name:
+                    continue
+                with cProfile.Profile() as pr:
+                    _proc(subject, ds_dir, opt)
+                pr.dump_stats(
+                    f"/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/cprofiles/{ds_dir.name}_{subject.name}_poi_report.prof"
+                )
+                break
+
+        # break
