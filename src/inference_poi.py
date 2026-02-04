@@ -430,6 +430,7 @@ def preprocess_segmentation_masks(
     vert_list,
     zoom=(1, 1, 1),
     tmp_name: str = "tmp",
+    inference_flipped: bool = False,
 ):
     """
     Preprocess segmentation masks and create a master dataframe.
@@ -511,6 +512,9 @@ def preprocess_segmentation_masks(
         z_min -= padding[2][0]
         # input_data_cropped.rescale_(zoom)
 
+        # if inference_flipped:
+        #    vert_cropped.flip(vert_cropped.get_axis("R"), inplace=True)
+
         vert_cropped.save(vert_path, verbose=False)
         # input_data_cropped.save(input_data_path, verbose=False)
         surface = vert_cropped.compute_surface_mask(connectivity=3)
@@ -583,6 +587,7 @@ def preprocess_segmentation_masks(
 
 def create_prediction_poi_files(
     subject,
+    vert_msk_ref: BIDS_FILE,
     # vert_msk,
     # subreg_msk,
     dm_path,
@@ -591,6 +596,7 @@ def create_prediction_poi_files(
     poi_out,
     poi_global_out,
     project_to_surface=False,
+    inference_flipped=False,
 ):
     # Load data module parameters
     dm_params = json.load(open(dm_path, "r"))
@@ -602,13 +608,15 @@ def create_prediction_poi_files(
     zoom = dm_params.get("zoom", (1, 1, 1))
     print("zoom: ", zoom)
 
-    vert_msk = get_vertseg(container)
+    vert_msk = vert_msk_ref.open_nii()
+    vert_list = [v for v in vert_list if v in vert_msk.unique()]
+    split_info = vert_msk_ref.info["split"] if "split" in vert_msk_ref.info else None
     if input_data_type == "vertseg":
         input_data = vert_msk
     elif input_data_type == "subreg":
-        input_data = get_subreg(container)
+        input_data = get_subreg(container, split=split_info)
     elif input_data_type == "ct":
-        input_data = get_ct(container)
+        input_data = get_ct(container, split=split_info)
     elif input_data_type == "surface_msk":
         # input_data = None  # vert_msk.compute_surface_mask(connectivity=3, dilated_surface=False)
         input_data = vert_msk.compute_surface_mask(connectivity=3, dilated_surface=False)
@@ -632,6 +640,7 @@ def create_prediction_poi_files(
         vert_list,
         zoom,
         tmp_name="tmp_" + vert_out.name,
+        inference_flipped=inference_flipped,
     )
 
     print(f"inferencing subject: {subject}")
@@ -660,9 +669,23 @@ def create_prediction_poi_files(
 
         # Bring all tensors to device
         batch = {k: v.to(model.device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+        if inference_flipped:
+            flip_axis = input_data.get_axis("L") + 2  # batch, channel
+            batch["input"] = torch.flip(batch["input"], dims=[flip_axis])  # flip along the sagittal axis
+
         batch = model(batch)
 
         refined_preds_batch = batch["refined_preds"]
+        if inference_flipped:
+            # idx = [slice(None)] * refined_preds_batch.ndim
+            # idx[flip_axis] = 0
+            backflip_axis = flip_axis - 2
+            # refined_preds_batch = torch.flip(refined_preds_batch, dims=[flip_axis])  # flip back
+            refined_preds_batch[:, :, backflip_axis] = (
+                batch["input"].shape[flip_axis] - refined_preds_batch[:, :, backflip_axis]
+            )  # flip x-coordinates back
+            # TODO: need to flip LABELS as well
+
         # if use_neighbor:
         #    n_poi = refined_preds_batch.shape[1] // 3
         # refined_preds_batch = refined_preds_batch[:, n_poi : n_poi * 2, :]
@@ -671,7 +694,7 @@ def create_prediction_poi_files(
         # assert refined_preds_batch.shape[1] == 35, f"wrong refined_preds_batch shape {refined_preds_batch.shape}"
 
         if project_to_surface:
-            refined_preds_projected_batch, _ = surface_project_coords(refined_preds_batch, batch["surface"])
+            refined_preds_projected_batch, _ = surface_project_coords(refined_preds_batch, batch["surface"], requires_filling=True)
             pred_coords = refined_preds_projected_batch.squeeze().detach().cpu().numpy()
         else:
             pred_coords = refined_preds_batch.squeeze().detach().cpu().numpy()
@@ -849,16 +872,17 @@ class InferenceConfig(Class_to_ArgParse):
     datasets: list[str] = field(
         default_factory=lambda: [
             "dataset-verse19training_1mmiso",
-            "dataset-verse20training_1mmiso",
-            "dataset-verse19validation_1mmiso",
-            "dataset-verse20validation_1mmiso",
-            "dataset-verse19test_1mmiso",
-            "dataset-verse20test_1mmiso",
+            # "dataset-verse20training_1mmiso",
+            # "dataset-verse19validation_1mmiso",
+            # "dataset-verse20validation_1mmiso",
+            # "dataset-verse19test_1mmiso",
+            # "dataset-verse20test_1mmiso",
         ]
     )
     der_msk: str = "derivatives_combined"
-    der_out_base: str = "TEST_derivatives_poi_"
-    model_info: TrainedModelInfo = TrainedModelInfo.GRUBER_N_SURFACE_NEIGHAUG
+    der_out_base: str = "derivatives_poi_"
+    model_info: TrainedModelInfo = TrainedModelInfo.GRUBER_S_SURFACE
+    inference_flipped: bool = False
 
 
 if __name__ == "__main__":
@@ -886,6 +910,8 @@ if __name__ == "__main__":
         )
 
         der_out = f"{opt.der_out_base}{model_dir}-v{model_info.version}"
+        if opt.inference_flipped:
+            der_out += "_flipped"
         if project_to_surface:
             der_out += "_sproj"
         # dm_path = "ablation_study/dataloader/training/include_pois/subreg-project_gt-no_freeze-standard_architecture-excel_outliers_exclude/version_0/data_module_params.json"
@@ -900,53 +926,67 @@ if __name__ == "__main__":
         inference_subjects = 0
 
         for sub, container in bgi.enumerate_subjects():
-            # if not "601" in sub:
+            # if "004" not in sub:
             #    continue
             print(f"Subject: {sub}")
 
-            vert_msk_ref: BIDS_FILE = get_vertseg_bfile(container)
-            subreg_msk = get_subreg(container)
+            vert_msk_refs: BIDS_FILE = get_vertseg_bfile(container)
+            for vert_msk_ref in vert_msk_refs:
+                if not vert_msk_ref.exists():
+                    continue
 
-            # gt_poi_path = get_poi(container)
+                # if "split" not in vert_msk_ref.info:
+                #    continue
+                # subreg_msk = get_subreg(container)
+                subreg_msk_p = vert_msk_ref.get_changed_path(info={"seg": "subreg"}, parent=vert_msk_ref.parent)
+                if not subreg_msk_p.exists():
+                    print(f"Skip Subject: {sub} - subreg file not found for vertseg {vert_msk_ref.path}")
+                    continue
+                # gt_poi_path = get_poi(container)
 
-            if vert_msk_ref is None:  # or subreg_msk is None:
-                print(f"Skip Subject: {sub} - not all data available")
-                continue
+                if vert_msk_ref is None:  # or subreg_msk is None:
+                    print(f"Skip Subject: {sub} - not all data available")
+                    continue
 
-            vert_out = vert_msk_ref.get_changed_path(info={"seg": "vert"}, parent=der_out)
-            poi_out = vert_msk_ref.get_changed_path(bids_format="poi", info={"mod": "ct", "seg": "vert"}, file_type="json", parent=der_out)
-            poi_global_out = vert_msk_ref.get_changed_path(
-                bids_format="poi", info={"mod": "ct", "seg": "vert", "space": "global"}, file_type="mrk.json", parent=der_out
-            )
+                vert_out = vert_msk_ref.get_changed_path(info={"seg": "vert"}, parent=der_out)
+                poi_out = vert_msk_ref.get_changed_path(
+                    bids_format="poi", info={"mod": "ct", "seg": "vert"}, file_type="json", parent=der_out
+                )
+                poi_global_out = vert_msk_ref.get_changed_path(
+                    bids_format="poi", info={"mod": "ct", "seg": "vert", "space": "global"}, file_type="mrk.json", parent=der_out
+                )
 
-            if poi_global_out.exists() and poi_out.exists():
-                print(f"Skip Subject: {sub} - output POI files already exist")
-                continue
+                if poi_global_out.exists() and poi_out.exists():
+                    print(f"Skip Subject: {sub} - output POI files already exist")
+                    continue
 
-            try:
-                vert_msk = vert_msk_ref.open_nii()
-            except Exception as e:
-                print(f"Error opening vertseg: {str(e)}")
-                vert_msk = None
+                try:
+                    vert_msk = vert_msk_ref.open_nii()
+                    subreg_msk = NII.load(subreg_msk_p, seg=True)
+                except Exception as e:
+                    print(f"Error opening vertseg: {str(e)}")
+                    vert_msk = None
 
-            if vert_msk is None:  # or subreg_msk is None:
-                print(f"Skip Subject: {sub} - not all data available")
-                continue
-            # if vert_msk.shape != subreg_msk.shape:
-            #    print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and subreg {subreg_msk.shape} shapes don't match")
-            #    continue
+                if vert_msk is None:  # or subreg_msk is None:
+                    print(f"Skip Subject: {sub} - not all data available")
+                    continue
+                # if vert_msk.shape != subreg_msk.shape:
+                #    print(f"Skip Subject: {sub} - vertseg {vert_msk.shape} and subreg {subreg_msk.shape} shapes don't match")
+                #    continue
 
-            vert_msk.assert_affine(other=subreg_msk)
-            # print("Original msk meta", vert_msk)
+                vert_msk.assert_affine(other=subreg_msk)
+                # print("Original msk meta", vert_msk)
 
-            create_prediction_poi_files(
-                sub,
-                # vert_msk,
-                # subreg_msk,
-                dm_path,
-                model_path,
-                vert_out,
-                poi_out,
-                poi_global_out,
-                project_to_surface=project_to_surface,
-            )
+                create_prediction_poi_files(
+                    sub,
+                    vert_msk_ref,
+                    # vert_msk,
+                    # subreg_msk,
+                    dm_path,
+                    model_path,
+                    vert_out,
+                    poi_out,
+                    poi_global_out,
+                    project_to_surface=project_to_surface,
+                    inference_flipped=opt.inference_flipped,
+                )

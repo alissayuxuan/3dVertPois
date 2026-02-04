@@ -35,6 +35,8 @@ def _proc(name, subject, der_out: str):
                 continue
             poi_ref: BIDS_FILE = f["poi_seg-vert"][0]
             vert_ref: BIDS_FILE = f["msk_seg-vert"][0]
+            # if "split" not in vert_ref.info:
+            #    continue
 
             #####
             # outputs
@@ -66,8 +68,8 @@ def _proc(name, subject, der_out: str):
                 if v not in poi.keys_region():
                     continue
                 vpoi = poi.extract_region(v)
-                surface_nii = vert_nii.extract_label(v).compute_surface_mask(connectivity=1, dilated_surface=False)
-                det_poi = surface_project_poi(vpoi, surface_nii=surface_nii)
+                surface_nii = vert_nii.extract_label(v)  # .compute_surface_mask(connectivity=3, dilated_surface=False)
+                det_poi = surface_project_poi(vpoi, surface_nii=surface_nii, requires_filling=False)
                 poi_s = [i for i in poi.keys_subregion() if i in vpoi.keys_subregion()]
                 for s in poi_s:
                     if s == 0:
@@ -86,16 +88,17 @@ def _proc(name, subject, der_out: str):
 if __name__ == "__main__":
     ds_names = [
         "dataset-verse19training_1mmiso",
-        "dataset-verse20training_1mmiso",
-        "dataset-verse19validation_1mmiso",
-        "dataset-verse20validation_1mmiso",
-        "dataset-verse19test_1mmiso",
-        "dataset-verse20test_1mmiso",
+        # "dataset-verse20training_1mmiso",
+        # "dataset-verse19validation_1mmiso",
+        # "dataset-verse20validation_1mmiso",
+        # "dataset-verse19test_1mmiso",
+        # "dataset-verse20test_1mmiso",
     ]
 
     DER_MSK = "derivatives_combined"
-    DER_IN = "derivatives_poi_surface_project-gt_cc3-exclude6-v0"  # "derivatives_poi_deterministic"
-    der_out = DER_IN + "_sproj"
+    DER_IN = "derivatives_poi_surface-neighbor-neighaug-project_gt_cc3-exclude6-v2"
+    # "derivatives_poi_deterministic"
+    der_out = DER_IN + "_sprojTEST"
 
     for ds_name in ds_names:
 

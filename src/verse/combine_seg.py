@@ -16,12 +16,12 @@ logger = No_Logger(prefix="verse_cseg")
 
 ROOT = Path("/DATA/NAS/datasets_processed/CT_spine/dataset-verse-challenge/")
 RAWDATA = "rawdata"
-DERIV_ORIGINAL_SUBREG = "derivatives_subreg"  # "derivatives_subreg"
-DERIV_SUBREG_NEW = "derivatives-template_padd"
+DERIV_ORIGINAL_SUBREG = "segmentation_origins/derivatives_subreg"  # "derivatives_subreg"
+DERIV_SUBREG_NEW = "segmentation_origins/derivatives-template_padd"
 DERIV_ORIGINAL = "derivatives"
-DERIV_C_ONE = "derivatives-template_padd"
+DERIV_C_ONE = "segmentation_origins/derivatives-template_padd"
 
-DERIV_OUT = "derivatives_combined"
+DERIV_OUT = "TEST_derivatives_combined"
 
 
 def _proc(subject: Path, ds_dir: Path):
@@ -71,6 +71,8 @@ def _proc(subject: Path, ds_dir: Path):
         # always use new subregion mask if exists
         subreg_path = subreg_new_path if not subreg_ori_path.exists() else subreg_ori_path
 
+        take_new_for_vert = []
+
         img_nii = NII.load(img_path, seg=False)
 
         # load both masks
@@ -80,6 +82,14 @@ def _proc(subject: Path, ds_dir: Path):
         vert_arr = vert_nii.get_seg_array()
         # subreg_nii.resample_from_to_(vert_nii)
         subreg_nii.assert_affine(other=vert_nii, verbose=logger, raise_error=True)
+
+        if len(take_new_for_vert) > 0:
+            subreg_n_nii = NII.load(subreg_new_path, seg=True).resample_from_to_(img_nii, verbose=False)
+            subreg_n_nii.map_labels_({51: 49, 50: 49}, verbose=False)
+            subreg_n_nii.assert_affine(other=vert_nii, verbose=logger, raise_error=True)
+            subreg_n_arr = subreg_n_nii.get_seg_array()
+            subreg_n_arr = vert_nii.extract_label(take_new_for_vert) * subreg_n_arr
+            subreg_nii[subreg_n_arr != 0] = subreg_n_arr[subreg_n_arr != 0]
 
         # then add anything in vert mask to nearest subreg region
         subreg_arr_cleaned, _, deletion_map = assign_missing_cc(
@@ -125,8 +135,10 @@ if __name__ == "__main__":
         # filter
         if not ds_dir.name.startswith("dataset-"):
             continue
-        # if not ds_dir.name == "dataset-verse19training_1mmiso":
+        # if not ds_dir.name == "dataset-verse20test_1mmiso":
         #    continue
+        if not ds_dir.name == "dataset-verse19training_1mmiso":
+            continue
 
         # has rawdata folder
         raw_dir = ds_dir.joinpath(RAWDATA)
@@ -136,11 +148,11 @@ if __name__ == "__main__":
 
         subjects = list(raw_dir.iterdir())
 
-        Parallel(n_jobs=25, backend="threading")(delayed(_proc)(subject, ds_dir) for subject in subjects)
+        Parallel(n_jobs=10, backend="threading")(delayed(_proc)(subject, ds_dir) for subject in subjects)
         # for subject in subjects:
-        #    if subject.name != "sub-verse014":
-        #        continue
-        #    _proc(subject, ds_dir)
-        #    break
+        # if "e766" not in subject.name:
+        #    continue
+        # _proc(subject, ds_dir)
+        # break
 
         # break

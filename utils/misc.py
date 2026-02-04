@@ -37,7 +37,7 @@ def one_hot_encode_batch(batch_tensor: torch.Tensor) -> torch.Tensor:
     return batch_tensor
 
 
-def surface_project_poi_vert_wise(poi: POI, surface_nii: NII):
+def surface_project_poi_vert_wise(poi: POI, surface_nii: NII, requires_filling: bool = True):
     poi_new = poi.make_empty_POI()
     for v in poi.keys_region():
         assert v in surface_nii.unique(), f"Surface NII does not contain vertebra {v}"
@@ -45,34 +45,42 @@ def surface_project_poi_vert_wise(poi: POI, surface_nii: NII):
         # extract surface for this vertebra
         surf_v_nii = surface_nii.extract_label(v)
         poi_v = poi.extract_region(v)
-        poi_v_proj = surface_project_poi(poi_v, surf_v_nii)
+        poi_v_proj = surface_project_poi(poi_v, surf_v_nii, requires_filling=requires_filling)
         for r, s, c in poi_v_proj.items():
             poi_new[r, s] = c
     return poi_new
 
 
-def surface_project_poi(poi: POI, surface_nii: NII):
+def surface_project_poi(poi: POI, surface_nii: NII, requires_filling: bool = True):
+    crop = surface_nii.compute_crop(dist=4)
+    poi_crop = poi.apply_crop(crop)
     # convert poi to coordinates tensor
     coord_keys = []
     coords_list = []
-    for r, s, c in poi.items():
+    for r, s, c in poi_crop.items():
         coord_keys.append((r, s))
         coords_list.append(c)
     # surface_nii to torch tensor
-    surface_tensor = torch.from_numpy(surface_nii.get_array()).unsqueeze(0).to(torch.float32)  # (1,D,H,W)
+    surface_tensor = torch.from_numpy(surface_nii.apply_crop(crop).get_array()).unsqueeze(0).to(torch.float32)  # (1,D,H,W)
     # run surface_project_coords
     coords_tensor = torch.from_numpy(np.asarray(coords_list)).unsqueeze(0).to(torch.float32)  # (1,N,3)
-    projected_coords, _ = surface_project_coords(coords_tensor, surface_tensor)  # (1,N,3)
+    projected_coords, _ = surface_project_coords(coords_tensor, surface_tensor, requires_filling=requires_filling)  # (1,N,3)
     # transfer back
-    projected_poi = poi.make_empty_POI()
+    projected_poi = poi_crop.make_empty_POI()
     for i, (r, s) in enumerate(coord_keys):
         projected_poi[r, s] = projected_coords[0, i].cpu().numpy()
+    final_poi = projected_poi.apply_crop_reverse(crop, surface_nii.shape)
     # return
-    return projected_poi
+    return final_poi
 
 
-def surface_project_coords(coordinates, surface, debug=False):
-    return surface_project_coords_marchingcubes(coordinates, surface, debug=debug)
+def surface_project_coords(
+    coordinates,
+    surface,
+    debug=False,
+    requires_filling: bool = True,
+):
+    return surface_project_coords_marchingcubes(coordinates, surface, debug=debug, requires_filling=requires_filling)
 
 
 def fill_holes_3d(surface_mask):
@@ -306,6 +314,7 @@ def surface_project_coords_marchingcubes(
     surface_mask,
     level=0.5,
     debug=False,
+    requires_filling: bool = False,
 ):
     """
     coordinates: (B, N, 3) or (N, 3)
@@ -336,7 +345,8 @@ def surface_project_coords_marchingcubes(
 
         if debug:
             np_to_bids_nii(mask_np).save("/DATA/NAS/ongoing_projects/hendrik/poi_prediction/test_mask_np.nii.gz")
-        # mask_np = np_fill_holes(mask_np)
+        if requires_filling:
+            mask_np = np_fill_holes(mask_np)
         if debug:
             np_to_bids_nii(mask_np).save("/DATA/NAS/ongoing_projects/hendrik/poi_prediction/test_mask_np_filled.nii.gz")
         (verts,) = (extract_surface_vertices(mask_np, level=level),)

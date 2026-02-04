@@ -9,9 +9,16 @@ from TPTBox import No_Logger, Log_Type, NII, BIDS_FILE, POI, Location, Vertebra_
 from joblib import Parallel, delayed
 from panoptica import Metric
 from utils.filepaths import search_path_single, search_path
+from utils.vertebra_rotation import (
+    calc_orientation_from_poi,
+    move_poi_along_axis,
+    find_extreme_point_along_axis,
+    get_axis_direction_vector,
+)
 import numpy as np
+from report_utils import SUBREGION_CONSTRAINT_DICT
 import shutil
-from utils.misc import surface_project_poi, surface_project_poi_vert_wise
+from utils.misc import surface_project_poi_vert_wise
 
 logger = No_Logger(prefix="verse_cseg")
 
@@ -19,18 +26,23 @@ ROOT = Path("/DATA/NAS/datasets_processed/CT_spine/dataset-verse-challenge/")
 RAWDATA = "rawdata"
 DERIV_SUBREG = "derivatives_combined"  # "derivatives_subreg"
 DERIV_VERT = "derivatives_combined"
-
+#
 DERIV_POI_MAINPRED = "derivatives_poi_surface-neighbor-neighaug-project_gt_cc3-exclude6-v2"
 DERIV_POI_PREDS = [
-    "derivatives_poi_surface-neighbor-neighaug-project_gt_cc3-exclude6",
-    "derivatives_poi_surface_project-gt_cc3-exclude6",
+    "derivatives_poi_surface-neighbor-neighaug-project_gt_cc3-exclude6-v0",
+    "derivatives_poi_surface_project-gt_cc3-exclude6-v0",
 ]
 DERIV_DET = "derivatives_poi_deterministic"
-DERIV_OUT = "derivatives_poi_automatic_correction"
+#
+DERIV_OUT = "derivatives_poi_automatic_correction-v3"
 # TODO use reports and don't use points that are marked there?
 
 
-def _proc(subject: Path, ds_dir: Path):
+def _proc(
+    subject: Path,
+    ds_dir: Path,
+    verbose=False,
+):
     subject_id = subject.name
     if not subject.is_dir():
         return
@@ -88,7 +100,7 @@ def _proc(subject: Path, ds_dir: Path):
         poi_paths[DERIV_DET] = img_bidsf.get_changed_path(
             file_type="json", bids_format="poi", info={"seg": "vert", "source": "deterministic"}, parent=DERIV_DET
         )
-        poi_dict: dict[str, POI] = {k: POI.load(v) if v.exists() else None for k, v in poi_paths.items()}
+        poi_dict: dict[str, POI] = {k: POI.load(v) if v.exists() else None for k, v in poi_paths.items()}  # type: ignore
 
         # project everything
         poi_ref_proj_path = img_bidsf.get_changed_path(
@@ -97,7 +109,7 @@ def _proc(subject: Path, ds_dir: Path):
         if poi_ref_proj_path.exists():
             poi_ref_proj = POI.load(poi_ref_proj_path)
         else:
-            poi_ref_proj = surface_project_poi_vert_wise(poi_ref, surface_nii)
+            poi_ref_proj = surface_project_poi_vert_wise(poi_ref, vert_nii, requires_filling=False)
             poi_ref_proj.save(poi_ref_proj_path)
 
         #
@@ -113,13 +125,23 @@ def _proc(subject: Path, ds_dir: Path):
             logger.print(f"{subject_ct_id}: No POI predictions found, skipping", Log_Type.FAIL)
             continue
 
+        # calc orientation of every vertebra to be used later
+        vert_orientations = {}
+        for idx, vert in enumerate(vert_nii.unique()):  # skip first and last
+            if DERIV_DET in poi_dict and poi_dict[DERIV_DET] is not None and idx != 0 and idx != len(vert_nii.unique()) - 1:
+                vert_orientations[vert] = calc_orientation_from_poi(poi_dict[DERIV_DET], vert)[2]
+            else:
+                vert_orientations[vert] = None
+
+        remove_pois = []
+
         for r, s, c in poi_ref.items():
             c_new = np.asarray(c)
             vert_instance = Vertebra_Instance(r)
             s_location = Location(s)
             # for each reference poi, find corresponding pois in other predictions
             # then compute distances
-            other_c = {k: np.asarray(v[r, s]) for k, v in poi_dict.items()}
+            other_c = {k: np.asarray(v[r, s]) for k, v in poi_dict.items() if [r, s] in v}  # type: ignore
             other_dist = {k: np.linalg.norm(c_new - pc) for k, pc in other_c.items()}
             other_dist = dict(sorted(other_dist.items(), key=lambda x: x[1]))
             other_dist_sorted_keys = other_dist.keys()
@@ -129,48 +151,160 @@ def _proc(subject: Path, ds_dir: Path):
             # TODO: remove all candidate points that have an issue based on the report thingy
             # if none survive, keep original
 
-            ##
-            # TODO do we require rotation here? makes it complex
-            ##
+            # remove points where the subregion is missing
+            allowed_subreg = SUBREGION_CONSTRAINT_DICT.get(s_location.value, None)
+            avilable_subregs = (subreg_nii * vert_nii.extract_label(r)).unique()
+            if allowed_subreg is not None and all(sr not in avilable_subregs for sr in allowed_subreg):
+                logger.print(
+                    f"{subject_ct_id} V{vert_instance.value} {s_location.name}: No allowed subregions {allowed_subreg} available in subreg mask {avilable_subregs}, removing POI",
+                    verbose=verbose,
+                )
+                remove_pois.append((r, s))
+                continue
+
+            if s in [
+                Location.Muscle_Inserts_Articulate_Process_Superior_Left.value,
+                Location.Muscle_Inserts_Articulate_Process_Superior_Right.value,
+            ]:
+                # move towards up for a couple voxels
+                # axis_idx = poi_ref.get_axis("S")
+                shift = 3
+                c_new = move_poi_along_axis(c_new, poi_ref, "S", vert_orientations[r], 3)
+                # inversed = poi_ref.orientation[axis_idx] != "S"
+                # shift = 3 * (1 if not inversed else -1)
+                # c_new[axis_idx] = c_new[axis_idx] + shift
+                logger.print(
+                    f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Superior Articulate Process POI shifted {shift} voxels along S axis",
+                    verbose=verbose,
+                )
+
             if vert_instance in Vertebra_Instance.thoracic():
                 if s == Location.Muscle_Inserts_Spinosus_Process.value:
                     # proc. spinosus. use most middle one in L/R dimension
-                    # take average except for longest distance?
-                    ks = list(other_dist_sorted_keys)
+                    # take average except for longest distance
+                    ks = list(other_dist_sorted_keys)[:-1]
                     all_x = [pc for k, pc in other_c.items() if k in ks] + [c_new]
                     c_new = np.mean(all_x, axis=0)
+                    # move a little back
+                    if vert_orientations[r] is not None:
+                        c_new = move_poi_along_axis(c_new, poi_ref, "P", vert_orientations[r], 3)
                     logger.print(
-                        f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Spinosus POI adjusted to mean of closest predictions of {all_x}"
+                        f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Spinosus POI adjusted to mean of closest predictions of {all_x}",
+                        verbose=verbose,
+                    )
+
+                # thoracic: lower inferior facet POI
+                if s in [
+                    Location.Muscle_Inserts_Articulate_Process_Inferior_Left.value,
+                    Location.Muscle_Inserts_Articulate_Process_Inferior_Right.value,
+                ]:
+                    # take average of neighbor predictions
+                    ks = list(other_dist_sorted_keys)
+                    all_x = [pc for k, pc in other_c.items() if k in ks if "neighbor" in k] + [c_new]
+                    c_new = np.mean(all_x, axis=0)
+
+                    if vert_orientations[r] is not None:
+                        c_new = move_poi_along_axis(c_new, poi_ref, "I", vert_orientations[r], 3)
+                    logger.print(
+                        f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Spinosus POI adjusted to mean of closest predictions of {all_x}",
+                        verbose=verbose,
                     )
 
             # Corpus Anterior Edge points, so superior or inferior corpus points
+            # ALL POIS: take most anterior point. then shift 3 voxels anterior then surface project again
             if s in [117, 101, 109, 119, 103, 111]:
                 # anterior axis
-                axis_idx = poi_ref.get_axis("A")
-                inversed = poi_ref.orientation[axis_idx] != "A"
                 # take most anterior point
-                all_a = {k: pc for k, pc in other_c.items()}
+                all_a = {k: pc for k, pc in other_c.items() if "deterministic" not in k}
                 all_a["ref"] = c_new
-                all_a_sorted = dict(sorted(all_a.items(), key=lambda x: x[1][axis_idx], reverse=inversed))
+                # all_a_sorted = dict(sorted(all_a.items(), key=lambda x: x[1][axis_idx], reverse=inversed))
                 # take most anterior
-                k_best = list(all_a_sorted.keys())[0]
-                logger.print(f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Anterior POI selected from {k_best}")
-                c_new = all_a_sorted[k_best]
+                # k_best = list(all_a_sorted.keys())[0]
+                candidates = list(all_a.values())
+                c_new = find_extreme_point_along_axis(candidates, poi_ref, "A", vert_orientations[r])
+                logger.print(
+                    f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Anterior POI selected from {candidates}", verbose=verbose
+                )
+                # c_new = all_a_sorted[k_best]
+                c_new = move_poi_along_axis(c_new, poi_ref, "A", vert_orientations[r], 3)
 
-                # move 3 voxel anteriorly
-                shift = 3 * (1 if not inversed else -1)
-                c_new[axis_idx] = c_new[axis_idx] + shift
-            # ALL POIS: take most anterior point. then shift 3 voxels anterior then surface project again
-            # TODO thoracic: lower inferior facet POI
-            # take average of neighbor predictions, then move along the vector to the superior POI
-            # TODO: lumbar: lower inferior facet POI
-            # take lowest point of all predictions
+            # lumbar: lower inferior facet POI
+            if vert_instance in Vertebra_Instance.lumbar():
+                if s in [
+                    Location.Muscle_Inserts_Articulate_Process_Inferior_Left.value,
+                    Location.Muscle_Inserts_Articulate_Process_Inferior_Right.value,
+                ]:
+                    # take lowest point of all predictions
+                    ks = list(other_dist_sorted_keys)
+                    all_x = [pc for k, pc in other_c.items() if k in ks and "deterministic" not in k] + [c_new]
+                    candidates = all_x
+                    c_new = find_extreme_point_along_axis(candidates, poi_ref, "I", vert_orientations[r])
+                    # find axis index for inferior
+                    # axis_idx = poi_ref.get_axis("I")
+                    # inversed = poi_ref.orientation[axis_idx] != "I"
+                    # all_x_sorted = sorted(all_x, key=lambda x: x[axis_idx], reverse=inversed)
+                    # c_new = all_x_sorted[0]
+                    logger.print(
+                        f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Lumbar Inferior Articulate POI adjusted to extremum of closest predictions of {all_x}",
+                        verbose=verbose,
+                    )
+                    if vert_orientations[r] is not None:
+                        c_new = move_poi_along_axis(c_new, poi_ref, "I", vert_orientations[r], 2)
 
-            # TODO: remove points where the subregion is missing
+            # costalis: most lateral point of all predictions
+            if s in [82, 83]:  # left/right costal process
+                dir = "L" if s == 83 else "R"
+                # axis_idx = poi_ref.get_axis("L" if s == 83 else "R")
+                # inversed = poi_ref.orientation[axis_idx] != ("L" if s == 83 else "R")
+                all_x = [pc for k, pc in other_c.items()] + [c_new]
+                # all_x_sorted = sorted(all_x, key=lambda x: x[axis_idx], reverse=inversed)
+                # c_new = all_x_sorted[0]
+                c_new = find_extreme_point_along_axis(all_x, poi_ref, dir, vert_orientations[r])
+                logger.print(
+                    f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Costal Process POI adjusted to extremum of closest predictions of {all_x}",
+                    verbose=verbose,
+                )
+                if vert_orientations[r] is not None:
+                    c_new = move_poi_along_axis(c_new, poi_ref, dir, vert_orientations[r], 2)
 
-            # TODO: costalis: most lateral point of all predictions
             poi_ref[r, s] = tuple(c_new)
-        poi_ref_proj = surface_project_poi_vert_wise(poi_ref, surface_nii)
+
+        for rp in remove_pois:
+            poi_ref.remove_(rp)
+        if len(remove_pois) > 0:
+            logger.print(f"Removed the points {remove_pois} from POI of {subject_ct_id}", Log_Type.STRANGE)
+
+        poi_ref_proj = surface_project_poi_vert_wise(poi_ref, vert_nii, requires_filling=False)
+
+        # Post processing some points
+        neigh_t_b = {
+            124: (117, 119),
+            108: (101, 103),
+            116: (109, 111),
+        }
+        # Corpus medial points, move towards half of superior direction between major and minor
+        for v in poi_ref_proj.keys_region():
+            for s in [124, 108, 116]:
+                if (v, s) not in poi_ref_proj:
+                    continue
+                t, b = neigh_t_b[s]
+                if (v, t) in poi_ref_proj and (v, b) in poi_ref_proj:
+                    c_t = np.asarray(poi_ref_proj[v, t])
+                    c_b = np.asarray(poi_ref_proj[v, b])
+                    axis_s = get_axis_direction_vector(vert_orientations[v], poi_ref_proj, "S")
+                    superior_n = 0.5 * (np.dot(c_t, axis_s) + np.dot(c_b, axis_s))
+                    superior_d = superior_n - np.dot(np.asarray(poi_ref_proj[v, s]), axis_s)
+                    c_new = np.asarray(poi_ref_proj[v, s]) + axis_s * superior_d
+
+                    # c_new = move_poi_along_axis(c_new, poi_ref, "S", vert_orientations[v], 2)
+                    poi_ref_proj[v, s] = tuple(c_new)
+                    # logger.print(
+                    #    f"{subject_ct_id} V{v} {Location(s).name}: Corpus Medial POI adjusted to half between superior and inferior points shifted S by 2 voxels",
+                    #    verbose=verbose,
+                    # )
+                #
+
+        poi_ref_proj = surface_project_poi_vert_wise(poi_ref_proj, vert_nii, requires_filling=False)
         surface_nii.save(poi_out_path.with_suffix(".nii.gz"))
         poi_ref_proj.save(poi_out_path)
         poi_ref_proj.to_global().save_mrk(poi_out_path_global, split_by_region=True)
@@ -183,7 +317,7 @@ if __name__ == "__main__":
         if not ds_dir.name.startswith("dataset-"):
             continue
 
-        if not ds_dir.name == "dataset-verse20validation_1mmiso":
+        if not ds_dir.name == "dataset-verse19training_1mmiso":
             continue
 
         # has rawdata folder
@@ -192,11 +326,11 @@ if __name__ == "__main__":
 
         logger.print("Processing dataset dir:", ds_dir.name, Log_Type.STAGE)
 
-        subjects = list(raw_dir.iterdir())
+        subjects = sorted(list(raw_dir.iterdir()), key=lambda x: x.name)
 
-        # Parallel(n_jobs=8)(delayed(_proc)(subject, ds_dir) for subject in subjects)
-        for subject in subjects:
-            _proc(subject, ds_dir)
-            break
+        Parallel(n_jobs=12)(delayed(_proc)(subject, ds_dir) for subject in subjects)
+        # for subject in subjects:
+        #    _proc(subject, ds_dir)
+        # break
 
         # break

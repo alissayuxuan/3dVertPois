@@ -100,7 +100,8 @@ def _proc(subject: Path, ds_dir: Path):
                 if CHECK_SUBREG_LABELS:
                     for v in vert_label_c:
                         s_labels = subreg_nii * vert_nii.extract_label(v)
-                        s_labels = s_labels.unique()
+                        s_labels = s_labels.volumes()
+                        s_labels_exist = [sl for sl, sv in s_labels.items() if sv >= 50]
                         missing_label = []
                         for sl in [41, 42, 49]:
                             known_issue = (
@@ -110,10 +111,12 @@ def _proc(subject: Path, ds_dir: Path):
                                 and sl in KNOWN_MISSING_LABELS[subject_ct_id][v]
                                 else False
                             )
-                            if sl not in s_labels and not known_issue:
+                            if sl not in s_labels_exist and not known_issue:
                                 missing_label.append(sl)
                         if len(missing_label) > 0:
                             logger.print(f"{subject_ct_id}: Subreg labels {missing_label} missing for vert {v}\n", Log_Type.FAIL)
+                        if 9 - len(s_labels_exist) >= 3:
+                            logger.print(f"{subject_ct_id}: Very few subreg labels found for vert {v}: {s_labels_exist}\n", Log_Type.FAIL)
 
                 if CHECK_BINARY_DSC:
                     # check that subreg matches vert perfectly
@@ -170,7 +173,7 @@ if __name__ == "__main__":
             continue
         if not ds_dir.name.startswith("dataset-"):
             continue
-        # if not ds_dir.name.startswith("dataset-verse20"):
+        # if not ds_dir.name == "dataset-verse20test_1mmiso":
         #    continue
 
         # has rawdata folder
@@ -182,5 +185,7 @@ if __name__ == "__main__":
 
         Parallel(n_jobs=10)(delayed(_proc)(subject, ds_dir) for subject in subjects)
         # for subject in subjects:
-
+        # if "gl195" not in subject.name:
+        #    continue
+        #    _proc(subject, ds_dir)
         # break

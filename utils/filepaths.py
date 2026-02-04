@@ -28,7 +28,7 @@ def search_path(basepath: str | Path, query: str, verbose: bool = False, suppres
     return paths
 
 
-def search_path_single(basepath: str | Path, query: str, verbose: bool = False) -> Path:
+def search_path_single(basepath: str | Path, query: str, verbose: bool = False, raise_missing: bool = False) -> None | Path:
     """Searches from basepath with query
     Args:
         basepath: ground path to look into
@@ -39,6 +39,8 @@ def search_path_single(basepath: str | Path, query: str, verbose: bool = False) 
         First found path
     """
     paths = search_path(basepath, query, verbose=verbose)
+    if not raise_missing and len(paths) != 1:
+        return None
     if len(paths) == 0:
         raise FileNotFoundError(f"did not find any paths in {basepath}{query}")
     if len(paths) > 1:

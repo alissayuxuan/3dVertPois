@@ -144,11 +144,11 @@ def _proc(name, subject, der_out: str):
 
 if __name__ == "__main__":
     ds_names = [
-        "dataset-verse19training_1mmiso",
-        "dataset-verse20training_1mmiso",
-        "dataset-verse19validation_1mmiso",
-        "dataset-verse20validation_1mmiso",
-        "dataset-verse19test_1mmiso",
+        # "dataset-verse19training_1mmiso",
+        # "dataset-verse20training_1mmiso",
+        # "dataset-verse19validation_1mmiso",
+        # "dataset-verse20validation_1mmiso",
+        # "dataset-verse19test_1mmiso",
         "dataset-verse20test_1mmiso",
     ]
 
@@ -160,7 +160,7 @@ if __name__ == "__main__":
             parents=["derivatives_combined"],
         )
 
-        der_out = "derivatives_poi_deterministic-new"
+        der_out = "derivatives_poi_deterministic"
 
         Parallel(n_jobs=10, backend="threading")(
             delayed(_proc)(name, subject, der_out) for name, subject in bgi.enumerate_subjects(sort=True)

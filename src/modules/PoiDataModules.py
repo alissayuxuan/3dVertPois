@@ -6,6 +6,7 @@ from typing import TypeVar
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+
 # from BIDS import BIDS_Global_info
 from TPTBox import BIDS_Global_info
 import json
@@ -104,17 +105,11 @@ class POIDataModule(pl.LightningDataModule):
 
         # Only keep rows where vertebra is in "include_vert_list"
         if self.include_vert_list is not None:
-            self.master_df = self.master_df[
-                self.master_df["vertebra"].isin(self.include_vert_list)
-            ]
+            self.master_df = self.master_df[self.master_df["vertebra"].isin(self.include_vert_list)]
 
-        self.train_df = self.master_df[
-            self.master_df["subject"].isin(self.train_subjects)
-        ]
+        self.train_df = self.master_df[self.master_df["subject"].isin(self.train_subjects)]
         self.val_df = self.master_df[self.master_df["subject"].isin(self.val_subjects)]
-        self.test_df = self.master_df[
-            self.master_df["subject"].isin(self.test_subjects)
-        ]
+        self.test_df = self.master_df[self.master_df["subject"].isin(self.test_subjects)]
 
         if self.transform_config is not None:
             transform = [create_transform(self.transform_config)]
@@ -176,7 +171,7 @@ class POIDataModule(pl.LightningDataModule):
                 include_poi_list=self.include_poi_list,
                 include_vert_list=self.include_vert_list,
                 transforms=transform,
-                flip_prob=0.0,  # Explizit deaktiviert
+                flip_prob=self.flip_prob,  # Explizit deaktiviert
                 poi_file_ending=self.poi_file_ending,
                 iterations=self.surface_erosion_iterations,
                 neighbor_drop_prob=self.neighbor_drop_prob,
@@ -216,7 +211,7 @@ class POIDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=True,
-            #collate_fn=custom_collate_fn
+            # collate_fn=custom_collate_fn
         )
 
     def train_noaug_dataloader(self):
@@ -236,7 +231,7 @@ class POIDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=False,
-            #collate_fn=custom_collate_fn
+            # collate_fn=custom_collate_fn
         )
 
     def test_dataloader(self):
@@ -306,24 +301,26 @@ class GruberDataModule(POIDataModule):
             get_subreg=get_subreg,
             get_vertseg=get_vertseg,
         )
-        super().prepare_data(
-            bids_surgery_info, save_path, gruber_get_files, rescale_zoom
-        )
+        super().prepare_data(bids_surgery_info, save_path, gruber_get_files, rescale_zoom)
+
 
 class GruberNeighborDataModule(POIDataModule):
-    def __init__(self, **kwargs):        
+    def __init__(self, **kwargs):
         # deactivate horizontal flip
-        if kwargs.get('flip_prob', 0) > 0:
-            print("WARNING: flip_prob set to 0.0 for neighbor dataset")
-            kwargs['flip_prob'] = 0.0
-            
-        #kwargs['input_shape'] = (120, 121, 149)
+        if kwargs.get("flip_prob", 0) > 0:
+            print(f"WARNING: flip_prob set to {kwargs.get('flip_prob', 0)} for neighbor dataset")
+            # kwargs["flip_prob"] = 0.0
+
+        # kwargs['input_shape'] = (120, 121, 149)
         super().__init__(dataset="GruberNeighbor", **kwargs)
 
     def prepare_data(self, bids_surgery_info, save_path, rescale_zoom=None):
         gruber_get_files = partial(
-            get_files, get_poi=get_gruber_poi, get_ct=get_ct, 
-            get_subreg=get_subreg, get_vertseg=get_vertseg,
+            get_files,
+            get_poi=get_gruber_poi,
+            get_ct=get_ct,
+            get_subreg=get_subreg,
+            get_vertseg=get_vertseg,
         )
         super().prepare_data(bids_surgery_info, save_path, gruber_get_files, rescale_zoom)
 
@@ -333,7 +330,7 @@ def create_data_module(config):
     module_params = config["params"]
     if module_type == "GruberDataModule":
         return GruberDataModule(**module_params)
-    elif module_type == "GruberNeighborDataModule":  
+    elif module_type == "GruberNeighborDataModule":
         return GruberNeighborDataModule(**module_params)
     else:
         raise ValueError(f"Data module type {module_type} not recognized")
@@ -342,7 +339,7 @@ def create_data_module(config):
 if __name__ == "__main__":
     config_path = "neighbors-test/datamodule_config.json"
     with open(config_path, "r") as f:
-            config = json.load(f)
+        config = json.load(f)
 
     data_module = create_data_module(config)
     data_module.setup()

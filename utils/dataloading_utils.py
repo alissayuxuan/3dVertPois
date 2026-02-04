@@ -4,6 +4,7 @@ from typing import Callable
 
 import numpy as np
 import torch
+
 # from BIDS import NII, POI
 # from BIDS.bids_files import Subject_Container
 from TPTBox import NII, Subject_Container
@@ -31,11 +32,7 @@ def get_gt_pois(poi, vertebra, poi_indices):
         torch.Tensor: The POI coordinates as a tensor.
     """
     coords = [
-        (
-            np.array((-1, -1, -1))
-            if not (vertebra, p_idx) in poi.keys()
-            else np.array(poi.centroids[vertebra, p_idx])
-        )
+        (np.array((-1, -1, -1)) if not (vertebra, p_idx) in poi.keys() else np.array(poi.centroids[vertebra, p_idx]))
         for p_idx in poi_indices
     ]
 
@@ -49,9 +46,7 @@ def get_gt_pois(poi, vertebra, poi_indices):
     missing_poi_list_idx = np.all(coords == -1, axis=1)  # Shape: (n_pois,)
 
     # Get the indices of missing pois
-    missing_pois = np.array(
-        [poi_idx for i, poi_idx in enumerate(poi_indices) if missing_poi_list_idx[i]]
-    )
+    missing_pois = np.array([poi_idx for i, poi_idx in enumerate(poi_indices) if missing_poi_list_idx[i]])
 
     return torch.from_numpy(coords), torch.from_numpy(missing_pois)
 
@@ -146,14 +141,7 @@ def embed_patch(patch, target_shape, center):
 
     # Calculate the actual start and end indices in the patch to be used
     patch_start = [0 if start_indices[i] >= 0 else -start_indices[i] for i in range(3)]
-    patch_end = [
-        (
-            p
-            if end_indices[i] <= target_shape[i]
-            else p - (end_indices[i] - target_shape[i])
-        )
-        for i in range(3)
-    ]
+    patch_end = [(p if end_indices[i] <= target_shape[i] else p - (end_indices[i] - target_shape[i])) for i in range(3)]
 
     # Adjust start and end indices to be within target tensor bounds
     start_indices = [max(0, start) for start in start_indices]
@@ -194,9 +182,7 @@ def compute_surface(msk: torch.tensor, iterations=1) -> torch.tensor:
     return torch.from_numpy(surface)
 
 
-def one_hot_encode_3d(
-    array: np.ndarray, subreg_ids: list[int] = [41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
-) -> np.ndarray:
+def one_hot_encode_3d(array: np.ndarray, subreg_ids: list[int] = [41, 42, 43, 44, 45, 46, 47, 48, 49, 50]) -> np.ndarray:
     """Convert a 3D integer numpy array to one-hot encoding with the channel as the
     first dimension.
 
@@ -252,9 +238,7 @@ def apply_dictionary_transform(
     return im, subreg, vertseg, transformed_data_dict["target"]
 
 
-def get_subreg_com(
-    subreg: ndarray, subregs=[41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
-) -> ndarray:
+def get_subreg_com(subreg: ndarray, subregs=[41, 42, 43, 44, 45, 46, 47, 48, 49, 50]) -> ndarray:
     """Compute the center of mass of the subregional segmentation.
 
     Args:
@@ -303,9 +287,7 @@ def pad_array_to_shape(arr, target_shape):
     pad_d2 = pad_d + (target_shape[2] - arr.shape[2]) % 2
 
     # Apply padding
-    padded_arr = np.pad(
-        arr, ((pad_h, pad_h2), (pad_w, pad_w2), (pad_d, pad_d2)), mode="constant"
-    )
+    padded_arr = np.pad(arr, ((pad_h, pad_h2), (pad_w, pad_w2), (pad_d, pad_d2)), mode="constant")
 
     offset = (pad_h, pad_w, pad_d)
 
@@ -338,18 +320,14 @@ def heatmaps_to_coords(pred_heatmaps):
     batch_size, n_pois, _, _, _ = pred_heatmaps.shape
 
     # Reshape pred_heatmaps and heatmap_coords for element-wise multiplication
-    pred_heatmaps_reshaped = pred_heatmaps.view(
-        batch_size, n_pois, -1
-    )  # Shape: (batch_size, n_pois, H*W*D)
+    pred_heatmaps_reshaped = pred_heatmaps.view(batch_size, n_pois, -1)  # Shape: (batch_size, n_pois, H*W*D)
     heatmap_coords = create_coordinate_tensor(pred_heatmaps.shape[2:]).to(device)
     heatmap_coords_reshaped = heatmap_coords.view(3, -1)  # Shape: (3, H*W*D)
 
     heatmap_coords_reshaped = heatmap_coords_reshaped.to(device)
 
     # Element-wise multiplication and sum along the last dimension
-    weighted_coords = torch.sum(
-        pred_heatmaps_reshaped.unsqueeze(-1) * heatmap_coords_reshaped.t(), dim=2
-    )  # Shape: (batch_size, n_pois, 3)
+    weighted_coords = torch.sum(pred_heatmaps_reshaped.unsqueeze(-1) * heatmap_coords_reshaped.t(), dim=2)  # Shape: (batch_size, n_pois, 3)
 
     # Reshape the result to (batch_size, n_pois, 3)
     coords = weighted_coords.view(batch_size, n_pois, 3)
@@ -363,7 +341,7 @@ def get_implants_poi(container) -> POI:
     poi_query.filter("desc", "local")
     poi_candidate = poi_query.candidates[0]
 
-    #poi = poi_candidate.open_ctd()
+    # poi = poi_candidate.open_ctd()
     poi = POI.load(poi_candidate.file["json"])
 
     return poi
@@ -375,7 +353,7 @@ def get_gruber_poi(container) -> POI:
     poi_query.filter("source", "gruber")
     poi_candidate = poi_query.candidates[0]
 
-    #poi = poi_candidate.open_ctd()
+    # poi = poi_candidate.open_ctd()
     poi = POI.load(poi_candidate.file["json"])
 
     return poi
@@ -407,9 +385,7 @@ def get_gruber_registration_poi(container):
     ctd = {}
     for key in keys:
         #
-        ctd[key] = tuple(
-            np.array([reg_ctd[key] for reg_ctd in registration_ctds]).mean(axis=0)
-        )
+        ctd[key] = tuple(np.array([reg_ctd[key] for reg_ctd in registration_ctds]).mean(axis=0))
 
     # Sort the new ctd by keys
     ctd = dict(sorted(ctd.items()))
@@ -432,22 +408,23 @@ def get_poi(container) -> POI:
     return str(poi_candidate.file["json"])
 
 
-def get_ct(container) -> NII:
+def get_ct(container, split=None) -> NII:
     ct_query = container.new_query(flatten=True)
     ct_query.filter_format("ct")
     ct_query.filter_filetype("nii.gz")  # only nifti files
+    ct_query.filter("split", split)
     ct_candidate = ct_query.candidates[0]
 
     ct = ct_candidate.open_nii()
     return ct
 
 
-def get_subreg(container) -> NII:
+def get_subreg(container, split=None) -> NII:
     subreg_query = container.new_query(flatten=True)
     subreg_query.filter_format("msk")
     subreg_query.filter_filetype("nii.gz")  # only nifti files
     subreg_query.filter("seg", "subreg")
-
+    subreg_query.filter("split", split)
     if not subreg_query.candidates:
         print("ERROR: No subreg candidates found!")
         return None
@@ -487,8 +464,8 @@ def get_vertseg_bfile(container):
     if not vertseg_query.candidates:
         print("ERROR: No vertseg candidate found!")
         return None
-    vertseg_candidate = vertseg_query.candidates[0]
-    return vertseg_candidate
+    vertseg_candidates = vertseg_query.candidates
+    return vertseg_candidates
 
 
 def get_files(
@@ -547,9 +524,8 @@ def process_container(
     ct.reorient_(("L", "A", "S"))
     subreg.reorient_(("L", "A", "S"))
     vertseg.reorient_(("L", "A", "S"))
-    #poi.reorient_centroids_to_(ct)
-    poi.reorient_(axcodes_to=ct.orientation, _shape=ct.shape) # the same as above? no reorient_centroids_to found in TPTBox
-
+    # poi.reorient_centroids_to_(ct)
+    poi.reorient_(axcodes_to=ct.orientation, _shape=ct.shape)  # the same as above? no reorient_centroids_to found in TPTBox
 
     vertebrae = set([key[0] for key in poi.keys()])
     vertseg_arr = vertseg.get_array()
@@ -557,9 +533,7 @@ def process_container(
     summary = []
     for vert in vertebrae:
         if vert in vertseg_arr:
-            x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(
-                vertseg_arr, vert
-            )
+            x_min, x_max, y_min, y_max, z_min, z_max = get_bounding_box(vertseg_arr, vert)
             ct_path = os.path.join(save_path, subject, str(vert), "ct.nii.gz")
             subreg_path = os.path.join(save_path, subject, str(vert), "subreg.nii.gz")
             vertseg_path = os.path.join(save_path, subject, str(vert), "vertseg.nii.gz")
@@ -569,18 +543,10 @@ def process_container(
             if not os.path.exists(os.path.join(save_path, subject, str(vert))):
                 os.makedirs(os.path.join(save_path, subject, str(vert)))
 
-            ct_cropped = ct.apply_crop(#_slice(
-                ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-            )
-            subreg_cropped = subreg.apply_crop(#_slice(
-                ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-            )
-            vertseg_cropped = vertseg.apply_crop(#_slice(
-                ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-            )
-            poi_cropped = poi.apply_crop(#crop_centroids(
-                o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))
-            )
+            ct_cropped = ct.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))  # _slice(
+            subreg_cropped = subreg.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))  # _slice(
+            vertseg_cropped = vertseg.apply_crop(ex_slice=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))  # _slice(
+            poi_cropped = poi.apply_crop(o_shift=(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max)))  # crop_centroids(
             # poi_det.crop_centroids(o_shift = (slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))).save(poi_det_path)
 
             if rescale_zoom:

@@ -79,9 +79,7 @@ class LandmarksRandAffine:
         transformed_volume, affine_matrix = self.image_transform(volume)
 
         # Convert landmarks to homogeneous coordinates
-        ones = torch.ones(
-            landmarks.shape[0], 1, dtype=landmarks.dtype, device=landmarks.device
-        )
+        ones = torch.ones(landmarks.shape[0], 1, dtype=landmarks.dtype, device=landmarks.device)
         homogeneous_landmarks = torch.cat([landmarks, ones], dim=1)
 
         # Apply the affine transformation to the landmarks
@@ -121,9 +119,51 @@ class LandMarksRandHorizontalFlip:
 
             # Reorder the landmarks according to the swap indices
             indices_map = {k.item(): v for v, k in enumerate(target_indices)}
-            new_positions = [
-                indices_map[self.flip_pairs[k.item()]] for k in target_indices
-            ]
+            new_positions = [indices_map[self.flip_pairs[k.item()]] for k in target_indices]
+
+            dd["target"] = dd["target"][new_positions]
+
+        return dd
+
+
+class LandMarksRandHorizontalFlipNeighbor:
+    def __init__(self, prob, flip_pairs, device="cpu"):
+        self.prob = prob
+        self.flip_pairs = flip_pairs
+
+    def __call__(self, dd):
+        if torch.rand(1) < self.prob:
+            target_indices = dd["target_indices"]
+            # print("target_indices")
+            # print(target_indices.shape)
+            # print(target_indices)
+
+            # print("target")
+            # print(dd["target"].shape)
+
+            # Flip the volume horizontally, since the orientation is LAS (Left, Anterior, Superior), this means flipping along dim 1 (dim 0 is channel dim)
+            x = torch.flip(dd["input"], dims=[1])
+            x_swapped = x.clone()
+
+            # Swap the labels in the seg mask
+            for label1, label2 in [(43, 44), (45, 46), (47, 48)]:
+                x_swapped[x == label1] = label2
+                x_swapped[x == label2] = label1
+
+            dd["input"] = x_swapped
+
+            # Flip the landmarks horizontally
+            dd["target"][:, 0] = dd["input"].shape[1] - dd["target"][:, 0]
+
+            new_positions = []
+            for slices in [slice(0, 35), slice(35, 70), slice(70, None)]:
+                # Reorder the landmarks according to the swap indices
+                indices_map = {k.item(): v + slices.start for v, k in enumerate(target_indices[slices])}
+                # print("indices_map", indices_map)
+                new_positions += [indices_map[self.flip_pairs[k.item()]] for k in target_indices[slices]]
+
+            # print("new_positions")
+            # print(new_positions)
 
             dd["target"] = dd["target"][new_positions]
 
@@ -264,11 +304,7 @@ class Resample(Transform):
         _align_corners = self.align_corners if align_corners is None else align_corners
         img_t, *_ = convert_data_type(img, torch.Tensor, dtype=_dtype, device=_device)
         sr = min(
-            len(
-                img_t.peek_pending_shape()
-                if isinstance(img_t, MetaTensor)
-                else img_t.shape[1:]
-            ),
+            len(img_t.peek_pending_shape() if isinstance(img_t, MetaTensor) else img_t.shape[1:]),
             3,
         )
         backend, _interp_mode, _padding_mode, _ = resolves_modes(
@@ -279,25 +315,17 @@ class Resample(Transform):
         )
 
         if USE_COMPILED or backend == TransformBackends.NUMPY:
-            grid_t, *_ = convert_to_dst_type(
-                grid[:sr], img_t, dtype=grid.dtype, wrap_sequence=True
-            )
+            grid_t, *_ = convert_to_dst_type(grid[:sr], img_t, dtype=grid.dtype, wrap_sequence=True)
             if isinstance(grid, torch.Tensor) and grid_t.data_ptr() == grid.data_ptr():
                 grid_t = grid_t.clone(memory_format=torch.contiguous_format)
             for i, dim in enumerate(img_t.shape[1 : 1 + sr]):
                 _dim = max(2, dim)
                 t = (_dim - 1) / 2.0
                 if self.norm_coords:
-                    grid_t[i] = (
-                        ((_dim - 1) / _dim) * grid_t[i] + t
-                        if _align_corners
-                        else grid_t[i] + t
-                    )
+                    grid_t[i] = ((_dim - 1) / _dim) * grid_t[i] + t if _align_corners else grid_t[i] + t
                 elif _align_corners:
                     grid_t[i] = ((_dim - 1) / _dim) * (grid_t[i] + 0.5)
-            if (
-                USE_COMPILED and backend == TransformBackends.TORCH
-            ):  # compiled is using torch backend param name
+            if USE_COMPILED and backend == TransformBackends.TORCH:  # compiled is using torch backend param name
                 grid_t = moveaxis(grid_t, 0, -1)  # type: ignore
                 out = grid_pull(
                     img_t.unsqueeze(0),
@@ -308,25 +336,14 @@ class Resample(Transform):
                 )[0]
             elif backend == TransformBackends.NUMPY:
                 is_cuda = img_t.is_cuda
-                img_np = (convert_to_cupy if is_cuda else convert_to_numpy)(
-                    img_t, wrap_sequence=True
-                )
-                grid_np, *_ = convert_to_dst_type(
-                    grid_t, img_np, dtype=grid_t.dtype, wrap_sequence=True
-                )
+                img_np = (convert_to_cupy if is_cuda else convert_to_numpy)(img_t, wrap_sequence=True)
+                grid_np, *_ = convert_to_dst_type(grid_t, img_np, dtype=grid_t.dtype, wrap_sequence=True)
                 _map_coord = (cupy_ndi if is_cuda else np_ndi).map_coordinates
-                out = (cupy if is_cuda else np).stack(
-                    [
-                        _map_coord(c, grid_np, order=_interp_mode, mode=_padding_mode)
-                        for c in img_np
-                    ]
-                )
+                out = (cupy if is_cuda else np).stack([_map_coord(c, grid_np, order=_interp_mode, mode=_padding_mode) for c in img_np])
                 out = convert_to_dst_type(out, img_t)[0]
         else:
             grid_t = moveaxis(grid[list(range(sr - 1, -1, -1))], 0, -1)  # type: ignore
-            grid_t = convert_to_dst_type(grid_t, img_t, wrap_sequence=True)[
-                0
-            ].unsqueeze(0)
+            grid_t = convert_to_dst_type(grid_t, img_t, wrap_sequence=True)[0].unsqueeze(0)
             if isinstance(grid, torch.Tensor) and grid_t.data_ptr() == grid.data_ptr():
                 grid_t = grid_t.clone(memory_format=torch.contiguous_format)
             if self.norm_coords:
@@ -399,9 +416,7 @@ class AffineGrid(LazyTransform):
         self.scale_params = scale_params
         self.device = device
         _dtype = get_equivalent_dtype(dtype, torch.Tensor)
-        self.dtype = (
-            _dtype if _dtype in (torch.float16, torch.float64, None) else torch.float32
-        )
+        self.dtype = _dtype if _dtype in (torch.float16, torch.float64, None) else torch.float32
         self.align_corners = align_corners
         self.affine = affine
 
@@ -428,12 +443,8 @@ class AffineGrid(LazyTransform):
         if not lazy_:
             if grid is None:  # create grid from spatial_size
                 if spatial_size is None:
-                    raise ValueError(
-                        "Incompatible values: grid=None and spatial_size=None."
-                    )
-                grid_ = create_grid(
-                    spatial_size, device=self.device, backend="torch", dtype=self.dtype
-                )
+                    raise ValueError("Incompatible values: grid=None and spatial_size=None.")
+                grid_ = create_grid(spatial_size, device=self.device, backend="torch", dtype=self.dtype)
             else:
                 grid_ = grid
             _dtype = self.dtype or grid_.dtype
@@ -448,21 +459,13 @@ class AffineGrid(LazyTransform):
         if self.affine is None:
             affine = torch.eye(spatial_dims + 1, device=_device)
             if self.rotate_params:
-                affine @= create_rotate(
-                    spatial_dims, self.rotate_params, device=_device, backend=_b
-                )
+                affine @= create_rotate(spatial_dims, self.rotate_params, device=_device, backend=_b)
             if self.shear_params:
-                affine @= create_shear(
-                    spatial_dims, self.shear_params, device=_device, backend=_b
-                )
+                affine @= create_shear(spatial_dims, self.shear_params, device=_device, backend=_b)
             if self.translate_params:
-                affine @= create_translate(
-                    spatial_dims, self.translate_params, device=_device, backend=_b
-                )
+                affine @= create_translate(spatial_dims, self.translate_params, device=_device, backend=_b)
             if self.scale_params:
-                affine @= create_scale(
-                    spatial_dims, self.scale_params, device=_device, backend=_b
-                )
+                affine @= create_scale(spatial_dims, self.scale_params, device=_device, backend=_b)
         else:
             affine = self.affine  # type: ignore
         affine = to_affine_nd(spatial_dims, affine)
@@ -478,13 +481,9 @@ class AffineGrid(LazyTransform):
                 backend=_b,
             )
             sc = convert_to_dst_type(sc, affine)[0]
-            grid_ = ((affine @ sc) @ grid_.view((grid_.shape[0], -1))).view(
-                [-1] + list(grid_.shape[1:])
-            )
+            grid_ = ((affine @ sc) @ grid_.view((grid_.shape[0], -1))).view([-1] + list(grid_.shape[1:]))
         else:
-            grid_ = (affine @ grid_.view((grid_.shape[0], -1))).view(
-                [-1] + list(grid_.shape[1:])
-            )
+            grid_ = (affine @ grid_.view((grid_.shape[0], -1))).view([-1] + list(grid_.shape[1:]))
         return grid_, affine
 
 
@@ -564,9 +563,7 @@ class RandAffineGrid(Randomizable, LazyTransform):
         for f in param_range:
             if issequenceiterable(f):
                 if len(f) != 2:
-                    raise ValueError(
-                        f"If giving range as [min,max], should have 2 elements per dim, got {f}."
-                    )
+                    raise ValueError(f"If giving range as [min,max], should have 2 elements per dim, got {f}.")
                 out_param.append(self.R.uniform(f[0], f[1]) + add_scalar)
             elif f is not None:
                 out_param.append(self.R.uniform(-f, f) + add_scalar)
@@ -767,12 +764,8 @@ class Affine(InvertibleTransform, LazyTransform):
                 during initialization for this call. Defaults to None.
         """
         img = convert_to_tensor(img, track_meta=get_track_meta())
-        img_size = (
-            img.peek_pending_shape() if isinstance(img, MetaTensor) else img.shape[1:]
-        )
-        sp_size = fall_back_tuple(
-            self.spatial_size if spatial_size is None else spatial_size, img_size
-        )
+        img_size = img.peek_pending_shape() if isinstance(img, MetaTensor) else img.shape[1:]
+        sp_size = fall_back_tuple(self.spatial_size if spatial_size is None else spatial_size, img_size)
         lazy_ = self.lazy if lazy is None else lazy
         _mode = mode if mode is not None else self.mode
         _padding_mode = padding_mode if padding_mode is not None else self.padding_mode
@@ -815,17 +808,13 @@ class Affine(InvertibleTransform, LazyTransform):
         affine_grid = AffineGrid(affine=inv_affine, align_corners=align_corners)
         grid, _ = affine_grid(orig_size)
         # Apply inverse transform
-        out = self.resampler(
-            data, grid, mode, padding_mode, align_corners=align_corners
-        )
+        out = self.resampler(data, grid, mode, padding_mode, align_corners=align_corners)
         if not isinstance(out, MetaTensor):
             out = MetaTensor(out)
         out.meta = data.meta  # type: ignore
         affine = convert_data_type(out.peek_pending_affine(), torch.Tensor)[0]
         xform, *_ = convert_to_dst_type(
-            Affine.compute_w_affine(
-                len(affine) - 1, inv_affine, data.shape[1:], orig_size
-            ),
+            Affine.compute_w_affine(len(affine) - 1, inv_affine, data.shape[1:], orig_size),
             affine,
         )
         out.affine @= xform
@@ -943,15 +932,11 @@ class RandAffine(RandomizableTransform, InvertibleTransform, LazyTransform):
             return None
         if self.spatial_size is None:
             if self.cache_grid:
-                warnings.warn(
-                    "cache_grid=True is not compatible with the dynamic spatial_size, please specify 'spatial_size'."
-                )
+                warnings.warn("cache_grid=True is not compatible with the dynamic spatial_size, please specify 'spatial_size'.")
             return None
         _sp_size = ensure_tuple(self.spatial_size)
         _ndim = len(_sp_size)
-        if _sp_size != fall_back_tuple(
-            _sp_size, [1] * _ndim
-        ) or _sp_size != fall_back_tuple(_sp_size, [2] * _ndim):
+        if _sp_size != fall_back_tuple(_sp_size, [1] * _ndim) or _sp_size != fall_back_tuple(_sp_size, [2] * _ndim):
             # dynamic shape because it falls back to different outcomes
             if self.cache_grid:
                 warnings.warn(
@@ -959,9 +944,7 @@ class RandAffine(RandomizableTransform, InvertibleTransform, LazyTransform):
                     f"'spatial_size={self.spatial_size}', please specify 'spatial_size'."
                 )
             return None
-        return create_grid(
-            spatial_size=_sp_size, device=self.rand_affine_grid.device, backend="torch"
-        )
+        return create_grid(spatial_size=_sp_size, device=self.rand_affine_grid.device, backend="torch")
 
     def get_identity_grid(self, spatial_size: Sequence[int], lazy: bool):
         """Return a cached or new identity grid depends on the availability.
@@ -972,12 +955,8 @@ class RandAffine(RandomizableTransform, InvertibleTransform, LazyTransform):
         if lazy:
             return None
         ndim = len(spatial_size)
-        if spatial_size != fall_back_tuple(
-            spatial_size, [1] * ndim
-        ) or spatial_size != fall_back_tuple(spatial_size, [2] * ndim):
-            raise RuntimeError(
-                f"spatial_size should not be dynamic, got {spatial_size}."
-            )
+        if spatial_size != fall_back_tuple(spatial_size, [1] * ndim) or spatial_size != fall_back_tuple(spatial_size, [2] * ndim):
+            raise RuntimeError(f"spatial_size should not be dynamic, got {spatial_size}.")
         return (
             create_grid(
                 spatial_size=spatial_size,
@@ -988,9 +967,7 @@ class RandAffine(RandomizableTransform, InvertibleTransform, LazyTransform):
             else self._cached_grid
         )
 
-    def set_random_state(
-        self, seed: int | None = None, state: np.random.RandomState | None = None
-    ) -> RandAffine:
+    def set_random_state(self, seed: int | None = None, state: np.random.RandomState | None = None) -> RandAffine:
         self.rand_affine_grid.set_random_state(seed, state)
         super().set_random_state(seed, state)
         return self
@@ -1041,12 +1018,8 @@ class RandAffine(RandomizableTransform, InvertibleTransform, LazyTransform):
             self.randomize()
         # if not doing transform and spatial size doesn't change, nothing to do
         # except convert to float and device
-        ori_size = (
-            img.peek_pending_shape() if isinstance(img, MetaTensor) else img.shape[1:]
-        )
-        sp_size = fall_back_tuple(
-            self.spatial_size if spatial_size is None else spatial_size, ori_size
-        )
+        ori_size = img.peek_pending_shape() if isinstance(img, MetaTensor) else img.shape[1:]
+        sp_size = fall_back_tuple(self.spatial_size if spatial_size is None else spatial_size, ori_size)
         do_resampling = self._do_transform or (sp_size != ensure_tuple(ori_size))
         _mode = mode if mode is not None else self.mode
         _padding_mode = padding_mode if padding_mode is not None else self.padding_mode
@@ -1058,16 +1031,12 @@ class RandAffine(RandomizableTransform, InvertibleTransform, LazyTransform):
                     self.rand_affine_grid(sp_size, randomize=randomize, lazy=True)
                 affine = self.rand_affine_grid.get_transformation_matrix()
             else:
-                affine = convert_to_dst_type(
-                    torch.eye(len(sp_size) + 1), img, dtype=self.rand_affine_grid.dtype
-                )[0]
+                affine = convert_to_dst_type(torch.eye(len(sp_size) + 1), img, dtype=self.rand_affine_grid.dtype)[0]
         else:
             if grid is None:
                 grid = self.get_identity_grid(sp_size, lazy_)
                 if self._do_transform:
-                    grid = self.rand_affine_grid(
-                        grid=grid, randomize=randomize, lazy=lazy_
-                    )
+                    grid = self.rand_affine_grid(grid=grid, randomize=randomize, lazy=lazy_)
             affine = self.rand_affine_grid.get_transformation_matrix()
         return affine_func(  # type: ignore
             img,
@@ -1106,9 +1075,7 @@ class RandAffine(RandomizableTransform, InvertibleTransform, LazyTransform):
         out.meta = data.meta  # type: ignore
         affine = convert_data_type(out.peek_pending_affine(), torch.Tensor)[0]
         xform, *_ = convert_to_dst_type(
-            Affine.compute_w_affine(
-                len(affine) - 1, inv_affine, data.shape[1:], orig_size
-            ),
+            Affine.compute_w_affine(len(affine) - 1, inv_affine, data.shape[1:], orig_size),
             affine,
         )
         out.affine @= xform

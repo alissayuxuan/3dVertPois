@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from TPTBox import Location, NII, POI, Vertebra_Instance, No_Logger, Log_Type
 from TPTBox.core.vert_constants import DIRECTIONS, COORDINATE
 from pathlib import Path
+import numpy as np
 
 logger = No_Logger(prefix="logic_report")
 
@@ -12,25 +13,39 @@ class LogicReport:
     subject_name: str
     vertebra: int | Vertebra_Instance
     location: Location
+    severity: float
     relevant_data: dict
     description: str
 
     def __str__(self):
-        return f"{self.subject_name}-v={self.vertebra}-{self.location, self.location.value}: {self.description}\n ({self.relevant_data})"
+        return f"{self.subject_name}-v={self.vertebra}-{self.location, self.location.value}: {self.description}\n ({self.severity}, {self.relevant_data})"
 
-    def get_dict(self):
+    def get_dict(self, round_d=3) -> dict:
+        relevant_data_rounded = {
+            k: (
+                round(v, round_d)
+                if isinstance(v, float)
+                else (
+                    [round(vv, round_d) if isinstance(vv, float) else vv for vv in v]
+                    if (isinstance(v, list) or isinstance(v, tuple) or isinstance(v, np.ndarray))
+                    else v
+                )
+            )
+            for k, v in self.relevant_data.items()
+        }
         return {
             "subject_name": self.subject_name,
             "vertebra": self.vertebra,
             "location": self.location.value,
-            "relevant_data": self.relevant_data,
+            "severity": round(self.severity, round_d),
+            "relevant_data": relevant_data_rounded,
             "description": self.description,
         }
 
 
-def save_logic_report(report_list: list[LogicReport], save_path: str | Path) -> None:
+def save_logic_report(report_list: list[LogicReport], save_path: str | Path, round_d=3) -> None:
     """Save logic report to CSV file."""
-    df = pd.DataFrame([r.get_dict() for r in report_list])
+    df = pd.DataFrame([r.get_dict(round_d=round_d) for r in report_list])
     df.to_excel(save_path, index=False)
     logger.print(f"Logic report saved to {save_path}", Log_Type.SAVE)
 
@@ -44,7 +59,10 @@ def poi_touches_subreg(coord: COORDINATE, subregion_nii: NII):
         for dy in dw:
             for dz in dw:
                 neighbor_coord = (rounded_coord[0] + dx, rounded_coord[1] + dy, rounded_coord[2] + dz)
-                voxel_value = subregion_nii[neighbor_coord]
+                try:
+                    voxel_value = subregion_nii[neighbor_coord]
+                except IndexError:
+                    continue
                 if voxel_value != 0:
                     if voxel_value not in counts:
                         counts[voxel_value] = 0
@@ -67,6 +85,9 @@ class SpatialLC:
     def __str__(self):
         return f"Spatial LC({self.location1} in {self.axis} > {self.location2})"
 
+    def get_singular_str(self, loc1: Location | int, axis: DIRECTIONS, loc2: Location | int) -> str:
+        return f"Spatial LC({loc1.value if isinstance(loc1, Location) else loc1} in {axis} > {loc2.value if isinstance(loc2, Location) else loc2})"
+
 
 SPATIAL_LOGIC_CONSTRAINTS = [
     # Anterior Corpus
@@ -78,7 +99,7 @@ SPATIAL_LOGIC_CONSTRAINTS = [
     SpatialLC(
         [121, 105, 113, 85, 84, 123, 107, 115],
         "A",
-        [112, 104, 120, 118, 102, 110, 106, 122, 125],
+        [112, 104, 120, 118, 102, 110, 106, 122, 125, 82, 83],
     ),
     # Right Corpus
     SpatialLC(
@@ -106,8 +127,8 @@ SPATIAL_LOGIC_CONSTRAINTS = [
     SpatialLC(
         [118, 102, 110, 114, 106, 122, 112, 104, 120],
         "A",
-        [82, 83, 86, 81, 87, 127, 125],
-    ),  # TODO 88,89 would require rotation
+        [86, 81, 87, 127, 125],
+    ),
     SpatialLC([89, 88], "S", [118, 102, 110]),
     # Posterior elements to each other
     SpatialLC(82, "R", 89),
@@ -138,6 +159,7 @@ for lc in SPATIAL_LOGIC_CONSTRAINTS:
 class SubregionLC:
     location1: Location | int | list[Location | int]
     subregion: int | list[int]
+    soft_subregion: int | list[int] | None = None
 
     """Means location1 must any of the given subregions
     """
@@ -151,22 +173,28 @@ SUBREGION_CONSTRAINT = [
     SubregionLC(
         [117, 101, 109, 124, 108, 116, 103, 111, 119, 84, 85, 121, 105, 113, 102],
         [49, 50],
+        [41],
     ),
     SubregionLC(
         [110, 118],
         [49, 50, 41],
     ),
-    SubregionLC(81, 42),
-    SubregionLC(83, 43),
-    SubregionLC(82, 44),
-    SubregionLC(88, 45),
-    SubregionLC(89, 46),
-    SubregionLC(86, 47),
-    SubregionLC(87, 48),
+    SubregionLC(81, 42, 41),
+    SubregionLC(83, 43, 41),
+    SubregionLC(82, 44, 41),
+    SubregionLC(88, 45, 41),
+    SubregionLC(89, 46, 41),
+    SubregionLC(86, 47, 41),
+    SubregionLC(87, 48, 41),
 ]
 
 SUBREGION_CONSTRAINT_DICT = {
     loc: lc.subregion if isinstance(lc.subregion, list) else [lc.subregion]
+    for lc in SUBREGION_CONSTRAINT
+    for loc in (lc.location1 if isinstance(lc.location1, list) else [lc.location1])
+}
+SUBREGION_SOFTCONSTRAINT_DICT = {
+    loc: lc.soft_subregion if isinstance(lc.soft_subregion, list) else [lc.soft_subregion]
     for lc in SUBREGION_CONSTRAINT
     for loc in (lc.location1 if isinstance(lc.location1, list) else [lc.location1])
 }

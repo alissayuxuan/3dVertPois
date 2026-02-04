@@ -9,6 +9,7 @@ import numpy as np
 import math
 import torch
 from TPTBox import calc_poi_labeled_buffered
+from TPTBox.core.vert_constants import DIRECTIONS, COORDINATE
 
 
 # function that yields matrix to reorient to PIR coordinate orientation
@@ -78,6 +79,46 @@ def calc_orientation_from_poi(poi: POI, region: int):
     # then orientation from that?
     # from that orientation calc matrix to inverse-orient basically?
     return R, corpus_com, rel_to_corpus, PIR_angle_degrees
+
+
+def get_axis_direction_from_rel_to_corpus(rel_to_corpus, dir: DIRECTIONS):
+    if dir == "A":
+        return rel_to_corpus[Location.Vertebra_Direction_Posterior.value] * -1
+    elif dir == "P":
+        return rel_to_corpus[Location.Vertebra_Direction_Posterior.value]
+    elif dir == "S":
+        return rel_to_corpus[Location.Vertebra_Direction_Inferior.value] * -1
+    elif dir == "I":
+        return rel_to_corpus[Location.Vertebra_Direction_Inferior.value]
+    elif dir == "L":
+        return rel_to_corpus[Location.Vertebra_Direction_Right.value] * -1
+    elif dir == "R":
+        return rel_to_corpus[Location.Vertebra_Direction_Right.value]
+    else:
+        raise ValueError(f"Unknown direction {dir}")
+
+
+def get_axis_direction_vector(rel_to_corpus, poi_ref, axis: DIRECTIONS):
+    if rel_to_corpus is None:
+        axis_idx = poi_ref.get_axis(axis)
+        inversed = poi_ref.orientation[axis_idx] != axis
+        vector = np.zeros(3)
+        vector[axis_idx] = -1 if inversed else 1
+    else:
+        vector = get_axis_direction_from_rel_to_corpus(rel_to_corpus, axis)
+    return vector
+
+
+def move_poi_along_axis(c: COORDINATE | np.ndarray, poi_ref, axis: DIRECTIONS, rel_to_corpus: dict, distance_voxel: int):
+    vector = get_axis_direction_vector(rel_to_corpus, poi_ref, axis)
+    return np.asarray(c) + vector * distance_voxel
+
+
+def find_extreme_point_along_axis(poi_coords: list[COORDINATE | np.ndarray], poi_ref, axis: DIRECTIONS, rel_to_corpus: dict):
+    vector = get_axis_direction_vector(rel_to_corpus, poi_ref, axis)
+    projections = [np.dot(np.asarray(c), vector) for c in poi_coords]
+    extreme_idx = np.argmax(projections)
+    return poi_coords[extreme_idx]
 
 
 def rotate_3darray(array, rotation, center: tuple | None = None):
