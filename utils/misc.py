@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from skimage import measure
 from TPTBox.core.np_utils import np_fill_holes
 from nibabel.nifti1 import Nifti1Image
+from scipy.ndimage import distance_transform_edt
 
 # from utils.raycast_torch import max_distance_ray_cast_convex_torch
 
@@ -80,7 +81,7 @@ def surface_project_coords(
     debug=False,
     requires_filling: bool = True,
 ):
-    return surface_project_coords_marchingcubes(coordinates, surface, debug=debug, requires_filling=requires_filling)
+    return surface_project_coords_marchingcubes_continuous(coordinates, surface, debug=debug, requires_filling=requires_filling)
 
 
 def fill_holes_3d(surface_mask):
@@ -216,87 +217,122 @@ def fill_holes_3d_6conn(surface_mask):
     return filled
 
 
-def surface_project_coords_sdf(coordinates, surface, chamfer_iters=4):
-    """
-    Project coordinates onto the nearest surface using SDF + normal projection.
-
-    coordinates: (B, N, 3) or (N, 3)
-    surface:     (B, D, H, W) or (B, 1, D, H, W) or (D, H, W)
-
-    Returns:
-        projected coordinates: same shape as input
-        distance to surface:  (B,N) or (N,)
-    """
-    # --- 0. normalize shapes ---
+def surface_project_coords_sdf_continuous(
+    coordinates,
+    surface_mask,
+    debug=False,
+    step_size=0.1,
+    max_steps=60,
+    tol=1e-4,
+    requires_filling: bool = False,
+):
+    # ---------- batching ----------
     unbatched_coords = coordinates.ndim == 2
-    unbatched_surface = surface.ndim == 3
+    unbatched_surface = surface_mask.ndim == 3
 
     if unbatched_coords:
         coordinates = coordinates.unsqueeze(0)
     if unbatched_surface:
-        surface = surface.unsqueeze(0)
-    if surface.ndim == 5 and surface.shape[1] == 1:
-        surface = surface[:, 0]
+        surface_mask = surface_mask.unsqueeze(0)
 
-    # --- 1. Fill holes (6-connectivity) ---
-    surface = fill_holes_3d_6conn(surface.unsqueeze(1)).squeeze(1)
-
-    B, D, H, W = surface.shape
+    B, N, _ = coordinates.shape
     device = coordinates.device
-    dtype = torch.float32
 
-    surface = surface.to(device, dtype=dtype)
+    projected = torch.zeros_like(coordinates)
+    surface_projection_dist = torch.zeros((B, N), device=device)
 
-    # --- 2. Compute Chamfer-based SDF ---
-    max_dist = D + H + W
-    dist_out = torch.where(surface == 0, torch.zeros_like(surface), torch.full_like(surface, max_dist))
-    dist_in = torch.where(surface == 1, torch.zeros_like(surface), torch.full_like(surface, max_dist))
+    for b in range(B):
 
-    kernel = torch.ones((1, 1, 3, 3, 3), device=device, dtype=dtype)
-    kernel[0, 0, 1, 1, 1] = 0
+        # ====== 1) BUILD SDF ON CPU (unchanged) ======
+        mask_np = surface_mask[b].detach().cpu().numpy().astype(np.uint8)
+        if mask_np.ndim == 4:
+            mask_np = mask_np[0]
 
-    for _ in range(chamfer_iters):
-        neigh_out = F.conv3d(dist_out.unsqueeze(1), kernel, padding=1).squeeze(1)
-        dist_out = torch.min(dist_out, neigh_out + 1)
-        neigh_in = F.conv3d(dist_in.unsqueeze(1), kernel, padding=1).squeeze(1)
-        dist_in = torch.min(dist_in, neigh_in + 1)
+        if requires_filling:
+            mask_np = np_fill_holes(mask_np)
 
-    sdf = dist_out - dist_in
-    sdf = sdf.unsqueeze(1)
+        dist_in = distance_transform_edt(mask_np)
+        dist_out = distance_transform_edt(1 - mask_np)
+        sdf = dist_in - dist_out  # positive inside, negative outside
 
-    # --- 3. Compute normals (finite difference) ---
-    dx = torch.tensor([[-1, 0, 1]], device=device, dtype=dtype).reshape(1, 1, 1, 1, 3)
-    dy = torch.tensor([[-1], [0], [1]], device=device, dtype=dtype).reshape(1, 1, 1, 3, 1)
-    dz = torch.tensor([[-1], [0], [1]], device=device, dtype=dtype).reshape(1, 1, 3, 1, 1)
+        gz, gy, gx = np.gradient(sdf)
 
-    gx = F.conv3d(sdf, dx, padding=(0, 0, 1))
-    gy = F.conv3d(sdf, dy, padding=(0, 1, 0))
-    gz = F.conv3d(sdf, dz, padding=(1, 0, 0))
+        # move to torch
+        sdf_t = torch.from_numpy(sdf).float().to(device)  # (Z,Y,X)
+        grad_t = torch.stack(
+            [
+                torch.from_numpy(gx).float().to(device),
+                torch.from_numpy(gy).float().to(device),
+                torch.from_numpy(gz).float().to(device),
+            ],
+            dim=0,
+        )  # (3, Z, Y, X)
 
-    normals = torch.cat([gz, gy, gx], dim=1)
-    normals = normals / (normals.norm(dim=1, keepdim=True) + 1e-12)
+        Z, Y, X = sdf_t.shape
 
-    # --- 4. Sample SDF and normals at coordinates ---
-    coords = coordinates.float()
-    norm = coords.clone()
-    norm[..., 0] = (coords[..., 2] / (W - 1)) * 2 - 1
-    norm[..., 1] = (coords[..., 1] / (H - 1)) * 2 - 1
-    norm[..., 2] = (coords[..., 0] / (D - 1)) * 2 - 1
-    grid = norm.view(B, -1, 1, 1, 3)
+        # reshape for grid_sample
+        sdf_t = sdf_t.unsqueeze(0).unsqueeze(0)  # (1,1,Z,Y,X)
+        grad_t = grad_t.unsqueeze(0)  # (1,3,Z,Y,X)
 
-    sdf_vals = F.grid_sample(sdf, grid, align_corners=True).view(B, -1)
-    normal_vals = F.grid_sample(normals, grid, align_corners=True).view(B, 3, -1).permute(0, 2, 1)
+        # ====== 2) PREPARE POINTS FOR GRID SAMPLE ======
+        p = coordinates[b].clone()  # (N,3)
+        p0 = p.clone()
 
-    # --- 5. Project coordinates ---
-    projected = coords - sdf_vals.unsqueeze(-1) * normal_vals
-    proj_dist = sdf_vals.abs()
+        # convert voxel coords -> normalized [-1,1] for grid_sample
+        # grid_sample expects (x,y,z) order but your coords are (x,y,z)
+        grid = torch.stack(
+            [
+                2 * p[:, 0] / (X - 1) - 1,
+                2 * p[:, 1] / (Y - 1) - 1,
+                2 * p[:, 2] / (Z - 1) - 1,
+            ],
+            dim=-1,
+        )  # (N,3)
 
-    if torch.isnan(projected).any():
-        print("NaNs detected in projected coordinates!")
+        grid = grid.view(1, N, 1, 1, 3)  # (1,N,1,1,3)
 
+        # ====== 3) ITERATIVE SDF STEPPING (FULLY PARALLEL) ======
+        for _ in range(max_steps):
+
+            # sample sdf and gradient at ALL points at once
+            sdf_val = F.grid_sample(sdf_t, grid, align_corners=True).view(N)  # (N,)
+
+            grad_val = F.grid_sample(grad_t, grid, align_corners=True).view(3, N).permute(1, 0)  # (N,3)
+
+            # normalize gradient
+            grad_norm = torch.norm(grad_val, dim=-1, keepdim=True) + 1e-8
+            grad_val = grad_val / grad_norm
+
+            # step toward zero level-set
+            step = step_size * torch.sign(sdf_val).unsqueeze(-1) * grad_val
+
+            # update voxel coords
+            p = p - step
+
+            # update normalized grid
+            grid = torch.stack(
+                [
+                    2 * p[:, 0] / (X - 1) - 1,
+                    2 * p[:, 1] / (Y - 1) - 1,
+                    2 * p[:, 2] / (Z - 1) - 1,
+                ],
+                dim=-1,
+            ).view(1, N, 1, 1, 3)
+
+            # early stop if all close to surface
+            if (sdf_val.abs() < tol).all():
+                break
+
+        # ====== 4) STORE RESULTS ======
+        projected[b] = p
+        surface_projection_dist[b] = torch.norm(p - p0, dim=-1)
+
+    # unbatch if needed
     if unbatched_coords:
-        return projected[0], proj_dist[0]
-    return projected, proj_dist
+        projected = projected.squeeze(0)
+        surface_projection_dist = surface_projection_dist.squeeze(0)
+
+    return projected, surface_projection_dist
 
 
 def extract_surface_vertices(mask, level=0.5):
@@ -392,6 +428,151 @@ def surface_project_coords_marchingcubes(
     surface_projection_dist = torch.sqrt(min_dist_sq)
 
     # ---------- Unbatch if needed ----------
+    if unbatched_coords:
+        projected = projected.squeeze(0)
+        surface_projection_dist = surface_projection_dist.squeeze(0)
+
+    return projected, surface_projection_dist
+
+
+def closest_point_on_triangle(p, v0, v1, v2):
+    # p, v0, v1, v2: (..., 3)
+
+    e0 = v1 - v0
+    e1 = v2 - v0
+    v = p - v0
+
+    d00 = (e0 * e0).sum(-1)
+    d01 = (e0 * e1).sum(-1)
+    d11 = (e1 * e1).sum(-1)
+    d20 = (v * e0).sum(-1)
+    d21 = (v * e1).sum(-1)
+
+    denom = d00 * d11 - d01 * d01 + 1e-8
+
+    b = (d11 * d20 - d01 * d21) / denom
+    c = (d00 * d21 - d01 * d20) / denom
+    a = 1.0 - b - c
+
+    # ---- Correct clamping (vector-safe) ----
+    b = torch.clamp(b, 0.0, 1.0)
+    c = torch.minimum(torch.clamp(c, 0.0, 1.0), 1.0 - b)
+    a = 1.0 - b - c
+    # ----------------------------------------
+
+    proj = a[..., None] * v0 + b[..., None] * v1 + c[..., None] * v2
+    return proj
+
+
+# -------------------------------------------------------------
+
+
+def surface_project_coords_marchingcubes_continuous(
+    coordinates,
+    surface_mask,
+    level=0.5,
+    debug=False,
+    requires_filling: bool = False,
+):
+    """
+    coordinates: (B, N, 3) or (N, 3)
+    surface_mask: (B, Z, Y, X) or (Z, Y, X)
+
+    returns:
+        projected: (B, N, 3) float  -- TRUE continuous surface points
+        surface_projection_dist: (B, N) float
+    """
+
+    # ---------------- batching ----------------
+    unbatched_coords = coordinates.ndim == 2
+    unbatched_surface = surface_mask.ndim == 3
+
+    if unbatched_coords:
+        coordinates = coordinates.unsqueeze(0)
+    if unbatched_surface:
+        surface_mask = surface_mask.unsqueeze(0)
+
+    B, N, _ = coordinates.shape
+    device = coordinates.device
+
+    # --------- extract surfaces per batch (verts + faces) ----------
+    surfaces = []
+    max_M = 0
+    max_K = 0
+
+    for b in range(B):
+        mask_np = surface_mask[b].detach().cpu().numpy()
+
+        if mask_np.ndim == 4:
+            mask_np = mask_np[0]
+
+        if requires_filling:
+            mask_np = np_fill_holes(mask_np)
+
+        verts, faces, _, _ = measure.marching_cubes(
+            mask_np,
+            level=level,
+            allow_degenerate=False,
+            step_size=1,
+        )
+
+        # verts = verts + 0.5  # shift from voxel corner to center
+
+        verts = torch.from_numpy(verts.copy()).float().to(device)
+        faces = torch.from_numpy(faces.copy()).long().to(device)
+
+        surfaces.append((verts, faces))
+        max_M = max(max_M, verts.shape[0])
+        max_K = max(max_K, faces.shape[0])
+
+    # -------- pad to batch tensors ----------
+    verts_pad = torch.zeros((B, max_M, 3), device=device)
+    faces_pad = torch.zeros((B, max_K, 3), device=device, dtype=torch.long)
+    verts_valid = torch.zeros((B, max_M), device=device, dtype=torch.bool)
+    faces_valid = torch.zeros((B, max_K), device=device, dtype=torch.bool)
+
+    for b, (v, f) in enumerate(surfaces):
+        M = v.shape[0]
+        K = f.shape[0]
+
+        verts_pad[b, :M] = v
+        faces_pad[b, :K] = f
+        verts_valid[b, :M] = True
+        faces_valid[b, :K] = True
+
+    # ------------- projection ----------------
+    projected = torch.zeros_like(coordinates)
+    surface_projection_dist = torch.zeros((B, N), device=device)
+
+    for b in range(B):
+        V = verts_pad[b]  # (M,3)
+        F = faces_pad[b]  # (K,3)
+        Fmask = faces_valid[b]  # (K,)
+
+        for n in range(N):
+            p = coordinates[b, n]  # (3,)
+
+            # get valid triangles
+            faces = F[Fmask]
+            v0 = V[faces[:, 0]]
+            v1 = V[faces[:, 1]]
+            v2 = V[faces[:, 2]]
+
+            # project to all triangles
+            p_expand = p.unsqueeze(0).expand_as(v0)
+            proj_all = closest_point_on_triangle(p_expand, v0, v1, v2)
+
+            # distances
+            dist = ((proj_all - p_expand) ** 2).sum(-1)
+
+            # best triangle
+            best_k = dist.argmin()
+            best_proj = proj_all[best_k]
+
+            projected[b, n] = best_proj
+            surface_projection_dist[b, n] = torch.sqrt(dist[best_k])
+
+    # -------- unbatch if needed ----------
     if unbatched_coords:
         projected = projected.squeeze(0)
         surface_projection_dist = surface_projection_dist.squeeze(0)
