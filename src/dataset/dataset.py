@@ -244,7 +244,7 @@ class PoiDataset(Dataset):
 
         data_dict["loss_mask"] = loss_mask.bool()
 
-        transformed_mask = data_dict["input"] > 0
+        transformed_mask = mask
         if self.show_neighbors:
             transformed_mask *= vertseg == vertebra
         surface = compute_surface(transformed_mask, iterations=self.iterations)
@@ -737,7 +737,7 @@ class PoiNeighborDataset(Dataset):
 
         data_dict["loss_mask"] = combined_loss_mask.bool()
 
-        transformed_mask = data_dict["input"] > 0
+        transformed_mask = torch.from_numpy(mask)
         surface = compute_surface(transformed_mask, iterations=self.iterations)
 
         data_dict["surface"] = surface
