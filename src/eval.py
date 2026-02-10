@@ -22,7 +22,7 @@ import shutil  # For file operations
 
 from modules.PoiModule import PoiPredictionModule
 from src.modules.PoiDataModules import POIDataModule
-from utils.misc import surface_project_coords
+from utils.misc import surface_project_coords, surface_project_coords_marchingcubes
 
 
 def load_data_module_from_config(config_path, alternative_poi_ending=None):
@@ -184,8 +184,8 @@ def create_prediction_poi_files(
         coarse_preds_batch = batch["coarse_preds"]
         refined_preds_batch = batch["refined_preds"]
 
-        if save_gt_proj:
-            target_batch, _ = surface_project_coords(target_batch, batch["surface"])
+        # if save_gt_proj:
+        target_batch, _ = surface_project_coords(target_batch, batch["surface"])
 
         if project:
             refined_preds_projected_batch, _ = surface_project_coords(refined_preds_batch, batch["surface"])
@@ -550,6 +550,23 @@ def calculate_metrics(errors, threshold=2.0):
     accuracy = np.mean(errors < threshold)
     max_error = np.max(errors)
     return mean_error, median_error, mse, accuracy, max_error
+
+
+def calculate_metrics4paper(errors, threshold=2.0, round_digits=2):
+    mean_error = np.mean(errors)
+    std = np.std(errors)
+    median_error = np.median(errors)
+    mse = np.mean(errors**2)
+    accuracy = np.mean(errors < threshold)
+    max_error = np.max(errors)
+    return (
+        round(mean_error, round_digits),
+        round(median_error, round_digits),
+        round(mse, round_digits),
+        round(accuracy, round_digits),
+        round(std, round_digits),
+        round(max_error, round_digits),
+    )
 
 
 def compute_overall_metrics(df):
@@ -955,6 +972,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--save_gt_proj", action="store_true", help="Whether to save projected GT POI files.")
 
+    parser.add_argument("--save_files", action="store_true", help="Whether to save the prediction files at all.")
+
     args = parser.parse_args()
     args.project = True  # REMOVE
     args.save_gt_proj = True  # REMOVE
@@ -973,6 +992,11 @@ if __name__ == "__main__":
             # Path(args.checkpoint_path).parent.parent.joinpath("data_module_params.json"))
         # args.data_module_save_path = str(Path(args.checkpoint_path).parent.parent.joinpath("data_module_params.json"))
 
+    out_metrics = os.path.join(args.save_path, "overall_metrics.csv")
+    if os.path.exists(out_metrics):
+        print(f"Overall metrics file already exists at {out_metrics}. Loading existing metrics.")
+        sys.exit(0)
+
     ### Create DataFrame with prediction information
     prediction_df = create_prediction_df(
         data_module_save_path=args.data_module_save_path, checkpoint_path=args.checkpoint_path, split=args.split, neighbor=args.neighbor
@@ -980,93 +1004,95 @@ if __name__ == "__main__":
     prediction_df = prediction_df[prediction_df["loss_mask"] == True]
 
     prediction_df.to_csv(os.path.join(args.save_path, "results.csv"))
-    print("Prediction DataFrame saved")
+    print(f"Prediction DataFrame saved {os.path.join(args.save_path, 'results.csv')}")
 
     # prediction_df = load_and_filter_csv(prediction_df)
 
     ### Compute overall metrics
     metrics_df = compute_overall_metrics(prediction_df)
-    metrics_df.to_csv(os.path.join(args.save_path, "overall_metrics.csv"))
+    metrics_df.to_csv(out_metrics)
     print("Overal metrics saved")
 
-    if args.project:
-        ### Compute POI-wise metrics projected
-        poi_metrics_proj_df = compute_poi_wise_metrics_proj(prediction_df)
-        poi_metrics_proj_df.to_csv(os.path.join(args.save_path, "poi_metrics_projected.csv"))
-        print("POI-wise projected metrics saved")
+    if args.save_files:
 
-        ### Compute vertebra-wise metrics projected
-        vert_metrics_proj_df = compute_vert_wise_metrics_proj(prediction_df)
-        vert_metrics_proj_df.to_csv(os.path.join(args.save_path, "vertebra_metrics_projected.csv"))
-        print("Vertebra-wise projected metrics saved")
+        if args.project:
+            ### Compute POI-wise metrics projected
+            poi_metrics_proj_df = compute_poi_wise_metrics_proj(prediction_df)
+            poi_metrics_proj_df.to_csv(os.path.join(args.save_path, "poi_metrics_projected.csv"))
+            print("POI-wise projected metrics saved")
 
-        ### Compute subject-wise metrics projected
-        sub_metrics_proj_df = compute_sub_wise_metrics_proj(prediction_df)
-        sub_metrics_proj_df.to_csv(os.path.join(args.save_path, "subject_metrics_projected.csv"))
-        print("Subject-wise projected metrics saved")
+            ### Compute vertebra-wise metrics projected
+            vert_metrics_proj_df = compute_vert_wise_metrics_proj(prediction_df)
+            vert_metrics_proj_df.to_csv(os.path.join(args.save_path, "vertebra_metrics_projected.csv"))
+            print("Vertebra-wise projected metrics saved")
+
+            ### Compute subject-wise metrics projected
+            sub_metrics_proj_df = compute_sub_wise_metrics_proj(prediction_df)
+            sub_metrics_proj_df.to_csv(os.path.join(args.save_path, "subject_metrics_projected.csv"))
+            print("Subject-wise projected metrics saved")
+
+            ### Find Outliers
+            outlier_df = filter_high_refined_proj_error_pois(prediction_df, 10)
+            outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_proj_error_higher_10.csv"))
+            print("Outliers (refined_proj_error > 10) saved")
+
+        ### Compute POI-wise metrics
+        poi_metrics_df = compute_poi_wise_metrics(prediction_df)
+        poi_metrics_df.to_csv(os.path.join(args.save_path, "poi_metrics.csv"))
+        print("POI-wise metrics saved")
+
+        ### Compute vertebra-wise metrics
+        vert_metrics_df = compute_vert_wise_metrics(prediction_df)
+        vert_metrics_df.to_csv(os.path.join(args.save_path, "vertebra_metrics.csv"))
+        print("Vertebra-wise metrics saved")
+
+        ### Compute subject-wise metrics
+        sub_metrics_df = compute_sub_wise_metrics(prediction_df)
+        sub_metrics_df.to_csv(os.path.join(args.save_path, "subject_metrics.csv"))
+        print("Subject-wise metrics saved")
 
         ### Find Outliers
-        outlier_df = filter_high_refined_proj_error_pois(prediction_df, 10)
-        outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_proj_error_higher_10.csv"))
-        print("Outliers (refined_proj_error > 10) saved")
+        outlier_df = filter_high_refined_error_pois(prediction_df, 10)
+        outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_error_higher_10.csv"))
+        print("Outliers (refined_error > 10) saved")
 
-    ### Compute POI-wise metrics
-    poi_metrics_df = compute_poi_wise_metrics(prediction_df)
-    poi_metrics_df.to_csv(os.path.join(args.save_path, "poi_metrics.csv"))
-    print("POI-wise metrics saved")
+        ### Create Prediction files
+        prediction_files_path_proj = os.path.join(args.save_path, "prediction_files")
+        prediction_files_path = os.path.join(args.save_path, "prediction_files-no_proj")
+        os.makedirs(prediction_files_path, exist_ok=True)
+        os.makedirs(prediction_files_path_proj, exist_ok=True)
 
-    ### Compute vertebra-wise metrics
-    vert_metrics_df = compute_vert_wise_metrics(prediction_df)
-    vert_metrics_df.to_csv(os.path.join(args.save_path, "vertebra_metrics.csv"))
-    print("Vertebra-wise metrics saved")
-
-    ### Compute subject-wise metrics
-    sub_metrics_df = compute_sub_wise_metrics(prediction_df)
-    sub_metrics_df.to_csv(os.path.join(args.save_path, "subject_metrics.csv"))
-    print("Subject-wise metrics saved")
-
-    ### Find Outliers
-    outlier_df = filter_high_refined_error_pois(prediction_df, 10)
-    outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_error_higher_10.csv"))
-    print("Outliers (refined_error > 10) saved")
-
-    ### Create Prediction files
-    prediction_files_path_proj = os.path.join(args.save_path, "prediction_files")
-    prediction_files_path = os.path.join(args.save_path, "prediction_files-no_proj")
-    os.makedirs(prediction_files_path, exist_ok=True)
-    os.makedirs(prediction_files_path_proj, exist_ok=True)
-
-    if args.neighbor:
-        # Generate predictions and get paths
-        poi_paths_dict = create_neighbor_prediction_poi_files(
-            data_module_save_path=args.data_module_save_path,
-            checkpoint_path=args.checkpoint_path,
-            poi_file_ending="_pred.json",
-            split=args.split,
-            save_path=prediction_files_path,
-            return_paths=True,
-            project=args.project,
-        )
-    else:
-        # Generate predictions and get paths
-        poi_paths_dict = create_prediction_poi_files(
-            data_module_save_path=args.data_module_save_path,
-            checkpoint_path=args.checkpoint_path,
-            poi_file_ending="_pred.json",
-            split=args.split,
-            save_path=prediction_files_path,
-            return_paths=True,
-            project=False,
-            save_gt_proj=args.save_gt_proj,
-        )
-        poi_paths_dict = create_prediction_poi_files(
-            data_module_save_path=args.data_module_save_path,
-            checkpoint_path=args.checkpoint_path,
-            poi_file_ending="_pred.json",
-            split=args.split,
-            save_path=prediction_files_path_proj,
-            return_paths=True,
-            project=True,
-            save_gt_proj=args.save_gt_proj,
-        )
-    print(f"Saved predictions and ground truths to: {prediction_files_path}")
+        if args.neighbor:
+            # Generate predictions and get paths
+            poi_paths_dict = create_neighbor_prediction_poi_files(
+                data_module_save_path=args.data_module_save_path,
+                checkpoint_path=args.checkpoint_path,
+                poi_file_ending="_pred.json",
+                split=args.split,
+                save_path=prediction_files_path,
+                return_paths=True,
+                project=args.project,
+            )
+        else:
+            # Generate predictions and get paths
+            poi_paths_dict = create_prediction_poi_files(
+                data_module_save_path=args.data_module_save_path,
+                checkpoint_path=args.checkpoint_path,
+                poi_file_ending="_pred.json",
+                split=args.split,
+                save_path=prediction_files_path,
+                return_paths=True,
+                project=False,
+                save_gt_proj=args.save_gt_proj,
+            )
+            poi_paths_dict = create_prediction_poi_files(
+                data_module_save_path=args.data_module_save_path,
+                checkpoint_path=args.checkpoint_path,
+                poi_file_ending="_pred.json",
+                split=args.split,
+                save_path=prediction_files_path_proj,
+                return_paths=True,
+                project=True,
+                save_gt_proj=args.save_gt_proj,
+            )
+        print(f"Saved predictions and ground truths to: {prediction_files_path}")
