@@ -25,6 +25,7 @@ class SADenseNet(nn.Module):
         n_landmarks: int,
         loss_fn: str,
         project_gt: bool = False,
+        project_pred: bool = False,
         init_features: int = 64,
         feature_l: int = 256,
         growth_rate: int = 32,
@@ -52,6 +53,7 @@ class SADenseNet(nn.Module):
 
         self.soft_argmax = SoftArgmax3D()
         self.project_gt = project_gt
+        self.project_pred = project_pred
 
     def forward(self, batch):
         x = batch["input"]
@@ -75,6 +77,9 @@ class SADenseNet(nn.Module):
         )
 
         batch["coarse_preds"] = scaled_coarse_preds  # (batch_size, n_landmarks, 3)
+        if self.project_pred:
+            surface = batch["surface"]
+            batch["coarse_preds"], _ = surface_project_coords(batch["coarse_preds"], surface)
         batch["coarse_features"] = (
             feature_encodings  # (batch_size, n_landmarks, feature_l)
         )
@@ -83,18 +88,22 @@ class SADenseNet(nn.Module):
 
     def calculate_loss(self, batch):
         target = batch["target"]
+        surface = batch["surface"]
         if self.project_gt:
             # Project targets to surface
-            surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
-        
+
+        # if self.project_pred:
+        #    surface = batch["surface"]
+        #    batch["coarse_preds"], _ = surface_project_coords(batch["coarse_preds"], surface)
+
         zoom = batch["zoom"].to(target.device)
         zoom = zoom.unsqueeze(1)
 
         coarse_preds_mm = batch["coarse_preds"] * zoom 
         target_mm = target * zoom 
 
-        return self.loss_fn(coarse_preds_mm, target_mm, batch["loss_mask"])
+        return self.loss_fn(coarse_preds_mm, target_mm, batch["loss_mask"], surface)
 
     def calculate_metrics(self, batch, mode):
         metrics = {}
@@ -112,10 +121,10 @@ class SADenseNet(nn.Module):
 
             metrics[f"coarse_projection_dist_{mode}"] = projection_dist.mean()
 
-        # Consider zoom (mm per voxel) 
+        # Consider zoom (mm per voxel)
         zoom = batch["zoom"].to(target.device)
         zoom = zoom.unsqueeze(1)
-        
+
         # Calculate the mean Euclidean distance between the predicted and target landmarks
         distances = torch.norm(
             (coarse_preds - target) * zoom, dim=-1

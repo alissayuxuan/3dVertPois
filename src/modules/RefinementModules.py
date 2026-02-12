@@ -117,7 +117,7 @@ class Identity(RefinementModule):
             )
 
         return metrics
-        
+
 
 class PatchTransformer(nn.Module):
     """Enrich the coarse features with patch features extracted with a simple CNN
@@ -135,13 +135,13 @@ class PatchTransformer(nn.Module):
         vert_embedding_l: int,
         loss_fn: str,
         project_gt: bool = False,
+        project_pred: bool = False,
         warmup_epochs: int = -1,
         mlp_dim: int = 1024,
         num_layers: int = 3,
         num_heads: int = 4,
         dropout: float = 0.2,
         lr: float = 1e-5,
-
     ):
         super().__init__()
 
@@ -170,13 +170,13 @@ class PatchTransformer(nn.Module):
         )
 
         self.project_gt = project_gt
+        self.project_pred = project_pred
 
         self.loss_fn = get_loss_fn(loss_fn)
 
         self.lr = lr
 
         self.warmup_epochs = warmup_epochs
-
 
     def forward(self, batch):
         coarse_preds = batch["coarse_preds"]
@@ -208,22 +208,27 @@ class PatchTransformer(nn.Module):
         )
         batch["offsets"] = offsets
         batch["refined_preds"] = coarse_preds + offsets
+        if self.project_pred:
+            surface = batch["surface"]
+            batch["refined_preds"], _ = surface_project_coords(batch["refined_preds"], surface)
 
         return batch
 
     def calculate_loss(self, batch):
         target = batch["target"]
+        surface = batch["surface"]
         if self.project_gt:
             # Project targets to surface
-            surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
-        
+
         zoom = batch["zoom"].to(target.device)
         zoom = zoom.unsqueeze(1)
 
         refined_preds_mm = batch["refined_preds"] * zoom
         target_mm = target * zoom
-        return self.loss_fn(refined_preds_mm, target_mm, batch["loss_mask"]) #self.loss_fn(batch["refined_preds"], target, batch["loss_mask"])
+        return self.loss_fn(
+            refined_preds_mm, target_mm, batch["loss_mask"], surface
+        )  # self.loss_fn(batch["refined_preds"], target, batch["loss_mask"])
 
     def calculate_metrics(self, batch, mode):
         metrics = {}
@@ -354,7 +359,7 @@ class NoPoiPatchTransformer(nn.Module):
 
     def forward(self, batch):
         coarse_preds = batch["coarse_preds"]
-        #poi_indices = batch["poi_list_idx"]
+        # poi_indices = batch["poi_list_idx"]
         vertebra_indices = batch["vert_list_idx"]
         poi_features = batch["coarse_features"]
 
@@ -377,9 +382,9 @@ class NoPoiPatchTransformer(nn.Module):
         # Concatenate the patch features with the coarse features
         poi_features = torch.cat([poi_features, patches], dim=-1)
 
-        #offsets = self.refinement_module(
+        # offsets = self.refinement_module(
         #    coarse_preds, poi_features
-        #)
+        # )
 
         offsets = self.refinement_module(
             coarse_preds=coarse_preds.float(),  
@@ -390,7 +395,7 @@ class NoPoiPatchTransformer(nn.Module):
 
         batch["offsets"] = offsets
         batch["refined_preds"] = coarse_preds.detach() + offsets
-        #batch["refined_preds"] = coarse_preds + offsets
+        # batch["refined_preds"] = coarse_preds + offsets
 
         return batch
 
@@ -466,7 +471,7 @@ class NoPoiPatchTransformer(nn.Module):
             )
 
         return metrics
-    
+
 class NoVertPatchTransformer(nn.Module):
     """Enrich the coarse features with patch features extracted with a simple CNN
     regressor, then refine the predictions using a transformer WITHOUT vertebra embeddings. """
@@ -701,8 +706,8 @@ class NoPoiVertPatchTransformer(nn.Module):
 
     def forward(self, batch):
         coarse_preds = batch["coarse_preds"]
-        #poi_indices = batch["poi_list_idx"]
-        #vertebra_indices = batch["vert_list_idx"]
+        # poi_indices = batch["poi_list_idx"]
+        # vertebra_indices = batch["vert_list_idx"]
         poi_features = batch["coarse_features"]
 
         if (
@@ -724,9 +729,9 @@ class NoPoiVertPatchTransformer(nn.Module):
         # Concatenate the patch features with the coarse features
         poi_features = torch.cat([poi_features, patches], dim=-1)
 
-        #offsets = self.refinement_module(
+        # offsets = self.refinement_module(
         #    coarse_preds, poi_features
-        #)
+        # )
 
         offsets = self.refinement_module(
             coarse_preds=coarse_preds.float(),  
@@ -737,7 +742,7 @@ class NoPoiVertPatchTransformer(nn.Module):
 
         batch["offsets"] = offsets
         batch["refined_preds"] = coarse_preds.detach() + offsets
-        #batch["refined_preds"] = coarse_preds + offsets
+        # batch["refined_preds"] = coarse_preds + offsets
 
         return batch
 
@@ -747,7 +752,7 @@ class NoPoiVertPatchTransformer(nn.Module):
             # Project targets to surface
             surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
-        
+
         zoom = batch["zoom"].to(target.device)
         zoom = zoom.unsqueeze(1)
 
@@ -771,7 +776,7 @@ class NoPoiVertPatchTransformer(nn.Module):
             target, projection_dist = surface_project_coords(target, surface)
 
             metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
-        
+
         # Consider zoom (mm per voxel)
         zoom = batch["zoom"].to(target.device)
         zoom = zoom.unsqueeze(1)
@@ -823,12 +828,11 @@ class NoPoiVertPatchTransformer(nn.Module):
             )
 
         return metrics
-    
+
 
 class NoPoiFeaturePatchTransformer(nn.Module):
     """Extract patch features around coarse predictions and refine using transformer,
     but WITHOUT using the coarse features from the previous model."""
-    
 
     def __init__(
         self,
@@ -888,7 +892,7 @@ class NoPoiFeaturePatchTransformer(nn.Module):
         coarse_preds = batch["coarse_preds"]
         poi_indices = batch["poi_list_idx"]
         vertebra_indices = batch["vert_list_idx"]
-        #poi_features = batch["coarse_features"]
+        # poi_features = batch["coarse_features"]
 
         if (
             self.warmup_epochs > 0
@@ -999,7 +1003,7 @@ class NoPoiFeaturePatchTransformer(nn.Module):
             )
 
         return metrics
-    
+
 
 class NoPoiVertFeaturePatchTransformer(nn.Module):
     """Extract patch features around coarse predictions and refine using transformer,
@@ -1476,6 +1480,3 @@ class FeatureTransformer(nn.Module):
             )
 
         return metrics
-
-
-

@@ -22,7 +22,7 @@ import shutil  # For file operations
 
 from modules.PoiModule import PoiPredictionModule
 from src.modules.PoiDataModules import POIDataModule
-from utils.misc import surface_project_coords, surface_project_coords_marchingcubes
+from utils.misc import surface_project_coords, surface_project_coords_marchingcubes, surface_project_coords_marchingcubes_continuous
 
 
 def load_data_module_from_config(config_path, alternative_poi_ending=None):
@@ -980,6 +980,11 @@ if __name__ == "__main__":
 
     os.makedirs(args.save_path, exist_ok=True)
 
+    out_metrics = os.path.join(args.save_path, "overall_metrics.csv")
+    if os.path.exists(out_metrics):
+        print(f"Overall metrics file already exists at {out_metrics}. Loading existing metrics.")
+        sys.exit(0)
+
     if args.data_module_save_path == "":
         t = Path(args.checkpoint_path)
         i = 0
@@ -991,11 +996,6 @@ if __name__ == "__main__":
             i += 1
             # Path(args.checkpoint_path).parent.parent.joinpath("data_module_params.json"))
         # args.data_module_save_path = str(Path(args.checkpoint_path).parent.parent.joinpath("data_module_params.json"))
-
-    out_metrics = os.path.join(args.save_path, "overall_metrics.csv")
-    if os.path.exists(out_metrics):
-        print(f"Overall metrics file already exists at {out_metrics}. Loading existing metrics.")
-        sys.exit(0)
 
     ### Create DataFrame with prediction information
     prediction_df = create_prediction_df(
