@@ -40,6 +40,8 @@ def create_callbacks(callbacks_config):
 
 def run_experiment(experiment_config):
 
+    pl.seed_everything(42)
+
     # Set the matmul precision to 'medium' for better performance
     torch.set_float32_matmul_precision("medium")
     poi_module_config = experiment_config["module_config"]
