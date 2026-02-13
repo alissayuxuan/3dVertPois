@@ -25,13 +25,15 @@ from src.modules.PoiDataModules import POIDataModule
 from utils.misc import surface_project_coords, surface_project_coords_marchingcubes, surface_project_coords_marchingcubes_continuous
 
 
-def load_data_module_from_config(config_path, alternative_poi_ending=None):
+def load_data_module_from_config(config_path, alternative_poi_ending=None, **kwargs):
     # Load the configuration file
     with open(config_path, "r") as f:
         config = json.load(f)
 
     # Instantiate the DataModule with the loaded configurations
     config["batch_size"] = 1
+    if kwargs is not None:
+        config.update(kwargs)
     if alternative_poi_ending is not None:
         config["poi_file_ending"] = alternative_poi_ending
     else:
@@ -184,8 +186,8 @@ def create_prediction_poi_files(
         coarse_preds_batch = batch["coarse_preds"]
         refined_preds_batch = batch["refined_preds"]
 
-        # if save_gt_proj:
-        target_batch, _ = surface_project_coords(target_batch, batch["surface"])
+        if save_gt_proj:
+            target_batch, _ = surface_project_coords(target_batch, batch["surface"])
 
         if project:
             refined_preds_projected_batch, _ = surface_project_coords(refined_preds_batch, batch["surface"])
@@ -339,13 +341,21 @@ def run_predictions(
     checkpoint_path,
     split="val",
     alternative_poi_ending=None,
+    vert_list=None,
     neighbor=False,
 ):
     # Change the ending of the POI files if necessary
-    data_module = load_data_module_from_config(
-        data_module_save_path,
-        alternative_poi_ending=alternative_poi_ending,
-    )
+    if vert_list is not None:
+        data_module = load_data_module_from_config(
+            data_module_save_path,
+            alternative_poi_ending=alternative_poi_ending,
+            include_vert_list=vert_list,
+        )
+    else:
+        data_module = load_data_module_from_config(
+            data_module_save_path,
+            alternative_poi_ending=alternative_poi_ending,
+        )
     data_module.setup()
     zoom = getattr(data_module, "zoom", (1, 1, 1))
 
@@ -516,8 +526,8 @@ def run_predictions(
     return pred_dict
 
 
-def create_prediction_df(data_module_save_path, checkpoint_path, split="val", alternative_poi_ending=None, neighbor=False):
-    pred_dict = run_predictions(data_module_save_path, checkpoint_path, split, alternative_poi_ending, neighbor)
+def create_prediction_df(data_module_save_path, checkpoint_path, split="val", alternative_poi_ending=None, neighbor=False, vert_list=None):
+    pred_dict = run_predictions(data_module_save_path, checkpoint_path, split, alternative_poi_ending, vert_list, neighbor)
     # Calculate distances between target and predicted POIs (in mm)
     pred_dict["coarse_error"] = [
         np.linalg.norm((np.array(t) - np.array(c)) * np.array(zoom))
@@ -557,14 +567,18 @@ def calculate_metrics4paper(errors, threshold=2.0, round_digits=2):
     std = np.std(errors)
     median_error = np.median(errors)
     mse = np.mean(errors**2)
+    mse_std = np.std(errors**2)
     accuracy = np.mean(errors < threshold)
+    accuracy2 = np.mean(errors < threshold * 2)
     max_error = np.max(errors)
     return (
         round(mean_error, round_digits),
         round(median_error, round_digits),
         round(mse, round_digits),
         round(accuracy, round_digits),
+        round(accuracy2, round_digits),
         round(std, round_digits),
+        round(mse_std, round_digits),
         round(max_error, round_digits),
     )
 
@@ -975,8 +989,8 @@ if __name__ == "__main__":
     parser.add_argument("--save_files", action="store_true", help="Whether to save the prediction files at all.")
 
     args = parser.parse_args()
-    args.project = True  # REMOVE
-    args.save_gt_proj = True  # REMOVE
+    # args.project = True  # REMOVE
+    # args.save_gt_proj = True  # REMOVE
 
     os.makedirs(args.save_path, exist_ok=True)
 
@@ -997,9 +1011,34 @@ if __name__ == "__main__":
             # Path(args.checkpoint_path).parent.parent.joinpath("data_module_params.json"))
         # args.data_module_save_path = str(Path(args.checkpoint_path).parent.parent.joinpath("data_module_params.json"))
 
+    vert_list = [
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        28,
+        20,
+        21,
+        22,
+        23,
+        24,
+    ]  # specify vert_list if you want to evaluate only on specific vertebrae, e.g. vert_list=[1,2,3]
+
     ### Create DataFrame with prediction information
     prediction_df = create_prediction_df(
-        data_module_save_path=args.data_module_save_path, checkpoint_path=args.checkpoint_path, split=args.split, neighbor=args.neighbor
+        data_module_save_path=args.data_module_save_path,
+        checkpoint_path=args.checkpoint_path,
+        split=args.split,
+        neighbor=args.neighbor,
+        vert_list=vert_list,
     )
     prediction_df = prediction_df[prediction_df["loss_mask"] == True]
 
