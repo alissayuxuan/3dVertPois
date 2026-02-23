@@ -11,7 +11,7 @@ from TPTBox import NII, BIDS_FILE, BIDS_Global_info, No_Logger, Log_Type, Locati
 import numpy as np
 from joblib import Parallel, delayed
 from TPTBox.core.bids_constants import sequence_splitting_keys
-
+from time import perf_counter
 import os
 
 
@@ -29,7 +29,7 @@ def _proc(name, subject, der_out: str):
         for f in families:
             fid = f.family_id
 
-            logger.print(fid, f.get_key_len())
+            # logger.print(fid, f.get_key_len())
 
             if ["msk_seg-subreg", "msk_seg-vert"] not in f:
                 continue
@@ -56,8 +56,9 @@ def _proc(name, subject, der_out: str):
             # out_det.parent.mkdir(parents=True, exist_ok=True)
             #####
             if out_det.exists():
-                logger.print("Outputs already exist")
-                continue
+                x = 0
+                # logger.print("Outputs already exist")
+                # continue
 
             vert_msk = vert_ref.open_nii()
             sem_msk = sem_ref.open_nii()
@@ -65,6 +66,7 @@ def _proc(name, subject, der_out: str):
             vert_ids = [v for v in vert_msk.unique() if v >= 6]
 
             try:
+                start = perf_counter()
                 det_poi = calc_poi_from_subreg_vert(
                     vert=vert_msk,
                     subreg=sem_msk,
@@ -121,23 +123,26 @@ def _proc(name, subject, der_out: str):
                         Location.Vertebra_Direction_Inferior,
                         Location.Vertebra_Direction_Right,
                     ],
+                    verbose=False,
                 )
+                stop = perf_counter()
+                logger.print(f"Calculated deterministic POIs in {stop - start:.2f} seconds")
             except Exception as e:
-                logger.print(f"[SKIP] Error at {name}: {e}", Log_Type.FAIL)
+                # logger.print(f"[SKIP] Error at {name}: {e}", Log_Type.FAIL)
                 # raise e
                 SKIPPED_SUBJECTS.append(name)
                 return  # Direkt zurück → dieses Subjekt wird geskippt
             det_poi = det_poi.round(2)
-            det_poi.save(out_det)
+            # det_poi.save(out_det)
 
-            det_poi.to_global().save_mrk(out_det_global, split_by_region=True)
+            # det_poi.to_global().save_mrk(out_det_global, split_by_region=True)
 
             # det_poi_nii = det_poi.make_point_cloud_nii()[1]
             # det_poi_nii.save(out_det.parent.joinpath("nifty.nii.gz"))
             # break
         # break
     except Exception as e:
-        logger.print(f"[SKIP] Error at {name}: {e}", Log_Type.FAIL)
+        # logger.print(f"[SKIP] Error at {name}: {e}", Log_Type.FAIL)
         # raise e
         SKIPPED_SUBJECTS.append(name)
 
@@ -162,13 +167,13 @@ if __name__ == "__main__":
 
         der_out = "derivatives_poi_deterministic"
 
-        Parallel(n_jobs=10, backend="threading")(
-            delayed(_proc)(name, subject, der_out) for name, subject in bgi.enumerate_subjects(sort=True)
-        )
-        # for name, subject in bgi.enumerate_subjects(sort=True):
-        # if "601" not in name:
-        #    continue
-        #    _proc(name, subject, der_out)
+        # Parallel(n_jobs=5, backend="threading")(
+        #    delayed(_proc)(name, subject, der_out) for name, subject in bgi.enumerate_subjects(sort=True)
+        # )
+        for name, subject in bgi.enumerate_subjects(sort=True):
+            # if "601" not in name:
+            #    #    continue
+            _proc(name, subject, der_out)
         #    break
 
         if len(SKIPPED_SUBJECTS) > 0:

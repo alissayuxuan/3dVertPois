@@ -527,7 +527,12 @@ def run_predictions(
 
 
 def create_prediction_df(data_module_save_path, checkpoint_path, split="val", alternative_poi_ending=None, neighbor=False, vert_list=None):
+    from time import perf_counter
+
+    start = perf_counter()
     pred_dict = run_predictions(data_module_save_path, checkpoint_path, split, alternative_poi_ending, vert_list, neighbor)
+    stop = perf_counter()
+    print(f"Time taken to run predictions: {stop - start:.2f} seconds")
     # Calculate distances between target and predicted POIs (in mm)
     pred_dict["coarse_error"] = [
         np.linalg.norm((np.array(t) - np.array(c)) * np.array(zoom))

@@ -102,6 +102,10 @@ class POIDataModule(pl.LightningDataModule):
 
     def setup(self, stage=None):
         self.master_df = pd.read_csv(self.master_df_path)
+        # empty column bad_poi_list
+        # n_rows = len(self.master_df)
+        # self.master_df["bad_poi_list"] = None  # Initialize the 'bad_poi_list' column with None
+        # self.master_df["bad_poi_list"] = ["[]" for _ in range(n_rows)]  # Initialize the 'bad_poi_list' column with empty lists
 
         # Only keep rows where vertebra is in "include_vert_list"
         if self.include_vert_list is not None:

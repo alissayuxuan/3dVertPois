@@ -6,10 +6,11 @@ sys.path.append(str(file.parents[1]))
 sys.path.append(str(file.parents[2]))
 
 from TPTBox import NII, BIDS_FILE, BIDS_Global_info, No_Logger, Log_Type, Location, POI, calc_poi_from_subreg_vert
-#from utils.filepaths import filepath_dataset
+# from utils.filepaths import filepath_dataset
 import numpy as np
 from joblib import Parallel, delayed
 from TPTBox.core.bids_constants import sequence_splitting_keys
+from time import perf_counter
 
 import os
 
@@ -53,14 +54,14 @@ def _proc(name, subject):
 
             #####
             # outputs
-            #out_det = ct_ref.get_changed_path(file_type="json", bids_format="poi", parent=der_seg, info={"source": "deterministic"})
-            #out_det_global = ct_ref.get_changed_path(file_type="json", bids_format="poi", parent=der_seg, info={"source": "global"})
+            # out_det = ct_ref.get_changed_path(file_type="json", bids_format="poi", parent=der_seg, info={"source": "deterministic"})
+            # out_det_global = ct_ref.get_changed_path(file_type="json", bids_format="poi", parent=der_seg, info={"source": "global"})
             out_det = Path(SAVE_PATH) / name / "poi_predicted.json"
             out_det.parent.mkdir(parents=True, exist_ok=True)
             #####
-            if out_det.exists():
-                logger.print("Outputs already exist")
-                continue
+            # if out_det.exists():
+            #    logger.print("Outputs already exist")
+            #    continue
 
             ct_nii = ct_ref.open_nii()
             logger.print(ct_nii)
@@ -71,6 +72,7 @@ def _proc(name, subject):
             print("DEBUG:", name)
 
             try:
+                start = perf_counter()
                 det_poi = calc_poi_from_subreg_vert(
                     vert=vert_msk,
                     subreg=sem_msk,
@@ -126,15 +128,18 @@ def _proc(name, subject):
                         Location.Vertebra_Direction_Inferior,
                         Location.Vertebra_Direction_Right,
                     ],
+                    verbose=False,
                 )
+                end = perf_counter()
+                logger.print(f"POI calculation took {end - start:.2f} seconds")
             except Exception as e:
                 print(f"[SKIP] Fehler bei {name}: {e}")
                 SKIPPED_SUBJECTS.append(name)
                 return  # Direkt zurück → dieses Subjekt wird geskippt    
             det_poi = det_poi.round(2)
-            det_poi.save(out_det)
-            
-            #det_poi.to_global().save_mrk(out_det_global)
+            # det_poi.save(out_det)
+
+            # det_poi.to_global().save_mrk(out_det_global)
 
             # det_poi_nii = det_poi.make_point_cloud_nii()[1]
             # det_poi_nii.save(out_det.parent.joinpath("nifty.nii.gz"))
