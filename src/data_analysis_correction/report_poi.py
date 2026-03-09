@@ -77,7 +77,7 @@ def make_single_vert_poi_report(
                 subject_name=subject_id,
                 vertebra=vert,
                 location=poi_loc,
-                severity=1.0 if allowed_soft_subreg is None or touched_subreg not in allowed_soft_subreg else 0.5,
+                severity=10.0 if allowed_soft_subreg is None or touched_subreg not in allowed_soft_subreg else 1.0,
                 relevant_data={"touched_subregion": touched_subreg},
                 description=f"Projected POI touches invalid subregion, allowed {allowed_subreg}",
             )
@@ -146,6 +146,7 @@ def make_poi_report(
     debug: bool = False,
     do_rotate_around_corpus: bool = True,
     ignore_poi: list[Location] = [],
+    vertebra_from: int = 6,
     # surface_msk: NII,
 ) -> list[LogicReport]:
     report_lines: list[LogicReport] = []
@@ -153,11 +154,12 @@ def make_poi_report(
     first_v = True
 
     vert_in_order = sorted(poi_ref.keys_region(), key=lambda v: v_idx_order.index(v))
+    vert_in_order = [v for v in vert_in_order if v >= vertebra_from - 1]
 
     for idx, vert in enumerate(tqdm(vert_in_order, desc="Processing vertebrae", unit="vertebra")):
         is_first_or_last = idx == 0 or idx == len(vert_in_order) - 1
-        if vert not in [23]:
-            continue
+        # if vert not in [23]:
+        #    continue
         # if vert not in [10, 28]:
         #    continue
         v_msk = vert_msk.extract_label(vert)
@@ -212,8 +214,8 @@ def make_poi_report(
         # poi_proj_crop = surface_project_poi(poi_proj_crop, surf_crop)
 
         for poi_loc_val in poi_ref.keys_subregion():
-            if poi_loc_val != 82:
-                continue
+            # if poi_loc_val != 82:
+            #    continue
             poi_loc = Location(poi_loc_val)
             if poi_loc in ignore_poi:
                 continue
@@ -282,6 +284,13 @@ def _proc(subject: Path, ds_dir: Path, opt):
         poi_ref_path = img_bidsf.get_changed_path(
             file_type="json", bids_format="poi", info={"seg": "vert", "mod": "ct"}, parent=opt.der_poi_mainpred
         )
+        if not poi_ref_path.exists():
+            poi_ref_path = img_bidsf.get_changed_path(
+                file_type="json",
+                bids_format="poi",
+                info={"seg": "vert", "mod": None, "source": "deterministic"},
+                parent=opt.der_poi_mainpred,
+            )
         poi_proj_ref_path = img_bidsf.get_changed_path(
             file_type="json", bids_format="poi", info={"seg": "vert", "mod": "ct"}, parent=opt.der_poi_mainpred + "_sproj"
         )
@@ -303,6 +312,8 @@ def _proc(subject: Path, ds_dir: Path, opt):
         if poi_4_rotation_p is not None and poi_4_rotation_p.exists():
             poi_4_rotation = POI.load(poi_4_rotation_p).reorient_()
             for v in poi_ref.keys_region():
+                if v < opt.vertebra_from:
+                    continue
                 for loc in [
                     Location.Vertebra_Direction_Inferior,
                     Location.Vertebra_Direction_Posterior,
@@ -325,6 +336,7 @@ def _proc(subject: Path, ds_dir: Path, opt):
             debug=False,
             do_rotate_around_corpus=poi_4_rotation_p is not None,
             ignore_poi=opt.ignore_poi,
+            vertebra_from=opt.vertebra_from,
         )
 
         if len(report_lines) > 0:
@@ -338,11 +350,19 @@ class InferenceConfig(Class_to_ArgParse):
     rawdata: str = "rawdata"
     der_subreg: str = "derivatives_combined"  # "derivatives_subreg"
     der_vert: str = "derivatives_combined"
-    der_poi_mainpred: str = "derivatives_poi_automatic_correction-v3"
+    der_direction: str = "derivatives_poi_deterministic"
+    #######
+    der_poi_mainpred: str = "derivatives_poi_automatic_correction-v3-4"
+    # "derivatives_poi_automatic_correction-v3"
+    # "derivatives_poi_surface_cc3-v0_flipped"
+    # "derivatives_poi_surface_cc3-bs32-v1_flipped"
+    # "derivatives_poi_surface_neighbor_cc3-v1_flipped"
+    # ]
+    #######
     # "derivatives_poi_automatic_correction"
     # "derivatives_poi_surface-neighbor-neighaug-project_gt_cc3-exclude6-v2"
-    der_direction: str = "derivatives_poi_deterministic"
     der_out_prefix: str = "TEST_"
+    vertebra_from: int = 6
 
     out_root: Path = Path("/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis")
 
@@ -365,8 +385,8 @@ class InferenceConfig(Class_to_ArgParse):
         ]
     )
 
-    num_threads: int = 1
-    cprofile_this: bool = True
+    num_threads: int = 10
+    cprofile_this: bool = False
 
 
 if __name__ == "__main__":
@@ -397,8 +417,8 @@ if __name__ == "__main__":
             Parallel(n_jobs=opt.num_threads)(delayed(_proc)(subject, ds_dir, opt) for subject in subjects)
         else:
             for subject in subjects:
-                if "e014" not in subject.name:
-                    continue
+                # if "e014" not in subject.name:
+                #    continue
                 with cProfile.Profile() as pr:
                     _proc(subject, ds_dir, opt)
                 pr.dump_stats(

@@ -16,7 +16,7 @@ from utils.vertebra_rotation import (
     get_axis_direction_vector,
 )
 import numpy as np
-from report_utils import SUBREGION_CONSTRAINT_DICT
+from report_utils import SUBREGION_CONSTRAINT_DICT, load_agg_report_df, convert_agg_report_to_reported_bool_dict
 import shutil
 from utils.misc import surface_project_poi_vert_wise
 
@@ -27,20 +27,30 @@ RAWDATA = "rawdata"
 DERIV_SUBREG = "derivatives_combined"  # "derivatives_subreg"
 DERIV_VERT = "derivatives_combined"
 #
-DERIV_POI_MAINPRED = "derivatives_poi_surface-neighbor-neighaug-project_gt_cc3-exclude6-v2"
+DERIV_POI_MAINPRED = "derivatives_poi_surface_cc3-bs32-v1"
 DERIV_POI_PREDS = [
-    "derivatives_poi_surface-neighbor-neighaug-project_gt_cc3-exclude6-v0",
-    "derivatives_poi_surface_project-gt_cc3-exclude6-v0",
+    "derivatives_poi_surface_neighbor_cc3-v1",
+    "derivatives_poi_surface_neighbor_cc3-v1_flipped",
+    "derivatives_poi_surface_cc3-v0",
+    "derivatives_poi_surface_cc3-v0_flipped",
+    # "derivatives_poi_surface_cc3-bs32-v1",
+    "derivatives_poi_surface_cc3-bs32-v1_flipped",
 ]
 DERIV_DET = "derivatives_poi_deterministic"
 #
-DERIV_OUT = "derivatives_poi_automatic_correction-v3"
+DERIV_OUT = "derivatives_poi_automatic_correction-v3-4"
 # TODO use reports and don't use points that are marked there?
+
+###
+REPORT_ROOT = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/"
+REPORT_PREFIX = "TEST_"
+REPORT_AGG_NAME = "aggregated_poi_report.xlsx"
 
 
 def _proc(
     subject: Path,
     ds_dir: Path,
+    report_der2dict: dict,
     verbose=False,
 ):
     subject_id = subject.name
@@ -136,12 +146,14 @@ def _proc(
         remove_pois = []
 
         for r, s, c in poi_ref.items():
+            is_first_or_last_v = r == vert_nii.unique()[0] or r == vert_nii.unique()[-1]
             c_new = np.asarray(c)
             vert_instance = Vertebra_Instance(r)
             s_location = Location(s)
             # for each reference poi, find corresponding pois in other predictions
             # then compute distances
-            other_c = {k: np.asarray(v[r, s]) for k, v in poi_dict.items() if [r, s] in v}  # type: ignore
+            other_reported_err = [k for k in report_der2dict if (r, s) in report_der2dict[k][subject_ct_id]]  # type: ignore
+            other_c = {k: np.asarray(v[r, s]) for k, v in poi_dict.items() if [r, s] in v and k not in other_reported_err}  # type: ignore
             other_dist = {k: np.linalg.norm(c_new - pc) for k, pc in other_c.items()}
             other_dist = dict(sorted(other_dist.items(), key=lambda x: x[1]))
             other_dist_sorted_keys = other_dist.keys()
@@ -169,7 +181,8 @@ def _proc(
                 # move towards up for a couple voxels
                 # axis_idx = poi_ref.get_axis("S")
                 shift = 3
-                c_new = move_poi_along_axis(c_new, poi_ref, "S", vert_orientations[r], 3)
+                if not is_first_or_last_v and vert_orientations[r] is not None:
+                    c_new = move_poi_along_axis(c_new, poi_ref, "S", vert_orientations[r], 3)
                 # inversed = poi_ref.orientation[axis_idx] != "S"
                 # shift = 3 * (1 if not inversed else -1)
                 # c_new[axis_idx] = c_new[axis_idx] + shift
@@ -186,7 +199,7 @@ def _proc(
                     all_x = [pc for k, pc in other_c.items() if k in ks] + [c_new]
                     c_new = np.mean(all_x, axis=0)
                     # move a little back
-                    if vert_orientations[r] is not None:
+                    if not is_first_or_last_v and vert_orientations[r] is not None:
                         c_new = move_poi_along_axis(c_new, poi_ref, "P", vert_orientations[r], 3)
                     logger.print(
                         f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Spinosus POI adjusted to mean of closest predictions of {all_x}",
@@ -203,7 +216,7 @@ def _proc(
                     all_x = [pc for k, pc in other_c.items() if k in ks if "neighbor" in k] + [c_new]
                     c_new = np.mean(all_x, axis=0)
 
-                    if vert_orientations[r] is not None:
+                    if not is_first_or_last_v and vert_orientations[r] is not None:
                         c_new = move_poi_along_axis(c_new, poi_ref, "I", vert_orientations[r], 3)
                     logger.print(
                         f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Spinosus POI adjusted to mean of closest predictions of {all_x}",
@@ -226,7 +239,8 @@ def _proc(
                     f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Anterior POI selected from {candidates}", verbose=verbose
                 )
                 # c_new = all_a_sorted[k_best]
-                c_new = move_poi_along_axis(c_new, poi_ref, "A", vert_orientations[r], 3)
+                if not is_first_or_last_v and vert_orientations[r] is not None:
+                    c_new = move_poi_along_axis(c_new, poi_ref, "A", vert_orientations[r], 3)
 
             # lumbar: lower inferior facet POI
             if vert_instance in Vertebra_Instance.lumbar():
@@ -248,7 +262,7 @@ def _proc(
                         f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Lumbar Inferior Articulate POI adjusted to extremum of closest predictions of {all_x}",
                         verbose=verbose,
                     )
-                    if vert_orientations[r] is not None:
+                    if not is_first_or_last_v and vert_orientations[r] is not None:
                         c_new = move_poi_along_axis(c_new, poi_ref, "I", vert_orientations[r], 2)
 
             # costalis: most lateral point of all predictions
@@ -264,7 +278,7 @@ def _proc(
                     f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Costal Process POI adjusted to extremum of closest predictions of {all_x}",
                     verbose=verbose,
                 )
-                if vert_orientations[r] is not None:
+                if not is_first_or_last_v and vert_orientations[r] is not None:
                     c_new = move_poi_along_axis(c_new, poi_ref, dir, vert_orientations[r], 2)
 
             poi_ref[r, s] = tuple(c_new)
@@ -328,7 +342,14 @@ if __name__ == "__main__":
 
         subjects = sorted(list(raw_dir.iterdir()), key=lambda x: x.name)
 
-        Parallel(n_jobs=12)(delayed(_proc)(subject, ds_dir) for subject in subjects)
+        # load reports
+        report_der2dict = {}
+        for der_name in [DERIV_POI_MAINPRED] + DERIV_POI_PREDS:
+            report_df = load_agg_report_df(REPORT_ROOT, REPORT_PREFIX, der_name, REPORT_AGG_NAME)
+            if report_df is not None:
+                report_der2dict[der_name] = convert_agg_report_to_reported_bool_dict(report_df)
+
+        Parallel(n_jobs=12)(delayed(_proc)(subject, ds_dir, report_der2dict) for subject in subjects)
         # for subject in subjects:
         #    _proc(subject, ds_dir)
         # break

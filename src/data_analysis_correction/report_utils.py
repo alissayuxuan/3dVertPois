@@ -140,7 +140,8 @@ SPATIAL_LOGIC_CONSTRAINTS = [
     SpatialLC([83, 82], "S", [86, 87]),
     # SpatialLC([86, 87], "S", [81]), #TODO <-- requires rotation
     # COM constraints
-    SpatialLC(42, ["S", "A"], 81),
+    SpatialLC(42, "S", 81),
+    SpatialLC(42, "A", 81),
     SpatialLC(43, "R", 83),
     SpatialLC(44, "L", 82),
     SpatialLC([45, 46], "I", [88, 89]),
@@ -198,3 +199,75 @@ SUBREGION_SOFTCONSTRAINT_DICT = {
     for lc in SUBREGION_CONSTRAINT
     for loc in (lc.location1 if isinstance(lc.location1, list) else [lc.location1])
 }
+
+
+def load_agg_report_df(root: str, prefix: str, der_name: str, file_name: str = "aggregated_poi_report.xlsx") -> pd.DataFrame | None:
+    report_path = Path(root).joinpath(f"{prefix}{der_name}", file_name)
+    if not report_path.exists():
+        logger.print(f"Report {report_path} does not exist", Log_Type.FAIL)
+        return None
+    df = pd.read_excel(report_path)
+    return df
+
+
+def convert_agg_report_to_reported_bool_dict(
+    df: pd.DataFrame,
+    severity_threshold=0.0,
+    vertebra_from: int = 8,
+) -> dict[str, dict[int, dict[Location, bool]]]:
+    report_dict = {}
+    for _, row in df.iterrows():
+        subject_name = row["subject_name"]
+        vert = row["vertebra"]
+        if vert < vertebra_from:
+            continue
+        location = Location(row["location"])
+        severity = row["severity"]
+        if subject_name not in report_dict:
+            report_dict[subject_name] = {}
+        if severity >= severity_threshold:
+            report_dict[subject_name][(vert, location)] = True
+    return report_dict
+
+
+def is_poi_reported(report_dict, subject_ct_id, vert, location):
+    if subject_ct_id in report_dict:
+        if (vert, location) in report_dict[subject_ct_id]:
+            return report_dict[subject_ct_id][(vert, location)]
+    return False
+
+
+if __name__ == "__main__":
+    ROOT = Path("/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/")
+    PREFIX = "TEST_"
+
+    der_names = ROOT.glob(f"{PREFIX}*")
+
+    for der in der_names:
+        if not der.is_dir():
+            continue
+        if "derivatives" not in der.name:
+            continue
+        if "poi" not in der.name:
+            continue
+
+        der = der.name.split(f"{PREFIX}")[1]
+        logger.print(f"{der}", Log_Type.STAGE)
+
+        df = load_agg_report_df(str(ROOT), PREFIX, der)
+        if df is not None:
+            report_der2dict = convert_agg_report_to_reported_bool_dict(df)
+            n_rows = len(df)
+
+            # print("Number of reported errors in df:", n_rows)
+
+            # compute sum of entire entries
+            # print(report_der2dict)
+            report_der2dict_sum_per_vert = {s: len(v) for s, v in report_der2dict.items()}
+            # print(report_der2dict_sum_per_vert)
+            report_der2dict_sum = sum(report_der2dict_sum_per_vert.values())
+
+            logger.print(f"Total number of reported errors: {report_der2dict_sum}")
+
+        print()
+        # break
