@@ -569,12 +569,14 @@ def calculate_metrics(errors, threshold=2.0):
 
 def calculate_metrics4paper(errors, threshold=2.0, round_digits=2):
     mean_error = np.mean(errors)
+    # mean error of worst 10% of errors
+    # mean_worst_error = np.mean(np.sort(errors)[-int(0.005 * len(errors)) :])
     std = np.std(errors)
     median_error = np.median(errors)
     mse = np.mean(errors**2)
     mse_std = np.std(errors**2)
     accuracy = np.mean(errors < threshold)
-    accuracy2 = np.mean(errors < threshold * 2)
+    accuracy2 = np.mean(errors < 4.0)
     max_error = np.max(errors)
     return (
         round(mean_error, round_digits),

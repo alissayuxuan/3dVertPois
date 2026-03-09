@@ -22,7 +22,7 @@ SKIPPED_SUBJECTS = []
 
 # zoom = (0.8, 0.8, 0.8)
 def _proc(name, subject, der_out: str):
-    # if "25" not in name:
+    # if "e004" not in name:
     #    return
     try:
         q = subject.new_query()
@@ -67,9 +67,17 @@ def _proc(name, subject, der_out: str):
                     continue
                 if v not in poi.keys_region():
                     continue
+                # if v != 20:
+                #    continue
                 vpoi = poi.extract_region(v)
+                # vpoi = vpoi.extract_subregion_(122)
                 surface_nii = vert_nii.extract_label(v)  # .compute_surface_mask(connectivity=3, dilated_surface=False)
-                det_poi = surface_project_poi(vpoi, surface_nii=surface_nii, requires_filling=False)
+                det_poi = surface_project_poi(
+                    vpoi,
+                    surface_nii=surface_nii,
+                    requires_filling=False,
+                    debug=True,
+                )
                 poi_s = [i for i in poi.keys_subregion() if i in vpoi.keys_subregion()]
                 for s in poi_s:
                     if s == 0:
@@ -96,9 +104,9 @@ if __name__ == "__main__":
     ]
 
     DER_MSK = "derivatives_combined"
-    DER_IN = "derivatives_poi_surface-neighbor-neighaug-project_gt_cc3-exclude6-v2"
+    DER_IN = "derivatives_poi_surface_cc3-bs32-v1_flipped"
     # "derivatives_poi_deterministic"
-    der_out = DER_IN + "_sprojTEST"
+    der_out = DER_IN + "_sproj"
 
     for ds_name in ds_names:
 
@@ -106,6 +114,7 @@ if __name__ == "__main__":
         bgi = BIDS_Global_info(
             datasets=[ds_path],
             parents=[DER_IN, DER_MSK],
+            verbose=False,
         )
 
         logger.print("Processing dataset:", ds_name, Log_Type.STAGE)

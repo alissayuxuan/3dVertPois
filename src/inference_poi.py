@@ -36,6 +36,47 @@ from torch.utils.data.dataloader import default_collate
 from eval import combine_centroids
 from model_sel import TrainedModelInfo
 
+poi_flip_pairs = {
+    # These are the middle points, i.e. the ones that are not flipped
+    81: 81,
+    101: 101,
+    103: 103,
+    102: 102,
+    104: 104,
+    105: 105,  #
+    106: 106,  #
+    107: 107,  #
+    108: 108,  #
+    125: 125,
+    127: 127,
+    # Flipped left to right
+    83: 82,
+    84: 85,
+    86: 87,
+    88: 89,
+    109: 117,
+    111: 119,
+    110: 118,
+    112: 120,
+    113: 121,  #
+    114: 122,  #
+    115: 123,  #
+    116: 124,  #
+    # Flipped right to left
+    82: 83,
+    85: 84,
+    87: 86,
+    89: 88,
+    117: 109,
+    118: 110,
+    119: 111,
+    120: 112,
+    121: 113,
+    122: 114,
+    123: 115,
+    124: 116,
+}
+
 
 class GruberInferenceDataset(Dataset):
     def __init__(
@@ -430,7 +471,6 @@ def preprocess_segmentation_masks(
     vert_list,
     zoom=(1, 1, 1),
     tmp_name: str = "tmp",
-    inference_flipped: bool = False,
 ):
     """
     Preprocess segmentation masks and create a master dataframe.
@@ -640,7 +680,6 @@ def create_prediction_poi_files(
         vert_list,
         zoom,
         tmp_name="tmp_" + vert_out.name,
-        inference_flipped=inference_flipped,
     )
 
     print(f"inferencing subject: {subject}")
@@ -791,6 +830,12 @@ def create_prediction_poi_files(
             unpadded_cutout_poi = unpadded_refined_preds_ctd
         print("unpadded_refined_preds_ctd: ", unpadded_refined_preds_ctd) if first else None
 
+        if inference_flipped:
+            # swap ids in unpadded_cutout_poi
+            unpadded_cutout_poi.map_labels_(label_map_subregion=poi_flip_pairs)
+            if use_neighbor:  # <- I have no idea why
+                unpadded_refined_preds_ctd.map_labels_(label_map_subregion=poi_flip_pairs)
+
         # subject_dir = os.path.join(save_dir, str(subject), "cutouts-preproccessed")
         # os.makedirs(subject_dir, exist_ok=True)
         subject_dir: Path = vert_out.parent.joinpath("cutouts-preproccessed")
@@ -800,7 +845,7 @@ def create_prediction_poi_files(
         ctd_save_path = os.path.join(subject_dir, str(subject) + "_" + str(vertebra) + "_pred.json")
         ctd_global_save_path = ctd_save_path.replace("_pred.json", "_pred_global.json")
 
-        unpadded_cutout_poi.save(ctd_save_path, verbose=False)
+        unpadded_cutout_poi.save(ctd_save_path, verbose=True)
         unpadded_refined_preds_ctd_poi = POI.load(ctd_save_path)
         unpadded_refined_preds_ctd_poi.to_global().save_mrk(ctd_global_save_path)
 
@@ -881,8 +926,9 @@ class InferenceConfig(Class_to_ArgParse):
     )
     der_msk: str = "derivatives_combined"
     der_out_base: str = "derivatives_poi_"
-    model_info: TrainedModelInfo = TrainedModelInfo.GRUBER_S_SURFACE
-    inference_flipped: bool = False
+    model_info: TrainedModelInfo = TrainedModelInfo.T_N_SURFACE
+    inference_flipped: bool = True
+    project_to_surface: bool = False
 
 
 if __name__ == "__main__":
@@ -899,7 +945,7 @@ if __name__ == "__main__":
     model_dir = model_info.model_dir
 
     #
-    project_to_surface = False
+    project_to_surface = opt.project_to_surface
 
     # LOOP
     for ds_name in ds_names:

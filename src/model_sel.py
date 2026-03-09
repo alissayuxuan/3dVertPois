@@ -1,6 +1,6 @@
 from enum import Enum
 
-MODEL_ROOT = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/largefov_pois-cc3-exclude6/"
+MODEL_ROOT = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/ForVerse/"
 
 
 class TrainedModelInfo(Enum):
@@ -24,6 +24,26 @@ class TrainedModelInfo(Enum):
     def model_path(self):
         return f"{MODEL_ROOT}/{self.model_dir}/version_{self.version}/checkpoints/{self.checkpoint_name}.ckpt"
 
+    # POST MICCAI (with more sorted out for training)
+    T_S_SURFACE = (
+        "surface_cc3",
+        0,
+        "sad-pt-epoch=104-fine_mean_distance_val=1.85",
+    )
+
+    T_S_SURFACE_HIGHBS = (
+        "surface_cc3-bs32",
+        1,
+        "sad-pt-epoch=133-fine_mean_distance_val=1.68",
+    )
+
+    T_N_SURFACE = (
+        "surface_neighbor_cc3",
+        1,
+        "sad-pt-epoch=52-fine_mean_distance_val=4.22",
+    )
+
+    ####################################################
     # Single best training MAE
     GRUBER_S_SURFACE = (
         "surface_project-gt_cc3-exclude6",
