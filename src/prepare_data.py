@@ -10,14 +10,19 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from TPTBox import NII, BIDS_Global_info, np_utils
+from TPTBox import NII, BIDS_Global_info, np_utils, No_Logger, Log_Type, BIDS_FILE
 from TPTBox.core.poi import POI
 from TPTBox import Subject_Container
 from pqdm.processes import pqdm
-
+from data_analysis_correction.report_utils import (
+    SUBREGION_CONSTRAINT_DICT,
+    load_agg_report_df,
+    convert_agg_report_to_reported_bool_dict,
+    is_vert_reported,
+)
 
 # /DATA/NAS/datasets_processed/CT_spine/dataset-poi-gruber/
-
+logger = No_Logger(prefix="prepare_data")
 
 def load_exclusion_dict(excel_path):
     """Load Excel file and create lookup dictionary for exclusions"""
@@ -64,72 +69,86 @@ def get_bad_poi_list(subject_id: str, vert: int, exclude_dict: dict[str, list[tu
     return filtered_pois
 
 
-def get_gruber_poi(container) -> POI:
+def get_gruber_poi(container, extra_filter: dict[str, str] | None = None) -> tuple[POI, BIDS_FILE]:
     poi_query = container.new_query(flatten=True)
     poi_query.filter_format("poi")
+    poi_query.filter_filetype("json")  # only json files
+    if extra_filter is not None:
+        for key, value in extra_filter.items():
+            poi_query.filter(key, value)
 
     if not poi_query.candidates:
-        print("ERROR: No POI candidates found!")
-        return None
+        logger.print("ERROR: No POI candidates found!", Log_Type.FAIL)
+        return None, None
 
     poi_candidate = poi_query.candidates[0]
-    print(f"Loading POI from: {poi_candidate.file['json']}")
+    poi_p = poi_candidate.file["json"]
+    logger.print(f"Loading POI from: {poi_p}")
 
     try:
-        poi = POI.load(poi_candidate.file["json"])
-        return poi
+        poi = POI.load(poi_p)
+        return poi, poi_candidate
     except Exception as e:
-        print(f"Error loading POI: {str(e)}")
-        return None
+        logger.print(f"Error loading POI: {str(e)}", Log_Type.FAIL)
+        return None, poi_candidate
 
 
-def get_ct(container) -> NII:
+def get_ct(container, extra_filter: dict[str, str] | None = None) -> tuple[NII, str]:
     ct_query = container.new_query(flatten=True)
     ct_query.filter_format("ct")
     ct_query.filter_filetype("nii.gz")  # only nifti files
+    if extra_filter is not None:
+        for key, value in extra_filter.items():
+            ct_query.filter(key, value)
     ct_candidate = ct_query.candidates[0]
 
-    print(f"Loading CT from: {ct_candidate.file['nii.gz']}")
+    logger.print(f"Loading CT from: {ct_candidate.file['nii.gz']}")
 
     try:
         ct = ct_candidate.open_nii()
-        return ct
+        return ct, ct_candidate.file["nii.gz"]
     except Exception as e:
-        print(f"Error opening CT: {str(e)}")
-        return None
+        logger.print(f"Error opening CT: {str(e)}", Log_Type.FAIL)
+        return None, None
 
 
-def get_subreg(container) -> NII:
+def get_subreg(container, extra_filter: dict[str, str] | None = None) -> NII:
     subreg_query = container.new_query(flatten=True)
     subreg_query.filter_format("msk")
     subreg_query.filter_filetype("nii.gz")  # only nifti files
     subreg_query.filter("seg", "subreg")
+    if extra_filter is not None:
+        for key, value in extra_filter.items():
+            subreg_query.filter(key, value)
     subreg_candidate = subreg_query.candidates[0]
 
-    print(f"Loading subreg from: {subreg_candidate.file['nii.gz']}")
+    logger.print(f"Loading subreg from: {subreg_candidate.file['nii.gz']}")
 
     try:
         subreg = subreg_candidate.open_nii()
         return subreg
     except Exception as e:
-        print(f"Error opening subreg: {str(e)}")
+        logger.print(f"Error opening subreg: {str(e)}", Log_Type.FAIL)
         return None
 
 
-def get_vertseg(container) -> NII:
+def get_vertseg(container, extra_filter: dict[str, str] | None = None) -> NII:
     vertseg_query = container.new_query(flatten=True)
     vertseg_query.filter_format("msk")
     vertseg_query.filter_filetype("nii.gz")  # only nifti files
     vertseg_query.filter("seg", "vert")
+    if extra_filter is not None:
+        for key, value in extra_filter.items():
+            vertseg_query.filter(key, value)
     vertseg_candidate = vertseg_query.candidates[0]
 
-    print(f"Loading vertseg from: {vertseg_candidate.file['nii.gz']}")
+    logger.print(f"Loading vertseg from: {vertseg_candidate.file['nii.gz']}")
 
     try:
         vertseg = vertseg_candidate.open_nii()
         return vertseg
     except Exception as e:
-        print(f"Error opening vertseg: {str(e)}")
+        logger.print(f"Error opening vertseg: {str(e)}", Log_Type.FAIL)
         return None
 
 
@@ -145,6 +164,27 @@ def get_files(
         get_ct_fn(container),
         get_subreg_fn(container),
         get_vertseg_fn(container),
+    )
+
+
+def get_files_withfilter(
+    container,
+    get_poi: Callable,
+    get_ct_fn: Callable,
+    get_subreg_fn: Callable,
+    get_vertseg_fn: Callable,
+) -> tuple[POI, NII, NII, NII]:
+    poi, poi_bf = get_poi(container)
+    extra_keys = ["split"]
+    if poi is not None:
+        extra_filter = {key: value for key, value in poi_bf.info.items() if key in extra_keys}
+    else:
+        extra_filter = None
+    return (
+        poi,
+        get_ct_fn(container, extra_filter=extra_filter),
+        get_subreg_fn(container, extra_filter=extra_filter),
+        get_vertseg_fn(container, extra_filter=extra_filter),
     )
 
 
@@ -202,12 +242,17 @@ def process_container(
     exclusion_dict: dict | None = None,
     compute_surface_mask: bool = False,
     include_neighbouring_vertebrae: bool = False,
+    report_der2dict: dict | None = None,
 ):
     # if "WS-25" not in subject and "WS-05" not in subject and "WS-22" not in subject and "WS-46" not in subject:
     #    return []
 
-    print(f"Processing Subject: {subject}")
-    poi, ct, subreg, vertseg = get_files_fn(container)
+    logger.print(f"Processing Subject: {subject}")
+    poi, (ct, ct_p), subreg, vertseg = get_files_fn(container)
+
+    if ct is None or subreg is None or vertseg is None or poi is None:
+        logger.print(f"Skipping subject {subject} due to missing data.", Log_Type.FAIL)
+        return []
 
     # reorient data to same orientation
     ct.reorient_(("L", "A", "S"))
@@ -234,6 +279,11 @@ def process_container(
     for index in range(len(vertebrae)):  # loops through each vertebra ID (extracted from POI keys)
         vert = vertebrae[index]
         if vert in vertseg_arr:  # vertebra found in segmentation mask
+
+            subject_ct_id = ct_p.name.split(".")[0]
+            if report_der2dict is not None and is_vert_reported(report_der2dict, subject_ct_id, vert):
+                logger.print(f"Skipping {subject}, vert={vert} because it is reported in the report dict.", Log_Type.STRANGE)
+                continue
 
             ## TODO: muss ich schauen ob die nachbarn in vertseg_arr sind? wenn nicht was dann?
             # if include_neighbouring_vertebrae:
@@ -326,7 +376,7 @@ def process_container(
             ct_cropped.save(ct_path, verbose=False)
             subreg_cropped.save(subreg_path, verbose=False)
             vertseg_cropped.save(vertseg_path, verbose=False)
-            poi_cropped.save(poi_path, verbose=False)
+            poi_cropped.save(poi_path, verbose=True)
 
             if compute_surface_mask:
                 try:
@@ -339,7 +389,7 @@ def process_container(
                     surface_mask_path = os.path.join(save_path, subject, str(vert), "surface_msk.nii.gz")
                     surface_subreg_path = os.path.join(save_path, subject, str(vert), "surface_subreg.nii.gz")
                     surface_mask.save(surface_mask_path, verbose=False)
-                    surface_subreg.save(surface_subreg_path, verbose=False)
+                    surface_subreg.save(surface_subreg_path, verbose=True)
 
             # if compute_surface_mask and surface_mask_cropped is not None and surface_subreg_cropped is not None:
             #    surface_mask_cropped.save(surface_mask_path, verbose=False)
@@ -385,6 +435,7 @@ def prepare_data(
     n_workers: int = 8,
     compute_surface_mask: bool = False,
     include_neighbouring_vertebrae: bool = False,
+    report_der2dict=None,
 ):
     master = []
     exclusion_dict = load_exclusion_dict(exclusion_path) if exclusion_path is not None else None
@@ -397,6 +448,7 @@ def prepare_data(
         exclusion_dict=exclusion_dict,  # Pass None if not provided
         compute_surface_mask=compute_surface_mask,
         include_neighbouring_vertebrae=include_neighbouring_vertebrae,
+        report_der2dict=report_der2dict,
     )
 
     master = pqdm(
@@ -428,14 +480,14 @@ if __name__ == "__main__":
         help="The name of the derivatives folder",
         # required=True,
         nargs="+",
-        default=["derivatives_seg", "derivatives_poi_new2g"],
+        default=["derivatives_seg", "derivatives_poi_new2g", "derivatives_combined", "derivatives_poi_automatic_correction-v3-6-onlygood"],
     )
     parser.add_argument(
         "--save_path",
         type=str,
         help="The path to save the prepared data",
         # required=True,
-        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/dataset/data_preprocessing/cutout-folder/cutouts-new/",
+        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/dataset/data_preprocessing/cutout-folder/cutouts-verse-manual/",
     )
     parser.add_argument(
         "--no_rescale",
@@ -471,10 +523,30 @@ if __name__ == "__main__":
         help="Whether to include neighbouring vertebrae in the bounding box extraction",
     )
 
+    parser.add_argument(
+        "--report_root",
+        type=str,
+        help="Path to text file containing list of subjects to ignore in case of errors (one subject per line)",
+        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/",
+    )
+    parser.add_argument(
+        "--ignore_err_list",
+        type=str,
+        help="Path to text file containing list of subjects to ignore in case of errors (one subject per line)",
+        default=None,
+        # default="TEST_derivatives_poi_automatic_correction-v3-6-onlygood",
+    )
+
     args = parser.parse_args()
     print(args)
 
     parents = ["rawdata", args.derivatives_name] if not isinstance(args.derivatives_name, list) else ["rawdata"] + args.derivatives_name
+
+    if args.ignore_err_list is not None:
+        report_df = pd.read_excel(args.report_root + "/" + args.ignore_err_list + "/aggregated_poi_report.xlsx")
+        report_der2dict = convert_agg_report_to_reported_bool_dict(report_df)
+    else:
+        report_der2dict = None
 
     bids_gloabl_info = BIDS_Global_info(
         datasets=[args.data_path],
@@ -482,7 +554,7 @@ if __name__ == "__main__":
     )
 
     get_data_files = partial(
-        get_files,
+        get_files_withfilter,
         get_poi=get_gruber_poi,
         get_ct_fn=get_ct,
         get_subreg_fn=get_subreg,
@@ -498,4 +570,5 @@ if __name__ == "__main__":
         n_workers=args.n_workers,
         compute_surface_mask=args.compute_surface_mask,
         include_neighbouring_vertebrae=args.include_neighbouring_vertebrae,
+        report_der2dict=report_der2dict,
     )

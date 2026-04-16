@@ -28,17 +28,21 @@ DERIV_SUBREG = "derivatives_combined"  # "derivatives_subreg"
 DERIV_VERT = "derivatives_combined"
 #
 DERIV_POI_PREDS = [
+    "derivatives_poi_surface_cc3-bs32-v3",
+    "derivatives_poi_surface_cc3-bs32-v3_flipped",
     "derivatives_poi_surface_cc3-bs32-v1",
-    "derivatives_poi_surface_neighbor_cc3-v1",
-    "derivatives_poi_surface_neighbor_cc3-v1_flipped",
-    "derivatives_poi_surface_cc3-v0",
-    "derivatives_poi_surface_cc3-v0_flipped",
+    # "derivatives_poi_surface_neighbor_cc3-v1",
+    # "derivatives_poi_surface_neighbor_cc3-v1_flipped",
+    # "derivatives_poi_surface_cc3-v0",
+    # "derivatives_poi_surface_cc3-v0_flipped",
     # "derivatives_poi_surface_cc3-bs32-v1",
     "derivatives_poi_surface_cc3-bs32-v1_flipped",
+    # "derivatives_poi_surface_cc3-bs32-v4",
+    # "derivatives_poi_surface_cc3-bs32-v4_flipped",
 ]
 DERIV_DET = "derivatives_poi_deterministic"
 #
-DERIV_OUT = "derivatives_poi_automatic_correction-v3-4"
+DERIV_OUT = "derivatives_poi_automatic_correction-v3-6-onlygood"
 # TODO use reports and don't use points that are marked there?
 
 ###
@@ -224,6 +228,25 @@ def _proc(
                     c_new = np.mean(all_x, axis=0)
 
                     if not is_first_or_last_v and vert_orientations[r] is not None:
+                        # calculate center of mass of corresponding subregion in vert mask
+                        vert_mask = vert_nii.extract_label(r)
+                        subreg_label = 47 if s == Location.Muscle_Inserts_Articulate_Process_Inferior_Left.value else 48
+                        subreg_mask = subreg_nii.extract_label(subreg_label)
+                        combined_mask = vert_mask * subreg_mask
+                        com = combined_mask.center_of_masses()[1]
+                        axis_dir = get_axis_direction_vector(vert_orientations[r], poi_ref, "R")
+                        # move c_new to coms coordinate in I axis, but keep other coordinates using the vert_orientation
+                        # only move inwards to com not outwards
+                        com_i = np.dot(com, axis_dir)
+                        c_new_i = np.dot(c_new, axis_dir)
+                        shift = com_i - c_new_i
+                        if s == Location.Muscle_Inserts_Articulate_Process_Inferior_Left.value:
+                            shift += 1  # add a little bias to the left side to prevent being too close to the edge.
+                            shift = min(0, shift)
+                        else:
+                            shift -= 1  # add a little bias to the right side to prevent being too close to the edge.
+                            shift = max(0, shift)
+                        c_new = c_new + axis_dir * shift
                         c_new = move_poi_along_axis(c_new, poi_ref, "I", vert_orientations[r], 3)
                     logger.print(
                         f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Spinosus POI adjusted to mean of closest predictions of {all_x}",
@@ -306,6 +329,36 @@ def _proc(
 
         poi_ref_proj = surface_project_poi_vert_wise(poi_ref, vert_nii, requires_filling=False)
 
+        left_post_corpus_points = [112, 114, 110]
+        right_post_corpus_points = [118, 122, 120]
+        # post process corpus left/right direction
+        for v in poi_ref_proj.keys_region():
+            if vert_orientations[v] is None:
+                continue
+            for sbucket in [
+                [117, 121, 118, 124, 119, 123, 120, 122],
+                [103, 108, 101, 105, 102, 107, 104, 106],
+                [111, 116, 109, 113, 110, 115, 112, 114],
+            ]:
+                dir = "L"
+                axis_dir = get_axis_direction_vector(vert_orientations[v], poi_ref_proj, dir)
+                # get average coordinate in dir axis direction
+                avg_dir_coord = np.mean([np.dot(np.asarray(poi_ref_proj[v, si]), axis_dir) for si in sbucket if (v, si) in poi_ref_proj])
+                for s in sbucket:
+                    if (v, s) not in poi_ref_proj:
+                        continue
+                    # project point so that in dir axis direction matches avg_dir_coord
+                    c = np.asarray(poi_ref_proj[v, s])
+                    c_diff = avg_dir_coord - np.dot(c, axis_dir)
+                    if s in left_post_corpus_points and c_diff > 0:
+                        c_diff = 0
+                    if s in right_post_corpus_points and c_diff < 0:
+                        c_diff = 0
+                    c_new = c + axis_dir * c_diff
+                    poi_ref_proj[v, s] = tuple(c_new)
+                #
+        poi_ref_proj = surface_project_poi_vert_wise(poi_ref_proj, vert_nii, requires_filling=False)
+
         # Post processing some points
         neigh_t_b = {
             124: (117, 119),
@@ -334,8 +387,9 @@ def _proc(
                     #    f"{subject_ct_id} V{v} {Location(s).name}: Corpus Medial POI adjusted to half between superior and inferior points shifted S by 2 voxels",
                     #    verbose=verbose,
                     # )
-                #
 
+        #######################################
+        #######################################
         poi_ref_proj = surface_project_poi_vert_wise(poi_ref_proj, vert_nii, requires_filling=False)
         surface_nii.save(poi_out_path.with_suffix(".nii.gz"))
         poi_ref_proj.save(poi_out_path)

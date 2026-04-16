@@ -141,7 +141,7 @@ class InferenceConfig(Class_to_ArgParse):
     der_subreg: str = "derivatives_combined"  # "derivatives_subreg"
     der_vert: str = "derivatives_combined"
     #######
-    der_poi_mainpred: str = "derivatives_poi_deterministic"
+    der_poi_mainpred: str = "derivatives_poi_automatic_correction-v3-6-onlygood"
     # "derivatives_poi_surface_cc3-v0_flipped"
     # "derivatives_poi_surface_cc3-bs32-v1_flipped"
     # "derivatives_poi_surface_neighbor_cc3-v1_flipped"

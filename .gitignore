@@ -130,6 +130,16 @@ src/ablation_study/dataloader/evaluation/*
 src/ablation_study/dataloader/training/*
 src/ablation_study/neighbor/evaluation/*
 src/ablation_study/neighbor/training/*
+src/dataset/data_preprocessing/*
+src/dataset/data_preprocessing
+src/miccai_study/*
+src/miccai_study
+src/hendrik/*
+src/hendrik
+data_analysis/*
+data_analysis
+k_fold/*
+k_fold
 *.ckpt
 *.nii.gz
 *.json

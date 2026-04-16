@@ -37,6 +37,18 @@ class TrainedModelInfo(Enum):
         "sad-pt-epoch=133-fine_mean_distance_val=1.68",
     )
 
+    T_S_SURFACE_HIGHBS2 = (
+        "surface_cc3-bs32",
+        3,
+        "sad-pt-epoch=175-fine_mean_distance_val=1.45",
+    )
+
+    T_S_SURFACE_HIGHBS3 = (
+        "surface_cc3-bs32",
+        4,
+        "sad-pt-epoch=108-fine_mean_distance_val=1.70",
+    )
+
     T_N_SURFACE = (
         "surface_neighbor_cc3",
         1,

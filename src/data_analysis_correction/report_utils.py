@@ -237,6 +237,14 @@ def is_poi_reported(report_dict, subject_ct_id, vert, location):
     return False
 
 
+def is_vert_reported(report_dict, subject_ct_id, vert):
+    if subject_ct_id in report_dict:
+        for v, location in report_dict[subject_ct_id]:
+            if v == vert:
+                return True
+    return False
+
+
 if __name__ == "__main__":
     ROOT = Path("/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/")
     PREFIX = "TEST_"
