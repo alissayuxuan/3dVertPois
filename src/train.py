@@ -49,6 +49,7 @@ def run_experiment(experiment_config):
 
     data_module = create_data_module(data_module_config)
     data_module.setup()
+
     poi_module = PoiPredictionModule(**poi_module_config["params"])
 
     logger = pl.loggers.TensorBoardLogger(save_dir=experiment_config["path"], name=experiment_config["name"])

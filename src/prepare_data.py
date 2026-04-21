@@ -243,6 +243,7 @@ def process_container(
     compute_surface_mask: bool = False,
     include_neighbouring_vertebrae: bool = False,
     report_der2dict: dict | None = None,
+    ignore_outer: bool = False,
 ):
     # if "WS-25" not in subject and "WS-05" not in subject and "WS-22" not in subject and "WS-46" not in subject:
     #    return []
@@ -276,6 +277,9 @@ def process_container(
     summary = []
 
     vertebrae = sorted(vertebrae)
+    if ignore_outer:
+        vertebrae = vertebrae[1:-1]  # ignore outermost vertebrae, which often have more artifacts and less reliable POI annotations
+
     for index in range(len(vertebrae)):  # loops through each vertebra ID (extracted from POI keys)
         vert = vertebrae[index]
         if vert in vertseg_arr:  # vertebra found in segmentation mask
@@ -434,6 +438,7 @@ def prepare_data(
     rescale_zoom: tuple | None = None,
     n_workers: int = 8,
     compute_surface_mask: bool = False,
+    ignore_outer: bool = False,
     include_neighbouring_vertebrae: bool = False,
     report_der2dict=None,
 ):
@@ -449,6 +454,7 @@ def prepare_data(
         compute_surface_mask=compute_surface_mask,
         include_neighbouring_vertebrae=include_neighbouring_vertebrae,
         report_der2dict=report_der2dict,
+        ignore_outer=ignore_outer,
     )
 
     master = pqdm(
@@ -471,6 +477,7 @@ if __name__ == "__main__":
         "--data_path",
         type=str,
         help="The path to the BIDS dataset",
+        nargs="+",
         # required=True,
         default="/DATA/NAS/datasets_processed/CT_spine/dataset-poi-gruber",
     )
@@ -480,7 +487,7 @@ if __name__ == "__main__":
         help="The name of the derivatives folder",
         # required=True,
         nargs="+",
-        default=["derivatives_seg", "derivatives_poi_new2g", "derivatives_combined", "derivatives_poi_automatic_correction-v3-6-onlygood"],
+        default=["derivatives_seg", "derivatives_poi_new2g", "derivatives_combined", "derivatives_poi_automatic_correction-v4-onlygood"],
     )
     parser.add_argument(
         "--save_path",
@@ -518,6 +525,13 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--ignoreouter",
+        action="store_true",
+        help="If true, will not prepare top and bottom vertebrae",
+        default=False,
+    )
+
+    parser.add_argument(
         "--include_neighbouring_vertebrae",
         action="store_true",
         help="Whether to include neighbouring vertebrae in the bounding box extraction",
@@ -548,8 +562,10 @@ if __name__ == "__main__":
     else:
         report_der2dict = None
 
+    data_path = args.data_path if isinstance(args.data_path, list) else [args.data_path]
+
     bids_gloabl_info = BIDS_Global_info(
-        datasets=[args.data_path],
+        datasets=data_path,
         parents=parents,
     )
 
@@ -570,5 +586,6 @@ if __name__ == "__main__":
         n_workers=args.n_workers,
         compute_surface_mask=args.compute_surface_mask,
         include_neighbouring_vertebrae=args.include_neighbouring_vertebrae,
+        ignore_outer=args.ignoreouter,
         report_der2dict=report_der2dict,
     )

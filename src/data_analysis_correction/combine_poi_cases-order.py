@@ -28,21 +28,23 @@ DERIV_SUBREG = "derivatives_combined"  # "derivatives_subreg"
 DERIV_VERT = "derivatives_combined"
 #
 DERIV_POI_PREDS = [
-    "derivatives_poi_surface_cc3-bs32-v3",
-    "derivatives_poi_surface_cc3-bs32-v3_flipped",
-    "derivatives_poi_surface_cc3-bs32-v1",
+    "derivatives_poi_FirstIter/surface_cc3-bs32-v3",
+    "derivatives_poi_FirstIter/surface_cc3-bs32-v3_flipped",
+    "derivatives_poi_ForVerse/surface_cc3-bs32-v3",
+    "derivatives_poi_ForVerse/surface_cc3-bs32-v3_flipped",
+    "derivatives_poi_ForVerse/surface_cc3-bs32-v1",
     # "derivatives_poi_surface_neighbor_cc3-v1",
     # "derivatives_poi_surface_neighbor_cc3-v1_flipped",
     # "derivatives_poi_surface_cc3-v0",
     # "derivatives_poi_surface_cc3-v0_flipped",
     # "derivatives_poi_surface_cc3-bs32-v1",
-    "derivatives_poi_surface_cc3-bs32-v1_flipped",
+    "derivatives_poi_ForVerse/surface_cc3-bs32-v1_flipped",
     # "derivatives_poi_surface_cc3-bs32-v4",
     # "derivatives_poi_surface_cc3-bs32-v4_flipped",
 ]
 DERIV_DET = "derivatives_poi_deterministic"
 #
-DERIV_OUT = "derivatives_poi_automatic_correction-v3-6-onlygood"
+DERIV_OUT = "derivatives_poi_automatic_correction-v4-onlygood"
 # TODO use reports and don't use points that are marked there?
 
 ###
@@ -404,8 +406,8 @@ if __name__ == "__main__":
         if not ds_dir.name.startswith("dataset-"):
             continue
 
-        if not ds_dir.name == "dataset-verse19training_1mmiso":
-            continue
+        # if not ds_dir.name == "dataset-verse19training_1mmiso":
+        #    continue
 
         # has rawdata folder
         raw_dir = ds_dir.joinpath(RAWDATA)

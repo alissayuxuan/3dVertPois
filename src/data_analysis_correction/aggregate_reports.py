@@ -18,7 +18,10 @@ logger = No_Logger(prefix="aggregate_poi_reports")
 def aggregate_in_dir(dir: Path, ds_names: list[str]) -> None | pd.DataFrame:
     agg_df = None
     for ds_name in ds_names:
-        df_ps = search_path(dir.joinpath(ds_name), query="*poi_report.xlsx")
+        basepath = dir.joinpath(ds_name)
+        if not basepath.exists():
+            continue
+        df_ps = search_path(basepath, query="*poi_report.xlsx")
         for df_p in tqdm(df_ps, desc=f"Processing {ds_name}"):
             df = pd.read_excel(df_p)
             df["ds"] = ds_name
@@ -34,22 +37,22 @@ if __name__ == "__main__":
 
     ds_names = [
         "dataset-verse19training_1mmiso",
-        # "dataset-verse20training_1mmiso",
-        # "dataset-verse19validation_1mmiso",
-        # "dataset-verse20validation_1mmiso",
-        # "dataset-verse19test_1mmiso",
-        # "dataset-verse20test_1mmiso",
+        "dataset-verse20training_1mmiso",
+        "dataset-verse19validation_1mmiso",
+        "dataset-verse20validation_1mmiso",
+        "dataset-verse19test_1mmiso",
+        "dataset-verse20test_1mmiso",
     ]
 
     for dir in ROOT.iterdir():
         if not dir.is_dir():
             continue
 
-        if "derivatives" not in dir.name:
-            continue
-
-        if "poi" not in dir.name:
-            continue
+        # if "derivatives" not in dir.name:
+        #    continue
+        #
+        # if "poi" not in dir.name:
+        #    continue
 
         out_agg_df = dir.joinpath("aggregated_poi_report.xlsx")
         if out_agg_df.exists():

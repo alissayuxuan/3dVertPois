@@ -109,9 +109,13 @@ class POIDataModule(pl.LightningDataModule):
 
         # Only keep rows where vertebra is in "include_vert_list"
         if self.include_vert_list is not None:
+            # convert vertebra column to int
+            self.master_df["vertebra"] = self.master_df["vertebra"].astype(int)
             self.master_df = self.master_df[self.master_df["vertebra"].isin(self.include_vert_list)]
 
-        self.train_df = self.master_df[self.master_df["subject"].isin(self.train_subjects)]
+        all_assigned_subjects = set(self.train_subjects) | set(self.val_subjects) | set(self.test_subjects)
+        train_mask = self.master_df["subject"].isin(self.train_subjects) | ~self.master_df["subject"].isin(all_assigned_subjects)
+        self.train_df = self.master_df[train_mask]
         self.val_df = self.master_df[self.master_df["subject"].isin(self.val_subjects)]
         self.test_df = self.master_df[self.master_df["subject"].isin(self.test_subjects)]
 
@@ -208,6 +212,10 @@ class POIDataModule(pl.LightningDataModule):
                 iterations=self.surface_erosion_iterations,
                 neighbor_drop_prob=self.neighbor_drop_prob,
             )
+        print("Setup complete. Dataset sizes:")
+        print(f"  Train: {len(self.train_dataset)}")
+        print(f"  Validation: {len(self.val_dataset)}")
+        print(f"  Test: {len(self.test_dataset)}")
 
     def train_dataloader(self):
         return DataLoader(

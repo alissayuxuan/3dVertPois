@@ -294,7 +294,9 @@ def _proc(subject: Path, ds_dir: Path, opt):
         poi_proj_ref_path = img_bidsf.get_changed_path(
             file_type="json", bids_format="poi", info={"seg": "vert", "mod": "ct"}, parent=opt.der_poi_mainpred + "_sproj"
         )
-        assert poi_ref_path.exists(), f"{subject_ct_id}: Main POI prediction file does not exist: {poi_ref_path}"
+        if not poi_ref_path.exists():
+            logger.print(f"{subject_ct_id}: Main POI prediction file does not exist: {poi_ref_path}", Log_Type.FAIL)
+            continue
         poi_ref = POI.load(poi_ref_path).reorient_()
         if poi_proj_ref_path.exists():
             poi_ref_proj = POI.load(poi_proj_ref_path).reorient_()
@@ -352,7 +354,16 @@ class InferenceConfig(Class_to_ArgParse):
     der_vert: str = "derivatives_combined"
     der_direction: str = "derivatives_poi_deterministic"
     #######
-    der_poi_mainpred: str = "derivatives_poi_automatic_correction-v3-6-onlygood"
+    der_poi_mainpred: list[str] = field(
+        default_factory=lambda: [
+            # "derivatives_poi_deterministic",
+            # "derivatives_poi_FirstIter/surface_cc3-bs32-v3_flipped",
+            # "derivatives_poi_ForVerse/surface_cc3-bs32-v1_flipped",
+            # "derivatives_poi_ForVerse/surface_cc3-bs32-v3_flipped",
+            "derivatives_poi_automatic_correction-v3-6-onlygood",
+            "derivatives_poi_automatic_correction-v4-onlygood",
+        ]
+    )
     # "derivatives_poi_automatic_correction-v3"
     # "derivatives_poi_surface_cc3-v0_flipped"
     # "derivatives_poi_surface_cc3-bs32-v1_flipped"
@@ -377,11 +388,11 @@ class InferenceConfig(Class_to_ArgParse):
     datasets: list[str] = field(
         default_factory=lambda: [
             "dataset-verse19training_1mmiso",
-            # "dataset-verse20training_1mmiso",
-            # "dataset-verse19validation_1mmiso",
-            # "dataset-verse20validation_1mmiso",
-            # "dataset-verse19test_1mmiso",
-            # "dataset-verse20test_1mmiso",
+            "dataset-verse20training_1mmiso",
+            "dataset-verse19validation_1mmiso",
+            "dataset-verse20validation_1mmiso",
+            "dataset-verse19test_1mmiso",
+            "dataset-verse20test_1mmiso",
         ]
     )
 
@@ -396,34 +407,39 @@ if __name__ == "__main__":
     if opt.cprofile_this:
         opt.num_threads = 1  # avoid multithreading issues with cprofile
 
-    for ds_dir in opt.root.iterdir():
-        if not ds_dir.is_dir():
-            continue
-        if not ds_dir.name.startswith("dataset-"):
-            continue
+    poi_mainpreds = [] + opt.der_poi_mainpred if isinstance(opt.der_poi_mainpred, list) else [opt.der_poi_mainpred]
+    for poi_mainpred in poi_mainpreds:
+        logger.print(f"Running POI report for main prediction: {poi_mainpred}", Log_Type.STAGE)
+        opt.der_poi_mainpred = poi_mainpred
 
-        if ds_dir.name not in opt.datasets:
-            continue
+        for ds_dir in opt.root.iterdir():
+            if not ds_dir.is_dir():
+                continue
+            if not ds_dir.name.startswith("dataset-"):
+                continue
 
-        # has rawdata folder
-        raw_dir = ds_dir.joinpath(opt.rawdata)
-        assert raw_dir.exists(), f"No rawdata dir in dataset dir: {ds_dir}"
+            if ds_dir.name not in opt.datasets:
+                continue
 
-        logger.print("Processing dataset dir:", ds_dir.name, Log_Type.STAGE)
+            # has rawdata folder
+            raw_dir = ds_dir.joinpath(opt.rawdata)
+            assert raw_dir.exists(), f"No rawdata dir in dataset dir: {ds_dir}"
 
-        subjects = list(raw_dir.iterdir())
+            logger.print("Processing dataset dir:", ds_dir.name, Log_Type.STAGE)
 
-        if not opt.cprofile_this:
-            Parallel(n_jobs=opt.num_threads)(delayed(_proc)(subject, ds_dir, opt) for subject in subjects)
-        else:
-            for subject in subjects:
-                # if "e014" not in subject.name:
-                #    continue
-                with cProfile.Profile() as pr:
-                    _proc(subject, ds_dir, opt)
-                pr.dump_stats(
-                    f"/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/cprofiles/{ds_dir.name}_{subject.name}_poi_report.prof"
-                )
-                break
+            subjects = list(raw_dir.iterdir())
 
-        # break
+            if not opt.cprofile_this:
+                Parallel(n_jobs=opt.num_threads)(delayed(_proc)(subject, ds_dir, opt) for subject in subjects)
+            else:
+                for subject in subjects:
+                    # if "e014" not in subject.name:
+                    #    continue
+                    with cProfile.Profile() as pr:
+                        _proc(subject, ds_dir, opt)
+                    pr.dump_stats(
+                        f"/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/cprofiles/{ds_dir.name}_{subject.name}_poi_report.prof"
+                    )
+                    break
+
+            # break

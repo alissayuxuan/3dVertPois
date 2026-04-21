@@ -245,6 +245,34 @@ def is_vert_reported(report_dict, subject_ct_id, vert):
     return False
 
 
+def print_one(df):
+    report_der2dict = convert_agg_report_to_reported_bool_dict(df)
+    n_rows = len(df)
+
+    # get unique ds names
+    ds_names = df["ds"].unique()
+    ds_names = [
+        ds.split("dataset-")[-1]
+        .split("_1mmiso")[0]
+        .replace("verse", "v-")
+        .replace("training", "-T")
+        .replace("validation", "-V")
+        .replace("test", "-TS")
+        for ds in ds_names
+    ]
+
+    # print("Number of reported errors in df:", n_rows)
+
+    # compute sum of entire entries
+    # print(report_der2dict)
+    report_der2dict_sum_per_vert = {s: len(v) for s, v in report_der2dict.items()}
+    # print(report_der2dict_sum_per_vert)
+    report_der2dict_sum = sum(report_der2dict_sum_per_vert.values())
+
+    logger.print(f"Total number of reported errors ({ds_names}): {report_der2dict_sum}")
+    print()
+
+
 if __name__ == "__main__":
     ROOT = Path("/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/")
     PREFIX = "TEST_"
@@ -263,19 +291,14 @@ if __name__ == "__main__":
         logger.print(f"{der}", Log_Type.STAGE)
 
         df = load_agg_report_df(str(ROOT), PREFIX, der)
-        if df is not None:
-            report_der2dict = convert_agg_report_to_reported_bool_dict(df)
-            n_rows = len(df)
+        if df is None:
+            # subfolder logic
+            logger.print(f"Loading report from subfolder: {der}", Log_Type.STAGE)
+            for subfolder in (ROOT / f"{PREFIX+der}").iterdir():
+                print(subfolder)
+                df = load_agg_report_df(str(subfolder), "", "", "aggregated_poi_report.xlsx")
+                print_one(df)
+        else:
+            print_one(df)
 
-            # print("Number of reported errors in df:", n_rows)
-
-            # compute sum of entire entries
-            # print(report_der2dict)
-            report_der2dict_sum_per_vert = {s: len(v) for s, v in report_der2dict.items()}
-            # print(report_der2dict_sum_per_vert)
-            report_der2dict_sum = sum(report_der2dict_sum_per_vert.values())
-
-            logger.print(f"Total number of reported errors: {report_der2dict_sum}")
-
-        print()
         # break
