@@ -928,9 +928,10 @@ class InferenceConfig(Class_to_ArgParse):
     der_out_base: str = "derivatives_poi_"
     model_info: list[TrainedModelInfo] = field(
         default_factory=lambda: [
-            TrainedModelInfo.T_S_SURFACE_FIRST,
-            TrainedModelInfo.T_S_SURFACE_HIGHBS,
-            TrainedModelInfo.T_S_SURFACE_HIGHBS2,
+            TrainedModelInfo.T_S_SURFACE_FIRST2,
+            TrainedModelInfo.T_S_SURFACE_SEC,
+            TrainedModelInfo.T_S_SURFACE_SEC2,
+            TrainedModelInfo.T_S_SURFACE_SEC3,
         ]
     )
     inference_flipped: bool = False

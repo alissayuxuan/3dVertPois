@@ -269,7 +269,10 @@ def print_one(df):
     # print(report_der2dict_sum_per_vert)
     report_der2dict_sum = sum(report_der2dict_sum_per_vert.values())
 
-    logger.print(f"Total number of reported errors ({ds_names}): {report_der2dict_sum}")
+    # num vertebra that have errors
+    n_vertebra_with_errors = sum(1 for v in report_der2dict_sum_per_vert.values() if v > 0)
+
+    logger.print(f"Reported errors ({ds_names}):\n#POIs {report_der2dict_sum}\n#VERT {n_vertebra_with_errors}")
     print()
 
 

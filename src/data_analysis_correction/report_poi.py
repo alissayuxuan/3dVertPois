@@ -357,11 +357,16 @@ class InferenceConfig(Class_to_ArgParse):
     der_poi_mainpred: list[str] = field(
         default_factory=lambda: [
             # "derivatives_poi_deterministic",
+            # "derivatives_poi_SecondIter/surface_cc3-bs32-v0_flipped",
+            # "derivatives_poi_SecondIter/surface_cc3-bs32-v1_flipped",
+            # "derivatives_poi_SecondIter/surface_cc3-bs32-v2_flipped",
+            # "derivatives_poi_FirstIter/surface_cc3-bs32-v5_flipped",
             # "derivatives_poi_FirstIter/surface_cc3-bs32-v3_flipped",
             # "derivatives_poi_ForVerse/surface_cc3-bs32-v1_flipped",
             # "derivatives_poi_ForVerse/surface_cc3-bs32-v3_flipped",
-            "derivatives_poi_automatic_correction-v3-6-onlygood",
-            "derivatives_poi_automatic_correction-v4-onlygood",
+            # "derivatives_poi_automatic_correction-v3-6-onlygood",
+            # "derivatives_poi_automatic_correction-v4-onlygood",
+            "derivatives_poi_automatic_correction-v5-onlygood",
         ]
     )
     # "derivatives_poi_automatic_correction-v3"
