@@ -61,6 +61,30 @@ class TrainedModelInfo(Enum):
         "sad-pt-epoch=134-fine_mean_distance_val=1.60",
     )
 
+    T_S_SURFACE_FIRST2 = (
+        "FirstIter/surface_cc3-bs32",
+        5,
+        "sad-pt-epoch=199-fine_mean_distance_val=1.11",
+    )
+
+    T_S_SURFACE_SEC = (
+        "SecondIter/surface_cc3-bs32",
+        0,
+        "sad-pt-epoch=21-fine_mean_distance_val=1.51",
+    )
+
+    T_S_SURFACE_SEC2 = (
+        "SecondIter/surface_cc3-bs32",
+        1,
+        "sad-pt-epoch=34-fine_mean_distance_val=1.39",
+    )
+
+    T_S_SURFACE_SEC3 = (
+        "SecondIter/surface_cc3-bs32",
+        2,
+        "sad-pt-epoch=19-fine_mean_distance_val=1.38",
+    )
+
     ####################################################
     # Single best training MAE
     GRUBER_S_SURFACE = (
