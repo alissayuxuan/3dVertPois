@@ -28,23 +28,30 @@ DERIV_SUBREG = "derivatives_combined"  # "derivatives_subreg"
 DERIV_VERT = "derivatives_combined"
 #
 DERIV_POI_PREDS = [
+    "derivatives_poi_SecondIter/surface_cc3-bs32-v1",
+    "derivatives_poi_SecondIter/surface_cc3-bs32-v1_flipped",
+    "derivatives_poi_automatic_correction-v4-onlygood",
+    # TODO: take best 5 models here, and make v5 version, see how well that worked
     "derivatives_poi_FirstIter/surface_cc3-bs32-v3",
     "derivatives_poi_FirstIter/surface_cc3-bs32-v3_flipped",
-    "derivatives_poi_ForVerse/surface_cc3-bs32-v3",
-    "derivatives_poi_ForVerse/surface_cc3-bs32-v3_flipped",
-    "derivatives_poi_ForVerse/surface_cc3-bs32-v1",
-    # "derivatives_poi_surface_neighbor_cc3-v1",
-    # "derivatives_poi_surface_neighbor_cc3-v1_flipped",
-    # "derivatives_poi_surface_cc3-v0",
-    # "derivatives_poi_surface_cc3-v0_flipped",
-    # "derivatives_poi_surface_cc3-bs32-v1",
-    "derivatives_poi_ForVerse/surface_cc3-bs32-v1_flipped",
-    # "derivatives_poi_surface_cc3-bs32-v4",
-    # "derivatives_poi_surface_cc3-bs32-v4_flipped",
+    "derivatives_poi_FirstIter/surface_cc3-bs32-v5",
+    "derivatives_poi_FirstIter/surface_cc3-bs32-v5_flipped",
 ]
 DERIV_DET = "derivatives_poi_deterministic"
 #
-DERIV_OUT = "derivatives_poi_automatic_correction-v4-onlygood"
+DERIV_OUT = "derivatives_poi_automatic_correction-v5-onlygood"
+# v3-6 war nur die
+# "derivatives_poi_ForVerse/surface_cc3-bs32-v3",
+#    "derivatives_poi_ForVerse/surface_cc3-bs32-v3_flipped",
+#    "derivatives_poi_ForVerse/surface_cc3-bs32-v1",
+#    "derivatives_poi_ForVerse/surface_cc3-bs32-v1_flipped",
+# v4 waren:
+# "derivatives_poi_FirstIter/surface_cc3-bs32-v3",
+#    "derivatives_poi_FirstIter/surface_cc3-bs32-v3_flipped",
+#    "derivatives_poi_ForVerse/surface_cc3-bs32-v3",
+#    "derivatives_poi_ForVerse/surface_cc3-bs32-v3_flipped",
+#    "derivatives_poi_ForVerse/surface_cc3-bs32-v1",
+#    "derivatives_poi_ForVerse/surface_cc3-bs32-v1_flipped",
 # TODO use reports and don't use points that are marked there?
 
 ###
