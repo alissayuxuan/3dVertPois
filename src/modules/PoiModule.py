@@ -179,7 +179,7 @@ class PoiPredictionModule(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer_class = getattr(torch.optim, self.optimizer)
-        optimizer = optimizer_class(self.parameters(), lr=self.lr)
+        optimizer = optimizer_class(self.parameters(), lr=self.lr, weight_decay=1e-4)
 
         if self.scheduler_config:
             scheduler_class = getattr(
@@ -277,7 +277,6 @@ def create_refinement_module(config):
         raise ValueError(f"Unknown refinement module type: {config['type']}")
 
     return module_type(**config["params"])
-
 
 
 class PoiNeighborPredictionModule(PoiPredictionModule):
