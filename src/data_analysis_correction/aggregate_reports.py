@@ -55,8 +55,8 @@ if __name__ == "__main__":
         #    continue
 
         out_agg_df = dir.joinpath("aggregated_poi_report.xlsx")
-        if out_agg_df.exists():
-            continue
+        #if out_agg_df.exists():
+        #    continue
 
         logger.print(f"Processing directory: {dir}", Log_Type.STAGE)
         agg_df = aggregate_in_dir(dir, ds_names)

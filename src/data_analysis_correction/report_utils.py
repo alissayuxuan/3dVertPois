@@ -5,7 +5,7 @@ from TPTBox.core.vert_constants import DIRECTIONS, COORDINATE
 from pathlib import Path
 import numpy as np
 
-logger = No_Logger(prefix="logic_report")
+logger = No_Logger(prefix="")
 
 
 @dataclass
@@ -245,10 +245,16 @@ def is_vert_reported(report_dict, subject_ct_id, vert):
     return False
 
 
-def print_one(df):
-    report_der2dict = convert_agg_report_to_reported_bool_dict(df)
-    n_rows = len(df)
+def _report_counts(df) -> tuple[int, int]:
+    """Return (#reported POIs, #subjects with >=1 reported error) for a report df."""
+    report_dict = convert_agg_report_to_reported_bool_dict(df)
+    sum_per_subject = {s: len(v) for s, v in report_dict.items()}
+    n_pois = sum(sum_per_subject.values())
+    n_subjects_with_errors = sum(1 for v in sum_per_subject.values() if v > 0)
+    return n_pois, n_subjects_with_errors
 
+
+def print_one(df):
     # get unique ds names
     ds_names = df["ds"].unique()
     ds_names = [
@@ -261,18 +267,18 @@ def print_one(df):
         for ds in ds_names
     ]
 
-    # print("Number of reported errors in df:", n_rows)
+    # Total across both report sources (deduplicated per subject by (vert, location))
+    total_pois, total_subjects = _report_counts(df)
+    lines = [f"Reported errors ({ds_names}):", f"#POIs {total_pois}\n#VERT {total_subjects}"]
 
-    # compute sum of entire entries
-    # print(report_der2dict)
-    report_der2dict_sum_per_vert = {s: len(v) for s, v in report_der2dict.items()}
-    # print(report_der2dict_sum_per_vert)
-    report_der2dict_sum = sum(report_der2dict_sum_per_vert.values())
+    # Per-source breakdown (if the source was tagged before concatenation). Note: the
+    # per-source counts can overlap, so their sum may exceed the deduplicated total.
+    if "source" in df.columns:
+        for source in df["source"].dropna().unique():
+            src_pois, src_subjects = _report_counts(df[df["source"] == source])
+            lines.append(f"  [{source}] #POIs {src_pois}  #VERT {src_subjects}")
 
-    # num vertebra that have errors
-    n_vertebra_with_errors = sum(1 for v in report_der2dict_sum_per_vert.values() if v > 0)
-
-    logger.print(f"Reported errors ({ds_names}):\n#POIs {report_der2dict_sum}\n#VERT {n_vertebra_with_errors}")
+    logger.print("\n".join(lines))
     print()
 
 
@@ -300,8 +306,25 @@ if __name__ == "__main__":
             for subfolder in (ROOT / f"{PREFIX+der}").iterdir():
                 print(subfolder)
                 df = load_agg_report_df(str(subfolder), "", "", "aggregated_poi_report.xlsx")
+                df2 = load_agg_report_df(str(subfolder), "", "", "aggregated_poi_neighbor_angle_report.xlsx")
+                if df is not None:
+                    df["source"] = "normal"
+                if df2 is not None:
+                    df2["source"] = "angle"
+                    # combine df and df2
+                    df = pd.concat([df, df2], ignore_index=True)
+                else:
+                    continue
                 print_one(df)
         else:
+            df["source"] = "normal"
+            df2 = load_agg_report_df(str(ROOT), PREFIX, der, "aggregated_poi_neighbor_angle_report.xlsx")
+            if df2 is not None:
+                df2["source"] = "angle"
+                # combine df and df2
+                df = pd.concat([df, df2], ignore_index=True)
+            else:
+                continue
             print_one(df)
 
         # break

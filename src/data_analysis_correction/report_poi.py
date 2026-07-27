@@ -21,8 +21,7 @@ from report_utils import (
     save_logic_report,
     SUBREGION_SOFTCONSTRAINT_DICT,
 )
-from dataclasses import dataclass, field
-from TypeSaveArgParse import Class_to_ArgParse
+from report_config import PipelineConfig as InferenceConfig
 from tqdm import tqdm
 
 logger = No_Logger(prefix="verse_cseg")
@@ -344,65 +343,6 @@ def _proc(subject: Path, ds_dir: Path, opt):
         if len(report_lines) > 0:
             logger.print(f"{subject_ct_id}: Saving {len(report_lines)} issues to {out_excel}", Log_Type.SAVE)
         save_logic_report(report_lines, out_excel)
-
-
-@dataclass
-class InferenceConfig(Class_to_ArgParse):
-    root: Path = Path("/DATA/NAS/datasets_processed/CT_spine/dataset-verse-challenge/")
-    rawdata: str = "rawdata"
-    der_subreg: str = "derivatives_combined"  # "derivatives_subreg"
-    der_vert: str = "derivatives_combined"
-    der_direction: str = "derivatives_poi_deterministic"
-    #######
-    der_poi_mainpred: list[str] = field(
-        default_factory=lambda: [
-            # "derivatives_poi_deterministic",
-            # "derivatives_poi_SecondIter/surface_cc3-bs32-v0_flipped",
-            # "derivatives_poi_SecondIter/surface_cc3-bs32-v1_flipped",
-            # "derivatives_poi_SecondIter/surface_cc3-bs32-v2_flipped",
-            # "derivatives_poi_FirstIter/surface_cc3-bs32-v5_flipped",
-            # "derivatives_poi_FirstIter/surface_cc3-bs32-v3_flipped",
-            # "derivatives_poi_ForVerse/surface_cc3-bs32-v1_flipped",
-            # "derivatives_poi_ForVerse/surface_cc3-bs32-v3_flipped",
-            # "derivatives_poi_automatic_correction-v3-6-onlygood",
-            # "derivatives_poi_automatic_correction-v4-onlygood",
-            "derivatives_poi_automatic_correction-v5-onlygood",
-        ]
-    )
-    # "derivatives_poi_automatic_correction-v3"
-    # "derivatives_poi_surface_cc3-v0_flipped"
-    # "derivatives_poi_surface_cc3-bs32-v1_flipped"
-    # "derivatives_poi_surface_neighbor_cc3-v1_flipped"
-    # ]
-    #######
-    # "derivatives_poi_automatic_correction"
-    # "derivatives_poi_surface-neighbor-neighaug-project_gt_cc3-exclude6-v2"
-    der_out_prefix: str = "TEST_"
-    vertebra_from: int = 6
-
-    out_root: Path = Path("/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis")
-
-    ignore_poi: list[Location] = field(
-        default_factory=lambda: [
-            Location.Vertebra_Direction_Inferior,
-            Location.Vertebra_Direction_Posterior,
-            Location.Vertebra_Direction_Right,
-            Location.Vertebra_Corpus,
-        ]
-    )
-    datasets: list[str] = field(
-        default_factory=lambda: [
-            "dataset-verse19training_1mmiso",
-            "dataset-verse20training_1mmiso",
-            "dataset-verse19validation_1mmiso",
-            "dataset-verse20validation_1mmiso",
-            "dataset-verse19test_1mmiso",
-            "dataset-verse20test_1mmiso",
-        ]
-    )
-
-    num_threads: int = 10
-    cprofile_this: bool = False
 
 
 if __name__ == "__main__":

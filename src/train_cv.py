@@ -9,32 +9,7 @@ from sklearn.model_selection import KFold
 from eval import create_self_training_pois
 from modules.PoiDataModules import create_data_module
 from modules.PoiModule import PoiPredictionModule
-
-
-def save_data_module_config(data_module, save_path):
-    """Save the hyperparameters of the DataModule to a JSON file for docuementation and
-    easy reproducibility."""
-    # Ensure the save directory exists
-    os.makedirs(save_path, exist_ok=True)
-    # Save the hyperparameters to a JSON file
-    with open(os.path.join(save_path, "data_module_params.json"), "w") as f:
-        json.dump(data_module.hparams, f, indent=4)
-
-
-def create_callbacks(callbacks_config):
-    callbacks_list = []
-    for callback_config in callbacks_config:
-        callback_type = callback_config["type"]
-        if callback_type == "ModelCheckpoint":
-            callbacks_list.append(
-                pl.callbacks.ModelCheckpoint(**callback_config["params"])
-            )
-        elif callback_type == "EarlyStopping":
-            callbacks_list.append(
-                pl.callbacks.EarlyStopping(**callback_config["params"])
-            )
-        # Add other callbacks as needed
-    return callbacks_list
+from utils.train_utils import create_callbacks, save_data_module_config
 
 
 def run_cv(n_folds, experiment_config, save_predictions=False, poi_file_ending=None):

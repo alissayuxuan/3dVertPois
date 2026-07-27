@@ -37,11 +37,11 @@ if __name__ == "__main__":
 
     ds_names = [
         "dataset-verse19training_1mmiso",
-        #"dataset-verse20training_1mmiso",
-        #"dataset-verse19validation_1mmiso",
-        #"dataset-verse20validation_1mmiso",
-        #"dataset-verse19test_1mmiso",
-        #"dataset-verse20test_1mmiso",
+        "dataset-verse20training_1mmiso",
+        "dataset-verse19validation_1mmiso",
+        "dataset-verse20validation_1mmiso",
+        "dataset-verse19test_1mmiso",
+        "dataset-verse20test_1mmiso",
     ]
 
     for dir in ROOT.iterdir():
@@ -56,7 +56,8 @@ if __name__ == "__main__":
 
         out_agg_df = dir.joinpath("aggregated_poi_neighbor_angle_report.xlsx")
         if out_agg_df.exists():
-            continue
+            a=None
+            #continue
 
         logger.print(f"Processing directory: {dir}", Log_Type.STAGE)
         agg_df = aggregate_in_dir(dir, ds_names)

@@ -152,21 +152,6 @@ def get_vertseg(container, extra_filter: dict[str, str] | None = None) -> NII:
         return None
 
 
-def get_files(
-    container,
-    get_poi: Callable,
-    get_ct_fn: Callable,
-    get_subreg_fn: Callable,
-    get_vertseg_fn: Callable,
-) -> tuple[POI, NII, NII, NII]:
-    return (
-        get_poi(container),
-        get_ct_fn(container),
-        get_subreg_fn(container),
-        get_vertseg_fn(container),
-    )
-
-
 def get_files_withfilter(
     container,
     get_poi: Callable,
@@ -186,51 +171,6 @@ def get_files_withfilter(
         get_subreg_fn(container, extra_filter=extra_filter),
         get_vertseg_fn(container, extra_filter=extra_filter),
     )
-
-
-def get_bounding_box(mask, vert):
-    """Get the bounding box of a given vertebra in a mask.
-
-    Args:
-        mask (numpy.ndarray): The mask to search for the vertex.
-        vert (int): The vertebra to search for in the mask.
-        margin (int, optional): The margin to add to the bounding box. Defaults to 2.
-
-    Returns:
-        tuple: A tuple containing the minimum and maximum values for the x, y, and z axes of the
-        bounding box.
-    """
-    indices = np.where(mask == vert)
-
-    # debug
-    if len(indices[0]) == 0:
-        raise ValueError(f"Vertebra {vert} not found in the mask.")
-
-    margin = 0
-    x_min = np.min(indices[0]) - margin
-    x_max = np.max(indices[0]) + margin
-    y_min = np.min(indices[1]) - margin
-    y_max = np.max(indices[1]) + margin
-    z_min = np.min(indices[2]) - margin
-    z_max = np.max(indices[2]) + margin
-
-    # Make sure the bounding box is within the mask
-    x_min = max(0, x_min)
-    x_max = min(mask.shape[0], x_max)
-    y_min = max(0, y_min)
-    y_max = min(mask.shape[1], y_max)
-    z_min = max(0, z_min)
-    z_max = min(mask.shape[2], z_max)
-
-    # debug
-    if x_min >= x_max or y_min >= y_max or z_min >= z_max:
-        raise ValueError(
-            f"Invalid bounding box for vertebra {vert}: "
-            f"x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}, "
-            f"z_min={z_min}, z_max={z_max}"
-        )
-
-    return x_min, x_max, y_min, y_max, z_min, z_max
 
 
 def process_container(
@@ -273,12 +213,19 @@ def process_container(
     #        surface_subreg = None
 
     vertebrae = {key[0] for key in poi.keys()}
-    vertseg_arr = vertseg.get_array()
-    summary = []
 
     vertebrae = sorted(vertebrae)
     if ignore_outer:
         vertebrae = vertebrae[1:-1]  # ignore outermost vertebrae, which often have more artifacts and less reliable POI annotations
+
+    if rescale_zoom:
+        ct.rescale_(rescale_zoom)
+        subreg.rescale_(rescale_zoom)
+        vertseg.rescale_(rescale_zoom)
+        poi.rescale_(rescale_zoom)
+
+    vertseg_arr = vertseg.get_array()
+    summary = []
 
     for index in range(len(vertebrae)):  # loops through each vertebra ID (extracted from POI keys)
         vert = vertebrae[index]
@@ -335,12 +282,6 @@ def process_container(
             # create directories if they do not exist
             if not os.path.exists(os.path.join(save_path, subject, str(vert))):
                 os.makedirs(os.path.join(save_path, subject, str(vert)))
-
-            if rescale_zoom:
-                ct.rescale_(rescale_zoom)
-                subreg.rescale_(rescale_zoom)
-                vertseg.rescale_(rescale_zoom)
-                poi.rescale_(rescale_zoom)
 
             try:
                 com = np_utils.np_center_of_mass(vertseg.extract_label(vert).get_seg_array())[1]

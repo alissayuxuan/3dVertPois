@@ -1,9 +1,7 @@
-# Alissa
 import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))  # Add project root to Python path
-
 
 import argparse
 import json
@@ -11,84 +9,144 @@ import os
 
 import numpy as np
 import pandas as pd
-import torch
-import matplotlib.pyplot as plt
 
-# from BIDS import POI
 from TPTBox.core.poi import POI
-from TPTBox import NII  # For loading NIfTI files
+from TPTBox import NII
 
-import shutil  # For file operations
+import shutil
 
 from modules.PoiModule import PoiPredictionModule
-from src.modules.PoiDataModules import POIDataModule
+from modules.PoiDataModules import POIDataModule
 from utils.misc import surface_project_coords, surface_project_coords_marchingcubes, surface_project_coords_marchingcubes_continuous
+from utils.inference_utils import batch_to_device
 
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _get_dataloader(data_module, split: str):
+    if split == "val":
+        return data_module.val_dataloader()
+    elif split == "test":
+        return data_module.test_dataloader()
+    elif split == "train":
+        return data_module.train_noaug_dataloader()
+    raise ValueError(f"Invalid split: {split}")
+
+
+def _setup_prediction(dm_path, ckpt_path, split, **dm_kwargs):
+    """Load data module, model, and dataloader in one step."""
+    data_module = load_data_module_from_config(dm_path, **dm_kwargs)
+    data_module.setup()
+    poi_module = PoiPredictionModule.load_from_checkpoint(ckpt_path)
+    poi_module.eval()
+    return data_module, poi_module, _get_dataloader(data_module, split)
+
+
+def _affine_check(batch):
+    subreg = NII.load(batch["subreg_path"][0], seg=True)
+    vertseg = NII.load(batch["msk_path"][0], seg=True)
+    if not subreg.assert_affine(vertseg, raise_error=False, verbose=True):
+        print(f"❌ Affine/Metadata stimmt nicht überein bei: \nsubreg: {subreg.affine}, \nvertseg: {vertseg.affine}")
+
+
+def _resolve_save_path(poi_path, poi_file_ending, save_in_dir, save_path, sub, vert, data_module):
+    if save_in_dir:
+        ctd_save_path = poi_path.replace(data_module.poi_file_ending, poi_file_ending)
+        if ctd_save_path == poi_path:
+            print(
+                f"Warning: The save path {ctd_save_path} is the same as the original POI path. "
+                "The new file will be saved with the ending '_pred.json'"
+            )
+            ctd_save_path = poi_path.replace(".json", "_pred.json")
+    else:
+        os.makedirs(save_path, exist_ok=True)
+        ctd_save_path = os.path.join(save_path, str(sub) + "_" + str(vert) + "_" + poi_file_ending)
+    return ctd_save_path
+
+
+def _write_prediction_files(pois: POI, poi_path: str, ctd_save_path: str, gt_verts: list) -> bool:
+    """Save prediction POI, global marker, GT POI, and segmentation files."""
+    pois.save(ctd_save_path, verbose=False)
+    if not os.path.exists(ctd_save_path):
+        print(f"⚠️ Prediction file not found: {ctd_save_path}")
+        return False
+
+    POI.load(ctd_save_path).to_global().save_mrk(ctd_save_path.replace("_pred.json", "_pred_global.json"))
+
+    gt_poi = POI.load(poi_path).extract_region(*gt_verts)
+    gt_save_path = ctd_save_path.replace("_pred.json", "_gt.json")
+    gt_poi.save(gt_save_path)
+    gt_poi.to_global().save_mrk(gt_save_path.replace("_gt.json", "_gt_global.json"))
+
+    seg_vert_path = poi_path.replace("poi.json", "vertseg.nii.gz")
+    seg_save_path = ctd_save_path.replace("_pred.json", "_seg.nii.gz")
+    if os.path.exists(seg_vert_path):
+        shutil.copy(seg_vert_path, seg_save_path)
+    else:
+        print(f"⚠️ Segmentation file not found: {seg_vert_path}")
+
+    return True
+
+
+def _compute_grouped_metrics(df: pd.DataFrame, group_col: str, error_col: str) -> pd.DataFrame:
+    metrics_df = df.groupby(group_col)[error_col].apply(lambda x: calculate_metrics(x)).apply(pd.Series)
+    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
+    return metrics_df
+
+
+def _filter_high_error(df: pd.DataFrame, error_col: str, threshold: float) -> pd.DataFrame:
+    filtered = df[df[error_col] > threshold]
+    return filtered[["subject", "vertebra", "poi_idx", error_col]].reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def load_data_module_from_config(config_path, alternative_poi_ending=None, **kwargs):
-    # Load the configuration file
     with open(config_path, "r") as f:
         config = json.load(f)
-
-    # Instantiate the DataModule with the loaded configurations
     config["batch_size"] = 1
-    if kwargs is not None:
+    if kwargs:
         config.update(kwargs)
     if alternative_poi_ending is not None:
         config["poi_file_ending"] = alternative_poi_ending
-    else:
-        return POIDataModule(**config)
+    return POIDataModule(**config)
 
 
 def load_model_from_checkpoint(checkpoint_path):
-    # Load the model from the checkpoint
-    model = PoiPredictionModule.load_from_checkpoint(checkpoint_path)
-    return model
+    return PoiPredictionModule.load_from_checkpoint(checkpoint_path)
 
 
 def combine_centroids(data_list):
-    # Extract the first dictionary for comparison
     first_entry = data_list[0]
-
-    # Define the expected values for comparison
     expected_subject = first_entry["subject"]
     expected_shape = first_entry["original_shape"]
     expected_zoom = first_entry["original_zoom"]
     expected_orientation = first_entry["original_orientation"]
-    expected_rotation = first_entry["original_rotation"]  # ALISSA
-    expected_origin = first_entry["original_origin"]  # ALISSA
+    expected_rotation = first_entry["original_rotation"]
+    expected_origin = first_entry["original_origin"]
 
-    # Initialize a defaultdict for combining centroids
     combined_centroids = {}
-
-    # Iterate through each entry in the list
     for entry in data_list:
-        # Assert that subject, shape, zoom, and orientation match the expected values
         assert entry["subject"] == expected_subject, "Subjects do not match."
         assert entry["original_shape"] == expected_shape, "Original shapes do not match."
         assert entry["original_zoom"] == expected_zoom, "Original zooms do not match."
         assert entry["original_orientation"] == expected_orientation, "Original orientations do not match."
-
         assert np.allclose(entry["original_rotation"], expected_rotation, rtol=1e-10), "Original rotations do not match."
-
-        # Combine the centroids
         for v_idx, p_idx, c in entry["centroids"].items():
             combined_centroids[v_idx, p_idx] = c
 
-    # Convert combined_centroids to a regular dict
-    combined_centroids = dict(combined_centroids)
-
-    # Return the common attributes and the combined centroids
-    poi_file = POI(
+    return expected_subject, POI(
         centroids=combined_centroids,
         orientation=expected_orientation,
         zoom=expected_zoom,
         shape=expected_shape,
-        rotation=expected_rotation,  # ALISSA
-        origin=expected_origin,  # ALISSA
+        rotation=expected_rotation,
+        origin=expected_origin,
     )
-
-    return expected_subject, poi_file
 
 
 def np_to_ctd(
@@ -100,8 +158,10 @@ def np_to_ctd(
     shape=(128, 128, 96),
     zoom=(1, 1, 1),
     offset=(0, 0, 0),
-    orientation=None,  # <- Neu: orientation als Argument
+    orientation=None,
 ):
+    if orientation is None:
+        raise ValueError("You must provide the orientation of the input POI.")
     ctd = {}
     for i, coords in enumerate(t):
         coords = np.array(coords).astype(float) - np.array(offset).astype(float)
@@ -110,23 +170,7 @@ def np_to_ctd(
             ctd[vertebra, i] = coords
         elif i < len(idx_list):
             ctd[vertebra, idx_list[i]] = coords
-
-    ###
-    if orientation is None:
-        raise ValueError("You must provide the orientation of the input POI.")
-
-    ctd = POI(
-        centroids=ctd,
-        orientation=orientation,
-        zoom=zoom,
-        shape=shape,
-        origin=origin,
-        rotation=rotation,
-    )
-
-    # ctd.reorient_(axcodes_to=("L", "A", "S"), verbose=False).rescale_((1, 1, 1), verbose=False)
-
-    return ctd
+    return POI(centroids=ctd, orientation=orientation, zoom=zoom, shape=shape, origin=origin, rotation=rotation)
 
 
 def create_prediction_poi_files(
@@ -140,197 +184,183 @@ def create_prediction_poi_files(
     project=False,
     save_gt_proj=False,
 ):
-
     print(f"save_gt_proj: {save_gt_proj}")
 
-    # Create the POI files for the refined predictions
     if return_paths:
         poi_paths_dict = {}
     if not save_in_dir and save_path is None:
         raise ValueError("Either save_in_dir or save_path must be set")
-
-    # Assert that the poi_file_ending is a json file
     if not poi_file_ending.endswith(".json"):
         raise ValueError("The poi_file_ending must be a json file")
 
-    data_module = load_data_module_from_config(data_module_save_path)
-    data_module.setup()
-
-    # Load the checkpoint
-    poi_module = PoiPredictionModule.load_from_checkpoint(checkpoint_path)
-
-    # Set the model to evaluation mode
-    poi_module.eval()
-
-    if split == "val":
-        val_dl = data_module.val_dataloader()
-    elif split == "test":
-        val_dl = data_module.test_dataloader()
-    elif split == "train":
-        val_dl = data_module.train_noaug_dataloader()
-    else:
-        raise ValueError(f"Invalid split: {split}")
+    data_module, poi_module, val_dl = _setup_prediction(data_module_save_path, checkpoint_path, split)
 
     for batch in val_dl:
-        # Bring all tensors to device
-        batch = {k: v.to(poi_module.device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+        batch = batch_to_device(batch, poi_module.device)
         batch = poi_module(batch)
 
         subject_batch = batch["subject"]
         vertebra_batch = batch["vertebra"]
-
         target_batch = batch["target"]
         target_indices_batch = batch["target_indices"]
         loss_mask_batch = batch["loss_mask"]
-
-        coarse_preds_batch = batch["coarse_preds"]
         refined_preds_batch = batch["refined_preds"]
 
         if save_gt_proj:
             target_batch, _ = surface_project_coords(target_batch, batch["surface"])
-
         if project:
             refined_preds_projected_batch, _ = surface_project_coords(refined_preds_batch, batch["surface"])
 
         offset_batch = batch["offset"]
         poi_path_batch = batch["poi_path"]
 
-        subreg = NII.load(batch["subreg_path"][0], seg=True)
-        vertseg = NII.load(batch["msk_path"][0], seg=True)
+        _affine_check(batch)
 
-        match = subreg.assert_affine(vertseg, raise_error=False, verbose=True)
-
-        if not match:
-            print(f"❌ Affine/Metadata stimmt nicht überein bei: \nsubreg: {subreg.affine}, \nvertseg: {vertseg.affine}")
-
-        # Detach all tensors
         vertebra_batch = vertebra_batch.detach().cpu().numpy()
         refined_preds_batch = refined_preds_batch.detach().cpu().numpy()
-
         target_batch = target_batch.detach().cpu().numpy()
-
         if project:
             refined_preds_projected_batch = refined_preds_projected_batch.detach().cpu().numpy()
-
         target_indices_batch = target_indices_batch.detach().cpu().numpy()
         offset_batch = offset_batch.detach().cpu().numpy()
-
-        loss_mask_batch = loss_mask_batch.detach().cpu().numpy()  # Alissa
+        loss_mask_batch = loss_mask_batch.detach().cpu().numpy()
 
         pred_batch = refined_preds_projected_batch if project else refined_preds_batch
 
-        for sub, vert, preds, targets, indices, poi_path, offset, mask in zip(  # Alissa: mask
-            subject_batch,
-            vertebra_batch,
-            pred_batch,
-            target_batch,  # Alissa: save GT proj
-            target_indices_batch,
-            poi_path_batch,
-            offset_batch,
-            loss_mask_batch,
+        for sub, vert, preds, targets, indices, poi_path, offset, mask in zip(
+            subject_batch, vertebra_batch, pred_batch, target_batch,
+            target_indices_batch, poi_path_batch, offset_batch, loss_mask_batch,
         ):
-
-            # Alissa: Filter nur gültige POIs (mask == True)
-
             preds = preds[mask]
             indices = indices[mask]
             targets = targets[mask]
 
-            # Open the old POI file to get the origin and rotation
-            ctd = POI.load(poi_path)
-
+            ref = POI.load(poi_path)
             print(f"subject {sub}, vertebra {vert}")
 
-            origin = ctd.origin
-            rotation = ctd.rotation
-            shape = ctd.shape
-            zoom = ctd.zoom
-            orientation = ctd.orientation  ### Alissa
-
-            # Create the new POI file
-            ctd = np_to_ctd(
-                preds, vert, origin, rotation, idx_list=indices, shape=shape, zoom=zoom, offset=offset, orientation=orientation  ### Alissa
-            )
+            ctd = np_to_ctd(preds, vert, ref.origin, ref.rotation, idx_list=indices,
+                            shape=ref.shape, zoom=ref.zoom, offset=offset, orientation=ref.orientation)
 
             if save_gt_proj:
-                # Create GT POI file with projected targets
-                gt_proj_ctd = np_to_ctd(
-                    targets,
-                    vert,
-                    origin,
-                    rotation,
-                    idx_list=indices,
-                    shape=shape,
-                    zoom=zoom,
-                    offset=offset,
-                    orientation=orientation,  ### Alissa
-                )
-                # Save GT projected POI file
+                gt_proj_ctd = np_to_ctd(targets, vert, ref.origin, ref.rotation, idx_list=indices,
+                                        shape=ref.shape, zoom=ref.zoom, offset=offset, orientation=ref.orientation)
                 save_path_gt_proj = os.path.join(save_path, "gt_projections")
                 os.makedirs(save_path_gt_proj, exist_ok=True)
-                gt_proj_save_path = os.path.join(save_path_gt_proj, str(sub) + "_" + str(vert) + "_" + "gt_proj.json")
+                gt_proj_save_path = os.path.join(save_path_gt_proj, f"{sub}_{vert}_gt_proj.json")
                 gt_proj_ctd.save(gt_proj_save_path, verbose=False)
+                POI.load(gt_proj_save_path).extract_region(vert).to_global().save_mrk(
+                    gt_proj_save_path.replace("gt_proj.json", "gt_proj_global.json")
+                )
 
-                gt_proj_global_save_path = gt_proj_save_path.replace("gt_proj.json", "gt_proj_global.json")
-                gt_proj = POI.load(gt_proj_save_path).extract_region(vert)
-                gt_proj.to_global().save_mrk(gt_proj_global_save_path)
-
-            if save_in_dir:
-                ctd_save_path = poi_path.replace(data_module.poi_file_ending, poi_file_ending)
-                # Make sure we do not overwrite the original POI file
-                if ctd_save_path == poi_path:
-                    # Print warning
-                    print(
-                        f"Warning: The save path {ctd_save_path} is the same as the original POI path. The new file will be saved with the ending '_pred.json'"
-                    )
-                    ctd_save_path = poi_path.replace(".json", "_pred.json")
-
-            else:
-                # Make sure the save path exists
-                os.makedirs(save_path, exist_ok=True)
-                ctd_save_path = os.path.join(save_path, str(sub) + "_" + str(vert) + "_" + poi_file_ending)
-
-            ctd.save(ctd_save_path, verbose=False)
-
+            ctd_save_path = _resolve_save_path(poi_path, poi_file_ending, save_in_dir, save_path, sub, vert, data_module)
             print("ctd zoom: ", ctd.zoom)
 
-            # === (1) Speichere globale Prediction-POIs ===
-            if not os.path.exists(ctd_save_path):
-                print(f"⚠️ Prediction file not found: {ctd_save_path}")
-                continue
-            ctd_global_save_path = ctd_save_path.replace("_pred.json", "_pred_global.json")
-            POI.load(ctd_save_path).to_global().save_mrk(ctd_global_save_path)
+            if _write_prediction_files(ctd, poi_path, ctd_save_path, [vert]):
+                if return_paths:
+                    poi_paths_dict[sub, vert] = {
+                        "gt": poi_path,
+                        "pred": ctd_save_path,
+                        "seg_vert": poi_path.replace("poi.json", "vertseg.nii.gz"),
+                    }
 
-            # === (2) Speichere GT-POI-Datei ===
+    if return_paths:
+        return poi_paths_dict
 
-            gt_poi = POI.load(poi_path).extract_region(vert)
 
-            print("gt_poi zoom: ", gt_poi.zoom)
+def create_neighbor_prediction_poi_files(
+    data_module_save_path,
+    checkpoint_path,
+    poi_file_ending,
+    split="val",
+    save_in_dir=False,
+    save_path=None,
+    return_paths=False,
+    project=False,
+):
+    if return_paths:
+        poi_paths_dict = {}
+    if not save_in_dir and save_path is None:
+        raise ValueError("Either save_in_dir or save_path must be set")
+    if not poi_file_ending.endswith(".json"):
+        raise ValueError("The poi_file_ending must be a json file")
 
-            gt_save_path = ctd_save_path.replace("_pred.json", "_gt.json")
-            gt_poi.save(gt_save_path)
+    data_module, poi_module, val_dl = _setup_prediction(data_module_save_path, checkpoint_path, split)
 
-            # === (3) Speichere globale GT-POIs ===
-            gt_global_save_path = gt_save_path.replace("_gt.json", "_gt_global.json")
-            gt_poi.to_global().save_mrk(gt_global_save_path)
+    for batch in val_dl:
+        batch = batch_to_device(batch, poi_module.device)
+        batch = poi_module(batch)
 
-            # === (4) Kopiere Segmentationsmaske ===
-            seg_vert_path = poi_path.replace("poi.json", "vertseg.nii.gz")
-            seg_save_path = ctd_save_path.replace("_pred.json", "_seg.nii.gz")
-            if os.path.exists(seg_vert_path):
-                shutil.copy(seg_vert_path, seg_save_path)
+        subject_batch = batch["subject"]
+        vertebra_batch = batch["vertebra"]
+        refined_preds_batch = batch["refined_preds"]
+        if project:
+            refined_preds_projected_batch, _ = surface_project_coords(refined_preds_batch, batch["surface"])
+        target_indices_batch = batch["target_indices"]
+        offset_batch = batch["offset"]
+        poi_path_batch = batch["poi_path"]
+        loss_mask_batch = batch["loss_mask"]
+        n_pois_per_vert_batch = batch["n_pois_per_vertebra"]
 
-                vertseg_test = NII.load(seg_vert_path, seg=True)
-                print("seg zoom: ", vertseg_test.zoom)
-            else:
-                print(f"⚠️ Segmentation file not found: {seg_vert_path}")
+        _affine_check(batch)
 
-            if return_paths:
-                poi_paths_dict[sub, vert] = {
-                    "gt": poi_path,
-                    "pred": ctd_save_path,
-                    "seg_vert": poi_path.replace("poi.json", "vertseg.nii.gz"),
-                }
+        vertebra_batch = vertebra_batch.detach().cpu().numpy()
+        refined_preds_batch = refined_preds_batch.detach().cpu().numpy()
+        if project:
+            refined_preds_projected_batch = refined_preds_projected_batch.detach().cpu().numpy()
+        target_indices_batch = target_indices_batch.detach().cpu().numpy()
+        offset_batch = offset_batch.detach().cpu().numpy()
+        loss_mask_batch = loss_mask_batch.detach().cpu().numpy()
+        n_pois_per_vert_batch = n_pois_per_vert_batch.detach().cpu().numpy()
+
+        pred_batch = refined_preds_projected_batch if project else refined_preds_batch
+
+        for sub, vert, preds, indices, poi_path, offset, mask, n_pois_per_vert in zip(
+            subject_batch, vertebra_batch, pred_batch, target_indices_batch,
+            poi_path_batch, offset_batch, loss_mask_batch, n_pois_per_vert_batch,
+        ):
+            ref = POI.load(poi_path)
+            origin, rotation, shape, zoom, orientation = (
+                ref.origin, ref.rotation, ref.shape, ref.zoom, ref.orientation
+            )
+            print(f"n_pois_per_vert: {n_pois_per_vert}")
+
+            def _make_ctd(slice_preds, slice_indices, slice_mask, v):
+                valid_preds = slice_preds[slice_mask]
+                valid_indices = slice_indices[slice_mask]
+                return np_to_ctd(valid_preds, v, origin, rotation,
+                                 idx_list=valid_indices, shape=shape, zoom=zoom,
+                                 offset=offset, orientation=orientation)
+
+            def _centroid_entry(ctd):
+                return {"subject": sub, "original_shape": shape, "original_zoom": zoom,
+                        "original_orientation": orientation, "original_rotation": rotation,
+                        "original_origin": origin, "centroids": ctd.centroids}
+
+            n = n_pois_per_vert
+            partial_centroids = [_centroid_entry(_make_ctd(preds[:n], indices[:n], mask[:n], vert))]
+
+            if vert > 1:
+                partial_centroids.append(_centroid_entry(
+                    _make_ctd(preds[n:2*n], indices[n:2*n], mask[n:2*n], vert - 1)
+                ))
+
+            if vert < 24:
+                partial_centroids.append(_centroid_entry(
+                    _make_ctd(preds[2*n:], indices[2*n:], mask[2*n:], vert + 1)
+                ))
+
+            sub, pois = combine_centroids(partial_centroids)
+
+            gt_verts = [vert] + ([vert - 1] if vert > 1 else []) + ([vert + 1] if vert < 24 else [])
+            ctd_save_path = _resolve_save_path(poi_path, poi_file_ending, save_in_dir, save_path, sub, vert, data_module)
+
+            if _write_prediction_files(pois, poi_path, ctd_save_path, gt_verts):
+                if return_paths:
+                    poi_paths_dict[sub, vert] = {
+                        "gt": poi_path,
+                        "pred": ctd_save_path,
+                        "seg_vert": poi_path.replace("poi.json", "vertseg.nii.gz"),
+                    }
 
     if return_paths:
         return poi_paths_dict
@@ -344,65 +374,33 @@ def run_predictions(
     vert_list=None,
     neighbor=False,
 ):
-    # Change the ending of the POI files if necessary
+    dm_kwargs = {}
+    if alternative_poi_ending is not None:
+        dm_kwargs["alternative_poi_ending"] = alternative_poi_ending
     if vert_list is not None:
-        data_module = load_data_module_from_config(
-            data_module_save_path,
-            alternative_poi_ending=alternative_poi_ending,
-            include_vert_list=vert_list,
-        )
-    else:
-        data_module = load_data_module_from_config(
-            data_module_save_path,
-            alternative_poi_ending=alternative_poi_ending,
-        )
-    data_module.setup()
+        dm_kwargs["include_vert_list"] = vert_list
+
+    data_module, poi_module, val_dl = _setup_prediction(
+        data_module_save_path, checkpoint_path, split, **dm_kwargs
+    )
     zoom = getattr(data_module, "zoom", (1, 1, 1))
-
     print(f"ZOOM: {zoom}")
-
-    # Load the checkpoint
-    poi_module = PoiPredictionModule.load_from_checkpoint(checkpoint_path)
-
-    # Set the model to evaluation mode
-    poi_module.eval()
-
-    if split == "val":
-        val_dl = data_module.val_dataloader()
-    elif split == "test":
-        val_dl = data_module.test_dataloader()
-    elif split == "train":
-        val_dl = data_module.train_noaug_dataloader()
-    else:
-        raise ValueError(f"Invalid split: {split}")
 
     project_gt = poi_module.hparams.refinement_config["params"]["project_gt"]
     print(f"project_gt: {project_gt}")
 
-    pred_dict = {
-        "subject": [],
-        "vertebra": [],
-        "poi_idx": [],
-        "target": [],
-        "coarse": [],
-        "refined": [],
-        "coarse_proj": [],
-        "refined_proj": [],
-        "coarse_proj_dist": [],
-        "refined_proj_dist": [],
-        "loss_mask": [],
-        "zoom": [],
-    }
+    pred_dict = {k: [] for k in [
+        "subject", "vertebra", "poi_idx", "target", "coarse", "refined",
+        "coarse_proj", "refined_proj", "coarse_proj_dist", "refined_proj_dist",
+        "loss_mask", "zoom",
+    ]}
 
     for batch in val_dl:
-        # Bring all torch tensors to device
-        batch = {k: v.to(poi_module.device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+        batch = batch_to_device(batch, poi_module.device)
         batch = poi_module(batch)
 
-        # Get target, coarse preds, refined preds, subject, vertebra and target indices
         subject_batch = batch["subject"]
         vertebra_batch = batch["vertebra"]
-
         target_batch = batch["target"]
         target_indices_batch = batch["target_indices"]
         loss_mask_batch = batch["loss_mask"]
@@ -412,23 +410,13 @@ def run_predictions(
         if neighbor:
             n_pois_per_vert_batch = batch["n_pois_per_vertebra"]
 
-        debug = False
-        # print(subject_batch, vertebra_batch, target_indices_batch)
-        if "WS-16" in subject_batch and 23 in vertebra_batch:
-            debug = True
-
         if project_gt:
             target_batch, _ = surface_project_coords(target_batch, batch["surface"], debug=False)
 
         coarse_preds_projected_batch, coarse_pred_proj_distances_batch = surface_project_coords(coarse_preds_batch, batch["surface"])
         refined_preds_projected_batch, refined_preds_proj_distances_batch = surface_project_coords(refined_preds_batch, batch["surface"])
 
-        # Detach all tensors and convert to numpy
         vertebra_batch = vertebra_batch.detach().cpu().numpy()
-
-        if neighbor:
-            n_pois_per_vert_batch = n_pois_per_vert_batch.detach().cpu().numpy()  # new
-
         target_batch = target_batch.detach().cpu().numpy()
         target_indices_batch = target_indices_batch.detach().cpu().numpy()
         loss_mask_batch = loss_mask_batch.detach().cpu().numpy()
@@ -438,35 +426,21 @@ def run_predictions(
         coarse_pred_proj_distances_batch = coarse_pred_proj_distances_batch.detach().cpu().numpy()
         refined_preds_projected_batch = refined_preds_projected_batch.detach().cpu().numpy()
         refined_preds_proj_distances_batch = refined_preds_proj_distances_batch.detach().cpu().numpy()
+        if neighbor:
+            n_pois_per_vert_batch = n_pois_per_vert_batch.detach().cpu().numpy()
 
         keys = [
-            "target",
-            "target_indices",
-            "coarse_preds",
-            "refined_preds",
-            "coarse_preds_projected",
-            "coarse_pred_proj_distances",
-            "refined_preds_projected",
-            "refined_preds_proj_distances",
-            "loss_mask",
-            "subject",
-            "vertebra",
+            "target", "target_indices", "coarse_preds", "refined_preds",
+            "coarse_preds_projected", "coarse_pred_proj_distances",
+            "refined_preds_projected", "refined_preds_proj_distances",
+            "loss_mask", "subject", "vertebra",
         ]
-
         batch_list = [
-            target_batch,
-            target_indices_batch,
-            coarse_preds_batch,
-            refined_preds_batch,
-            coarse_preds_projected_batch,
-            coarse_pred_proj_distances_batch,
-            refined_preds_projected_batch,
-            refined_preds_proj_distances_batch,
-            loss_mask_batch,
-            subject_batch,
-            vertebra_batch,
+            target_batch, target_indices_batch, coarse_preds_batch, refined_preds_batch,
+            coarse_preds_projected_batch, coarse_pred_proj_distances_batch,
+            refined_preds_projected_batch, refined_preds_proj_distances_batch,
+            loss_mask_batch, subject_batch, vertebra_batch,
         ]
-
         if neighbor:
             keys.append("n_pois_per_vert")
             batch_list.append(n_pois_per_vert_batch)
@@ -475,18 +449,16 @@ def run_predictions(
             data_dict = dict(zip(keys, values))
 
             if neighbor:
-                n_pois_per_vert = data_dict["n_pois_per_vert"]
-
-                indices = data_dict["target_indices"][:n_pois_per_vert]
-                targets = data_dict["target"][:n_pois_per_vert]
-                coarse = data_dict["coarse_preds"][:n_pois_per_vert]
-                refined = data_dict["refined_preds"][:n_pois_per_vert]
-                coarse_proj = data_dict["coarse_preds_projected"][:n_pois_per_vert]
-                refined_proj = data_dict["refined_preds_projected"][:n_pois_per_vert]
-                coarse_proj_dist = data_dict["coarse_pred_proj_distances"][:n_pois_per_vert]
-                refined_proj_dist = data_dict["refined_preds_proj_distances"][:n_pois_per_vert]
-                loss_mask = data_dict["loss_mask"][:n_pois_per_vert]
-
+                n = data_dict["n_pois_per_vert"]
+                indices = data_dict["target_indices"][:n]
+                targets = data_dict["target"][:n]
+                coarse = data_dict["coarse_preds"][:n]
+                refined = data_dict["refined_preds"][:n]
+                coarse_proj = data_dict["coarse_preds_projected"][:n]
+                refined_proj = data_dict["refined_preds_projected"][:n]
+                coarse_proj_dist = data_dict["coarse_pred_proj_distances"][:n]
+                refined_proj_dist = data_dict["refined_preds_proj_distances"][:n]
+                loss_mask = data_dict["loss_mask"][:n]
             else:
                 indices = data_dict["target_indices"]
                 targets = data_dict["target"]
@@ -498,17 +470,9 @@ def run_predictions(
                 refined_proj_dist = data_dict["refined_preds_proj_distances"]
                 loss_mask = data_dict["loss_mask"]
 
-            # Iterate over all POIs to collect POI-wise information
             for poi_idx, t, c, r, c_proj, r_proj, c_proj_dist, r_proj_dist, l in zip(
-                indices,  # data_dict["target_indices"],
-                targets,  # data_dict["target"],
-                coarse,  # data_dict["coarse_preds"],
-                refined,  # data_dict["refined_preds"],
-                coarse_proj,  # data_dict["coarse_preds_projected"],
-                refined_proj,  # data_dict["refined_preds_projected"],
-                coarse_proj_dist,  # data_dict["coarse_pred_proj_distances"],
-                refined_proj_dist,  # data_dict["refined_preds_proj_distances"],
-                loss_mask,  # data_dict["loss_mask"],
+                indices, targets, coarse, refined,
+                coarse_proj, refined_proj, coarse_proj_dist, refined_proj_dist, loss_mask,
             ):
                 pred_dict["subject"].append(data_dict["subject"])
                 pred_dict["vertebra"].append(data_dict["vertebra"])
@@ -531,9 +495,8 @@ def create_prediction_df(data_module_save_path, checkpoint_path, split="val", al
 
     start = perf_counter()
     pred_dict = run_predictions(data_module_save_path, checkpoint_path, split, alternative_poi_ending, vert_list, neighbor)
-    stop = perf_counter()
-    print(f"Time taken to run predictions: {stop - start:.2f} seconds")
-    # Calculate distances between target and predicted POIs (in mm)
+    print(f"Time taken to run predictions: {perf_counter() - start:.2f} seconds")
+
     pred_dict["coarse_error"] = [
         np.linalg.norm((np.array(t) - np.array(c)) * np.array(zoom))
         for t, c, zoom in zip(pred_dict["target"], pred_dict["coarse"], pred_dict["zoom"])
@@ -542,8 +505,6 @@ def create_prediction_df(data_module_save_path, checkpoint_path, split="val", al
         np.linalg.norm((np.array(t) - np.array(r)) * np.array(zoom))
         for t, r, zoom in zip(pred_dict["target"], pred_dict["refined"], pred_dict["zoom"])
     ]
-
-    # Calculate distances between target and projected POIs
     pred_dict["coarse_proj_error"] = [
         np.linalg.norm((np.array(t) - np.array(c)) * np.array(zoom))
         for t, c, zoom in zip(pred_dict["target"], pred_dict["coarse_proj"], pred_dict["zoom"])
@@ -553,9 +514,7 @@ def create_prediction_df(data_module_save_path, checkpoint_path, split="val", al
         for t, r, zoom in zip(pred_dict["target"], pred_dict["refined_proj"], pred_dict["zoom"])
     ]
 
-    # Create DataFrame
-    df = pd.DataFrame(pred_dict)
-    return df
+    return pd.DataFrame(pred_dict)
 
 
 def calculate_metrics(errors, threshold=2.0):
@@ -569,8 +528,6 @@ def calculate_metrics(errors, threshold=2.0):
 
 def calculate_metrics4paper(errors, threshold=2.0, round_digits=2):
     mean_error = np.mean(errors)
-    # mean error of worst 10% of errors
-    # mean_worst_error = np.mean(np.sort(errors)[-int(0.005 * len(errors)) :])
     std = np.std(errors)
     median_error = np.median(errors)
     mse = np.mean(errors**2)
@@ -591,413 +548,72 @@ def calculate_metrics4paper(errors, threshold=2.0, round_digits=2):
 
 
 def compute_overall_metrics(df):
-    # Create an empty DataFrame to hold the metrics
     metrics_df = pd.DataFrame(columns=["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"])
-
-    # Calculate metrics for each error type
-    for error_type in [
-        "coarse_error",
-        "refined_error",
-        "coarse_proj_error",
-        "refined_proj_error",
-    ]:
+    for error_type in ["coarse_error", "refined_error", "coarse_proj_error", "refined_proj_error"]:
         metrics_df.loc[error_type] = calculate_metrics(df[error_type])
-
-    return metrics_df
-
-
-def compute_poi_wise_metrics_proj(df):
-    # Group by poi_idx and calculate metrics for refined_proj_error
-    grouped = df.groupby("poi_idx")["refined_proj_error"]
-    metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
-    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
-
     return metrics_df
 
 
 def compute_poi_wise_metrics(df):
-    # Group by poi_idx and calculate metrics for refined_proj_error
-    grouped = df.groupby("poi_idx")["refined_error"]
-    metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
-    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
-
-    return metrics_df
+    return _compute_grouped_metrics(df, "poi_idx", "refined_error")
 
 
-def compute_vert_wise_metrics_proj(df):
-    # Group by vertebra and calculate metrics for refined_proj_error
-    grouped = df.groupby("vertebra")["refined_proj_error"]
-    metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
-    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
-
-    return metrics_df
+def compute_poi_wise_metrics_proj(df):
+    return _compute_grouped_metrics(df, "poi_idx", "refined_proj_error")
 
 
 def compute_vert_wise_metrics(df):
-    # Group by vertebra and calculate metrics for refined_proj_error
-    grouped = df.groupby("vertebra")["refined_error"]
-    metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
-    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
-
-    return metrics_df
+    return _compute_grouped_metrics(df, "vertebra", "refined_error")
 
 
-def compute_sub_wise_metrics_proj(df):
-    # Group by vertebra and calculate metrics for refined_proj_error
-    grouped = df.groupby("subject")["refined_proj_error"]
-    metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
-    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
-
-    return metrics_df
+def compute_vert_wise_metrics_proj(df):
+    return _compute_grouped_metrics(df, "vertebra", "refined_proj_error")
 
 
 def compute_sub_wise_metrics(df):
-    # Group by vertebra and calculate metrics for refined_proj_error
-    grouped = df.groupby("subject")["refined_error"]
-    metrics_df = grouped.apply(lambda x: calculate_metrics(x)).apply(pd.Series)
-    metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
+    return _compute_grouped_metrics(df, "subject", "refined_error")
 
-    return metrics_df
+
+def compute_sub_wise_metrics_proj(df):
+    return _compute_grouped_metrics(df, "subject", "refined_proj_error")
 
 
 def filter_high_refined_proj_error_pois(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
-    """
-    filters all subjects with vertebra and poi_idx, where refined_proj_error > threshold
-    """
-    filtered_df = df[df["refined_proj_error"] > threshold]
-    return filtered_df[["subject", "vertebra", "poi_idx", "refined_proj_error"]].reset_index(drop=True)
+    return _filter_high_error(df, "refined_proj_error", threshold)
 
 
 def filter_high_refined_error_pois(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
-    """
-    filters all subjects with vertebra and poi_idx, where refined_error > threshold
-    """
-    filtered_df = df[df["refined_error"] > threshold]
-    return filtered_df[["subject", "vertebra", "poi_idx", "refined_error"]].reset_index(drop=True)
-
-
-def create_neighbor_prediction_poi_files(
-    data_module_save_path,
-    checkpoint_path,
-    poi_file_ending,
-    split="val",
-    save_in_dir=False,
-    save_path=None,
-    return_paths=False,
-    project=False,
-):
-    # Create the POI files for the refined predictions
-    if return_paths:
-        poi_paths_dict = {}
-    if not save_in_dir and save_path is None:
-        raise ValueError("Either save_in_dir or save_path must be set")
-
-    # Assert that the poi_file_ending is a json file
-    if not poi_file_ending.endswith(".json"):
-        raise ValueError("The poi_file_ending must be a json file")
-
-    data_module = load_data_module_from_config(data_module_save_path)
-    data_module.setup()
-
-    # Load the checkpoint
-    poi_module = PoiPredictionModule.load_from_checkpoint(checkpoint_path)
-
-    # Set the model to evaluation mode
-    poi_module.eval()
-
-    if split == "val":
-        val_dl = data_module.val_dataloader()
-    elif split == "test":
-        val_dl = data_module.test_dataloader()
-    else:
-        raise ValueError(f"Invalid split: {split}")
-
-    for batch in val_dl:
-        # Bring all tensors to device
-        batch = {k: v.to(poi_module.device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
-        batch = poi_module(batch)
-
-        # ALISSA: save img of heatmaps and global features -> für ppt
-        # save_heatmaps(batch, out_dir="heatmaps")
-        # save_feature_maps(batch, out_dir="features")
-
-        subject_batch = batch["subject"]
-        vertebra_batch = batch["vertebra"]
-        refined_preds_batch = batch["refined_preds"]
-        if project:
-            refined_preds_projected_batch, _ = surface_project_coords(refined_preds_batch, batch["surface"])
-        target_indices_batch = batch["target_indices"]
-        offset_batch = batch["offset"]
-        poi_path_batch = batch["poi_path"]
-
-        loss_mask_batch = batch["loss_mask"]  # Alissa
-
-        coarse_preds_batch = batch["coarse_preds"]
-
-        n_pois_per_vert_batch = batch["n_pois_per_vertebra"]
-
-        subreg = NII.load(batch["subreg_path"][0], seg=True)
-        vertseg = NII.load(batch["msk_path"][0], seg=True)
-
-        match = subreg.assert_affine(vertseg, raise_error=False, verbose=True)
-
-        if not match:
-            print(f"❌ Affine/Metadata stimmt nicht überein bei: \nsubreg: {subreg.affine}, \nvertseg: {vertseg.affine}")
-
-        # Detach all tensors
-        vertebra_batch = vertebra_batch.detach().cpu().numpy()
-        refined_preds_batch = refined_preds_batch.detach().cpu().numpy()
-        if project:
-            refined_preds_projected_batch = refined_preds_projected_batch.detach().cpu().numpy()
-        target_indices_batch = target_indices_batch.detach().cpu().numpy()
-        offset_batch = offset_batch.detach().cpu().numpy()
-
-        loss_mask_batch = loss_mask_batch.detach().cpu().numpy()  # Alissa
-
-        pred_batch = refined_preds_projected_batch if project else refined_preds_batch
-
-        n_pois_per_vert_batch = n_pois_per_vert_batch.detach().cpu().numpy()
-
-        for sub, vert, preds, indices, poi_path, offset, mask, n_pois_per_vert in zip(  # Alissa: mask
-            subject_batch,
-            vertebra_batch,
-            pred_batch,
-            target_indices_batch,
-            poi_path_batch,
-            offset_batch,
-            loss_mask_batch,  # Alissa
-            n_pois_per_vert_batch,  # Alissa new
-        ):
-
-            # Open the old POI file to get the origin, rotation, ...
-            ctd = POI.load(poi_path)
-
-            origin = ctd.origin
-            rotation = ctd.rotation
-            shape = ctd.shape
-            zoom = ctd.zoom
-            orientation = ctd.orientation
-
-            # current vertebra
-            print(f"n_pois_per_vert: {n_pois_per_vert}")
-            current_preds = preds[:n_pois_per_vert]  #
-            current_indices = indices[:n_pois_per_vert]  #
-            current_mask = mask[:n_pois_per_vert]  #
-
-            current_preds = current_preds[current_mask]
-            current_indices = current_indices[current_mask]
-
-            # Create the new POI file
-            current_ctd = np_to_ctd(
-                current_preds,
-                vert,
-                origin,
-                rotation,
-                idx_list=current_indices,
-                shape=shape,
-                zoom=zoom,
-                offset=offset,
-                orientation=orientation,  ### Alissa
-            )
-            partial_centroids = []
-            partial_centroids.append(
-                {
-                    "subject": sub,
-                    "original_shape": shape,
-                    "original_zoom": zoom,
-                    "original_orientation": orientation,
-                    "original_rotation": rotation,  # ALISSA
-                    "original_origin": origin,  # ALISSA
-                    "centroids": current_ctd.centroids,
-                }
-            )
-            start_idx = n_pois_per_vert
-
-            # top neighbor
-            if vert > 1:
-                top_vert = vert - 1
-                top_preds = preds[start_idx : start_idx + n_pois_per_vert]  #
-                top_indices = indices[start_idx : start_idx + n_pois_per_vert]  #
-                top_mask = mask[start_idx : start_idx + n_pois_per_vert]
-
-                top_preds = top_preds[top_mask]
-                top_indices = top_indices[top_mask]
-
-                top_ctd = np_to_ctd(
-                    top_preds,
-                    top_vert,
-                    origin,
-                    rotation,
-                    idx_list=top_indices,
-                    shape=shape,
-                    zoom=zoom,
-                    offset=offset,
-                    orientation=orientation,  ### Alissa
-                )
-
-                partial_centroids.append(
-                    {
-                        "subject": sub,
-                        "original_shape": shape,
-                        "original_zoom": zoom,
-                        "original_orientation": orientation,
-                        "original_rotation": rotation,  # ALISSA
-                        "original_origin": origin,  # ALISSA
-                        "centroids": top_ctd.centroids,
-                    }
-                )
-
-            # bottom neighbor
-            start_idx += n_pois_per_vert
-
-            if vert < 24:
-                bottom_vert = vert + 1
-                bottom_preds = preds[start_idx:]  #
-                bottom_indices = indices[start_idx:]  #
-                bottom_mask = mask[start_idx:]
-
-                bottom_preds = bottom_preds[bottom_mask]
-                bottom_indices = bottom_indices[bottom_mask]
-
-                bottom_ctd = np_to_ctd(
-                    bottom_preds,
-                    bottom_vert,
-                    origin,
-                    rotation,
-                    idx_list=bottom_indices,
-                    shape=shape,
-                    zoom=zoom,
-                    offset=offset,
-                    orientation=orientation,  ### Alissa
-                )
-
-                partial_centroids.append(
-                    {
-                        "subject": sub,
-                        "original_shape": shape,
-                        "original_zoom": zoom,
-                        "original_orientation": orientation,
-                        "original_rotation": rotation,  # ALISSA
-                        "original_origin": origin,  # ALISSA
-                        "centroids": bottom_ctd.centroids,
-                    }
-                )
-
-            sub, pois = combine_centroids(partial_centroids)
-
-            if save_in_dir:
-                ctd_save_path = poi_path.replace(data_module.poi_file_ending, poi_file_ending)
-                # Make sure we do not overwrite the original POI file
-                if ctd_save_path == poi_path:
-                    # Print warning
-                    print(
-                        f"Warning: The save path {ctd_save_path} is the same as the original POI path. The new file will be saved with the ending '_pred.json'"
-                    )
-                    ctd_save_path = poi_path.replace(".json", "_pred.json")
-
-            else:
-                # Make sure the save path exists
-                os.makedirs(save_path, exist_ok=True)
-                ctd_save_path = os.path.join(save_path, str(sub) + "_" + str(vert) + "_" + poi_file_ending)
-
-            pois.save(ctd_save_path, verbose=False)
-
-            # save pred as global
-            if not os.path.exists(ctd_save_path):
-                print(f"⚠️ Prediction file not found: {ctd_save_path}")
-                continue
-            ctd_global_save_path = ctd_save_path.replace("_pred.json", "_pred_global.json")
-            POI.load(ctd_save_path).to_global().save_mrk(ctd_global_save_path)
-
-            # save GT files
-            all_vert = [vert]
-            if vert > 1:
-                all_vert.append(vert - 1)
-            if vert < 24:
-                all_vert.append(vert + 1)
-
-            gt_poi = POI.load(poi_path).extract_region(*all_vert)
-            gt_save_path = ctd_save_path.replace("_pred.json", "_gt.json")
-            gt_poi.save(gt_save_path)
-
-            gt_global_save_path = gt_save_path.replace("_gt.json", "_gt_global.json")
-            gt_poi.to_global().save_mrk(gt_global_save_path)
-
-            # save segmentation masks
-            seg_vert_path = poi_path.replace("poi.json", "vertseg.nii.gz")
-            seg_save_path = ctd_save_path.replace("_pred.json", "_seg.nii.gz")
-            if os.path.exists(seg_vert_path):
-                shutil.copy(seg_vert_path, seg_save_path)
-            else:
-                print(f"⚠️ Segmentation file not found: {seg_vert_path}")
-
-            if return_paths:
-                poi_paths_dict[sub, vert] = {
-                    "gt": poi_path,
-                    "pred": ctd_save_path,
-                    "seg_vert": poi_path.replace("poi.json", "vertseg.nii.gz"),
-                }
-
-    if return_paths:
-        return poi_paths_dict
+    return _filter_high_error(df, "refined_error", threshold)
 
 
 def load_and_filter_csv(df):
-    """
-    Lädt CSV-Datei und filtert poi_idx 41-50 heraus
-    """
-    # CSV laden
-    df
-
-    # poi_idx 41-50 ausschließen
     excluded_poi_idx = [41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
     df_filtered = df[~df["poi_idx"].isin(excluded_poi_idx)]
-
     print(f"Original Anzahl Zeilen: {len(df)}")
     print(f"Gefilterte Anzahl Zeilen: {len(df_filtered)}")
     print(f"Entfernte Zeilen: {len(df) - len(df_filtered)}")
-
     return df_filtered
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--data_module_save_path",
-        type=str,
-        help="Path to the saved DataModule configuration",
-        default="",
-    )
-    parser.add_argument(
-        "--checkpoint_path",
-        type=str,
-        help="Path to the saved checkpoint",
-        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/include_pois-cc3-exclude6/subreg-project_gt-no_freeze-surface-cc3-exclude6/version_1/checkpoints/sad-pt-epoch=122-fine_mean_distance_val=1.58.ckpt",
-    )
-    parser.add_argument(
-        "--split",
-        type=str,
-        default="val",
-        help="Dataset split to evaluate on (val/test)",
-    )
-    parser.add_argument(
-        "--save_path",
-        type=str,
-        help="Path to save the evaluation results",
-        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/ablation_study/hendrik/val_dummy/subreg-project_gt-no_freeze-surface/",
-    )
+    parser.add_argument("--data_module_save_path", type=str, default="",
+                        help="Path to the saved DataModule configuration")
+    parser.add_argument("--checkpoint_path", type=str,
+                        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/hendrik/trainings/include_pois-cc3-exclude6/subreg-project_gt-no_freeze-surface-cc3-exclude6/version_1/checkpoints/sad-pt-epoch=122-fine_mean_distance_val=1.58.ckpt",
+                        help="Path to the saved checkpoint")
+    parser.add_argument("--split", type=str, default="val",
+                        help="Dataset split to evaluate on (val/test)")
+    parser.add_argument("--save_path", type=str,
+                        default="/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/src/ablation_study/hendrik/val_dummy/subreg-project_gt-no_freeze-surface/",
+                        help="Path to save the evaluation results")
     parser.add_argument("--neighbor", action="store_true", help="Whether neighbor predictions were made")
-
     parser.add_argument("--project", action="store_true", help="Whether the final predictions should be projected to the surface.")
-
     parser.add_argument("--save_gt_proj", action="store_true", help="Whether to save projected GT POI files.")
-
     parser.add_argument("--save_files", action="store_true", help="Whether to save the prediction files at all.")
 
     args = parser.parse_args()
-    # args.project = True  # REMOVE
-    # args.save_gt_proj = True  # REMOVE
 
     os.makedirs(args.save_path, exist_ok=True)
 
@@ -1008,38 +624,14 @@ if __name__ == "__main__":
 
     if args.data_module_save_path == "":
         t = Path(args.checkpoint_path)
-        i = 0
-        while i < 3:
+        for _ in range(3):
             if t.joinpath("data_module_params.json").exists():
                 args.data_module_save_path = str(t.joinpath("data_module_params.json"))
                 break
             t = t.parent
-            i += 1
-            # Path(args.checkpoint_path).parent.parent.joinpath("data_module_params.json"))
-        # args.data_module_save_path = str(Path(args.checkpoint_path).parent.parent.joinpath("data_module_params.json"))
 
-    vert_list = [
-        8,
-        9,
-        10,
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17,
-        18,
-        19,
-        28,
-        20,
-        21,
-        22,
-        23,
-        24,
-    ]  # specify vert_list if you want to evaluate only on specific vertebrae, e.g. vert_list=[1,2,3]
+    vert_list = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 28, 20, 21, 22, 23, 24]
 
-    ### Create DataFrame with prediction information
     prediction_df = create_prediction_df(
         data_module_save_path=args.data_module_save_path,
         checkpoint_path=args.checkpoint_path,
@@ -1048,69 +640,41 @@ if __name__ == "__main__":
         vert_list=vert_list,
     )
     prediction_df = prediction_df[prediction_df["loss_mask"] == True]
-
     prediction_df.to_csv(os.path.join(args.save_path, "results.csv"))
     print(f"Prediction DataFrame saved {os.path.join(args.save_path, 'results.csv')}")
 
-    # prediction_df = load_and_filter_csv(prediction_df)
-
-    ### Compute overall metrics
     metrics_df = compute_overall_metrics(prediction_df)
     metrics_df.to_csv(out_metrics)
-    print("Overal metrics saved")
+    print("Overall metrics saved")
 
     if args.save_files:
 
         if args.project:
-            ### Compute POI-wise metrics projected
-            poi_metrics_proj_df = compute_poi_wise_metrics_proj(prediction_df)
-            poi_metrics_proj_df.to_csv(os.path.join(args.save_path, "poi_metrics_projected.csv"))
+            compute_poi_wise_metrics_proj(prediction_df).to_csv(os.path.join(args.save_path, "poi_metrics_projected.csv"))
             print("POI-wise projected metrics saved")
-
-            ### Compute vertebra-wise metrics projected
-            vert_metrics_proj_df = compute_vert_wise_metrics_proj(prediction_df)
-            vert_metrics_proj_df.to_csv(os.path.join(args.save_path, "vertebra_metrics_projected.csv"))
+            compute_vert_wise_metrics_proj(prediction_df).to_csv(os.path.join(args.save_path, "vertebra_metrics_projected.csv"))
             print("Vertebra-wise projected metrics saved")
-
-            ### Compute subject-wise metrics projected
-            sub_metrics_proj_df = compute_sub_wise_metrics_proj(prediction_df)
-            sub_metrics_proj_df.to_csv(os.path.join(args.save_path, "subject_metrics_projected.csv"))
+            compute_sub_wise_metrics_proj(prediction_df).to_csv(os.path.join(args.save_path, "subject_metrics_projected.csv"))
             print("Subject-wise projected metrics saved")
-
-            ### Find Outliers
-            outlier_df = filter_high_refined_proj_error_pois(prediction_df, 10)
-            outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_proj_error_higher_10.csv"))
+            filter_high_refined_proj_error_pois(prediction_df, 10).to_csv(os.path.join(args.save_path, "outliers_refined_proj_error_higher_10.csv"))
             print("Outliers (refined_proj_error > 10) saved")
 
-        ### Compute POI-wise metrics
-        poi_metrics_df = compute_poi_wise_metrics(prediction_df)
-        poi_metrics_df.to_csv(os.path.join(args.save_path, "poi_metrics.csv"))
+        compute_poi_wise_metrics(prediction_df).to_csv(os.path.join(args.save_path, "poi_metrics.csv"))
         print("POI-wise metrics saved")
-
-        ### Compute vertebra-wise metrics
-        vert_metrics_df = compute_vert_wise_metrics(prediction_df)
-        vert_metrics_df.to_csv(os.path.join(args.save_path, "vertebra_metrics.csv"))
+        compute_vert_wise_metrics(prediction_df).to_csv(os.path.join(args.save_path, "vertebra_metrics.csv"))
         print("Vertebra-wise metrics saved")
-
-        ### Compute subject-wise metrics
-        sub_metrics_df = compute_sub_wise_metrics(prediction_df)
-        sub_metrics_df.to_csv(os.path.join(args.save_path, "subject_metrics.csv"))
+        compute_sub_wise_metrics(prediction_df).to_csv(os.path.join(args.save_path, "subject_metrics.csv"))
         print("Subject-wise metrics saved")
-
-        ### Find Outliers
-        outlier_df = filter_high_refined_error_pois(prediction_df, 10)
-        outlier_df.to_csv(os.path.join(args.save_path, "outliers_refined_error_higher_10.csv"))
+        filter_high_refined_error_pois(prediction_df, 10).to_csv(os.path.join(args.save_path, "outliers_refined_error_higher_10.csv"))
         print("Outliers (refined_error > 10) saved")
 
-        ### Create Prediction files
-        prediction_files_path_proj = os.path.join(args.save_path, "prediction_files")
         prediction_files_path = os.path.join(args.save_path, "prediction_files-no_proj")
+        prediction_files_path_proj = os.path.join(args.save_path, "prediction_files")
         os.makedirs(prediction_files_path, exist_ok=True)
         os.makedirs(prediction_files_path_proj, exist_ok=True)
 
         if args.neighbor:
-            # Generate predictions and get paths
-            poi_paths_dict = create_neighbor_prediction_poi_files(
+            create_neighbor_prediction_poi_files(
                 data_module_save_path=args.data_module_save_path,
                 checkpoint_path=args.checkpoint_path,
                 poi_file_ending="_pred.json",
@@ -1120,8 +684,7 @@ if __name__ == "__main__":
                 project=args.project,
             )
         else:
-            # Generate predictions and get paths
-            poi_paths_dict = create_prediction_poi_files(
+            create_prediction_poi_files(
                 data_module_save_path=args.data_module_save_path,
                 checkpoint_path=args.checkpoint_path,
                 poi_file_ending="_pred.json",
@@ -1131,7 +694,7 @@ if __name__ == "__main__":
                 project=False,
                 save_gt_proj=args.save_gt_proj,
             )
-            poi_paths_dict = create_prediction_poi_files(
+            create_prediction_poi_files(
                 data_module_save_path=args.data_module_save_path,
                 checkpoint_path=args.checkpoint_path,
                 poi_file_ending="_pred.json",
