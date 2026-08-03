@@ -16,8 +16,16 @@ from utils.train_utils import create_callbacks, save_data_module_config
 
 
 def run_experiment(experiment_config):
-    pl.seed_everything(42)
-    torch.set_float32_matmul_precision("medium")
+    pl.seed_everything(42, workers=True)
+    torch.set_float32_matmul_precision("high")
+    # warn_only=True would let 3D CUDA convs run non-deterministically.
+    # Setting False raises on the first non-deterministic op — used to identify
+    # the exact source of run-to-run variance.
+    import os
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    torch.use_deterministic_algorithms(mode=True, warn_only=False)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
     data_module = create_data_module(experiment_config["data_module_config"])
     data_module.setup()
@@ -30,6 +38,7 @@ def run_experiment(experiment_config):
     callbacks = create_callbacks(experiment_config.get("callbacks_config", []))
     trainer_config = experiment_config.get("trainer_config", {})
     trainer_config.setdefault("callbacks", callbacks)
+    trainer_config.setdefault("deterministic", "warn")
     trainer_config["logger"] = logger
 
     trainer = pl.Trainer(**trainer_config)

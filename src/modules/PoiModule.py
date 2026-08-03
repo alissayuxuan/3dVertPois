@@ -61,7 +61,8 @@ class PoiPredictionModule(pl.LightningModule):
         loss_weights=None,
         optimizer="AdamW",
         scheduler_config=None,
-        feature_freeze_patience=None
+        feature_freeze_patience=None,
+        weight_decay=1e-4,
     ):
         super().__init__()
         if loss_weights is None:
@@ -69,6 +70,13 @@ class PoiPredictionModule(pl.LightningModule):
         self.feature_extraction_module = create_feature_extraction_module(coarse_config)
         self.refinement_module = create_refinement_module(refinement_config)
         self.lr = lr
+        # Per-submodule LRs (fall back to the module-level lr). Honouring these
+        # lets configs use a smaller LR for the transformer refiner (standard for
+        # coarse-to-fine models — the refiner needs a gentler step or it
+        # diverges and drags the coarse encoder with it).
+        self.coarse_lr = coarse_config.get("params", {}).get("lr", lr)
+        self.refiner_lr = refinement_config.get("params", {}).get("lr", lr)
+        self.weight_decay = weight_decay
         self.loss_weights = torch.tensor(loss_weights) / torch.sum(
             torch.tensor(loss_weights)
         )
@@ -179,7 +187,21 @@ class PoiPredictionModule(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer_class = getattr(torch.optim, self.optimizer)
-        optimizer = optimizer_class(self.parameters(), lr=self.lr, weight_decay=1e-4)
+        param_groups = [
+            {
+                "params": self.feature_extraction_module.parameters(),
+                "lr": self.coarse_lr,
+                "name": "coarse",
+            },
+            {
+                "params": self.refinement_module.parameters(),
+                "lr": self.refiner_lr,
+                "name": "refiner",
+            },
+        ]
+        optimizer = optimizer_class(
+            param_groups, lr=self.lr, weight_decay=self.weight_decay
+        )
 
         if self.scheduler_config:
             scheduler_class = getattr(
@@ -298,6 +320,7 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
         feature_freeze_patience=None,
         current_weight=1.0,
         neighbor_weight=0.2,
+        weight_decay=1e-4,
     ):
         """
         Args:
@@ -312,7 +335,8 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
             loss_weights=loss_weights,
             optimizer=optimizer,
             scheduler_config=scheduler_config,
-            feature_freeze_patience=feature_freeze_patience
+            feature_freeze_patience=feature_freeze_patience,
+            weight_decay=weight_decay,
         )
         
         self.current_weight = current_weight

@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class PatchExtractor(nn.Module):
@@ -33,54 +32,64 @@ class PatchExtractor(nn.Module):
         return out
 
     def extract_patches(self, vol, centroids):
-        """Extract 3D patches from the input volume using slicing, ensuring all patches
-        are of uniform size, applying zero padding where necessary.
+        """Vectorised 3D patch extraction with zero-padding for out-of-volume
+        positions.
 
         Parameters:
         - vol: Input volume tensor of shape (B, C, H, W, D).
-        - centroids: Tensor of centroids of shape (B, N, 3).
-        - patch_size: Integer, the size of the patch to extract.
+        - centroids: Tensor of centroids of shape (B, N, 3). Float or int; will be
+          rounded to long for indexing.
 
         Returns:
-        - Tensor of extracted patches of shape (B, N, C, patch_size, patch_size, patch_size).
+        - Tensor of extracted patches of shape (B, N, C, P, P, P), P = patch_size.
         """
         patch_size = self.patch_size
         B, C, H, W, D = vol.shape
-        patches = torch.zeros(
-            B,
-            centroids.shape[1],
-            C,
-            patch_size,
-            patch_size,
-            patch_size,
-            device=vol.device,
+        N = centroids.shape[1]
+        device = vol.device
+
+        # Round centroids to integer indices; accept float or int input.
+        centroids = centroids.long()
+
+        # 1D offset grid of length P centred on 0 → positions [-P//2, ..., P//2 - 1]
+        offs = torch.arange(patch_size, device=device) - patch_size // 2
+
+        # Per-axis coord arrays: (B, N, P) via broadcasting the offset over the centroid
+        cx = centroids[..., 0:1] + offs.view(1, 1, patch_size)  # x indexes H dim
+        cy = centroids[..., 1:2] + offs.view(1, 1, patch_size)  # y indexes W dim
+        cz = centroids[..., 2:3] + offs.view(1, 1, patch_size)  # z indexes D dim
+
+        # Broadcast to full 3-D grid (B, N, P, P, P)
+        cx_f = cx.unsqueeze(-1).unsqueeze(-1).expand(B, N, patch_size, patch_size, patch_size)
+        cy_f = cy.unsqueeze(-2).unsqueeze(-1).expand(B, N, patch_size, patch_size, patch_size)
+        cz_f = cz.unsqueeze(-2).unsqueeze(-2).expand(B, N, patch_size, patch_size, patch_size)
+
+        # Validity mask: True where the coord is inside the volume
+        valid = (
+            (cx_f >= 0) & (cx_f < H) &
+            (cy_f >= 0) & (cy_f < W) &
+            (cz_f >= 0) & (cz_f < D)
+        )  # (B, N, P, P, P)
+
+        # Clamp coords so gather is safe; masked-out positions are zeroed later
+        cx_c = cx_f.clamp(0, H - 1)
+        cy_c = cy_f.clamp(0, W - 1)
+        cz_c = cz_f.clamp(0, D - 1)
+
+        b_idx = (
+            torch.arange(B, device=device)
+            .view(B, 1, 1, 1, 1)
+            .expand(B, N, patch_size, patch_size, patch_size)
         )
 
-        for b in range(B):
-            for n in range(centroids.shape[1]):
-                x, y, z = centroids[b, n].long()
-                z_min = max(z - patch_size // 2, 0)
-                y_min = max(y - patch_size // 2, 0)
-                x_min = max(x - patch_size // 2, 0)
-                z_max = min(z + patch_size // 2 + 1, D)
-                y_max = min(y + patch_size // 2 + 1, W)
-                x_max = min(x + patch_size // 2 + 1, H)
+        # Advanced indexing across the batch and 3 spatial dims, keeping C as a slice.
+        # Because the slice (:) sits between fancy indices, the fancy dims are moved to
+        # the front → result shape (B, N, P, P, P, C).
+        patches = vol[b_idx, :, cx_c, cy_c, cz_c]
 
-                # Extract the patch
-                patch = vol[b, :, x_min:x_max, y_min:y_max, z_min:z_max]
-
-                # Calculate padding needed to reach the desired patch size
-                pad = [
-                    0,
-                    patch_size - patch.size(3),  # Padding for X dimension
-                    0,
-                    patch_size - patch.size(2),  # Padding for Y dimension
-                    0,
-                    patch_size - patch.size(1),  # Padding for Z dimension
-                ]
-
-                # Apply padding
-                patch_padded = F.pad(patch, pad, "constant", 0)
-                patches[b, n] = patch_padded
+        # Rearrange to (B, N, C, P, P, P) and zero out invalid positions.
+        # Cast to float32 to match model weights (dataset may hand us float64).
+        patches = patches.permute(0, 1, 5, 2, 3, 4).contiguous().float()
+        patches = patches * valid.unsqueeze(2)
 
         return patches

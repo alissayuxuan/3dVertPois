@@ -16,15 +16,19 @@ def run_cv(n_folds, experiment_config, save_predictions=False, poi_file_ending=N
     # If the predictions are saved the file ending must be set
     if save_predictions and not poi_file_ending:
         raise ValueError("If predictions are saved the poi file ending must be set")
-    # Set the matmul precision to 'medium' for better performance
-    torch.set_float32_matmul_precision("medium")
+
+    pl.seed_everything(42, workers=True)
+    torch.set_float32_matmul_precision("high")
+    torch.use_deterministic_algorithms(mode=True, warn_only=True)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
     train_subjects = experiment_config["data_module_config"]["params"]["train_subjects"]
     val_subjects = experiment_config["data_module_config"]["params"]["val_subjects"]
 
     # Add val subjects to train subjects and create random folds
     train_subjects += val_subjects
-    kf = KFold(n_splits=n_folds, shuffle=True)
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
 
     for fold, (train_idx, val_idx) in enumerate(kf.split(train_subjects)):
         train_subjects_fold = [train_subjects[i] for i in train_idx]
@@ -44,6 +48,7 @@ def run_cv(n_folds, experiment_config, save_predictions=False, poi_file_ending=N
         # Trainer configuration
         trainer_config = experiment_config.get("trainer_config", {})
         trainer_config["callbacks"] = callbacks
+        trainer_config.setdefault("deterministic", "warn")
 
         # Add fold to path
         path = experiment_config["path"] + f"/fold_{fold}"

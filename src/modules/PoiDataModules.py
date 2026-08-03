@@ -1,8 +1,10 @@
 import os
+import random
 from functools import partial
 from os import PathLike
 from typing import TypeVar
 
+import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
@@ -12,8 +14,23 @@ from TPTBox import BIDS_Global_info
 import json
 
 
+from monai.data.utils import worker_init_fn as _monai_worker_init_fn
 from pqdm.processes import pqdm
 from torch.utils.data import DataLoader
+
+
+def _seed_worker(worker_id):
+    """Deterministic per-worker seeding. Seeds:
+    - numpy / random globals from torch's per-worker seed
+    - every MONAI Randomizable object attached to the worker's dataset
+      (e.g. RandAffine holds its own PRNG state — without this call,
+      augmentation streams diverge between runs even with pl.seed_everything).
+    """
+    seed = torch.initial_seed() % (2**32)
+    np.random.seed(seed)
+    random.seed(seed)
+    if torch.utils.data.get_worker_info() is not None:
+        _monai_worker_init_fn(worker_id)
 
 from dataset.dataset import GruberDataset, PoiDataset, GruberNeighborDataset
 from transforms.transforms import create_transform
@@ -217,12 +234,17 @@ class POIDataModule(pl.LightningDataModule):
         print(f"  Validation: {len(self.val_dataset)}")
         print(f"  Test: {len(self.test_dataset)}")
 
+    def _dataloader_generator(self):
+        return torch.Generator().manual_seed(42)
+
     def train_dataloader(self):
         return DataLoader(
             dataset=self.train_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=True,
+            worker_init_fn=_seed_worker,
+            generator=self._dataloader_generator(),
             # collate_fn=custom_collate_fn
         )
 
@@ -235,6 +257,8 @@ class POIDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=False,
+            worker_init_fn=_seed_worker,
+            generator=self._dataloader_generator(),
         )
 
     def val_dataloader(self):
@@ -243,6 +267,8 @@ class POIDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=False,
+            worker_init_fn=_seed_worker,
+            generator=self._dataloader_generator(),
             # collate_fn=custom_collate_fn
         )
 
@@ -252,6 +278,8 @@ class POIDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=False,
+            worker_init_fn=_seed_worker,
+            generator=self._dataloader_generator(),
         )
 
 

@@ -182,7 +182,10 @@ class PatchTransformer(nn.Module):
         coarse_preds = batch["coarse_preds"]
         poi_indices = batch["poi_list_idx"]
         vertebra_indices = batch["vert_list_idx"]
-        poi_features = batch["coarse_features"]
+        # Detach coarse features so refiner gradients cannot propagate into the
+        # DenseNet encoder. Prevents refiner blowup from corrupting the encoder
+        # (observed as simultaneous coarse+refined divergence in earlier runs).
+        poi_features = batch["coarse_features"].detach()
 
         if (
             self.warmup_epochs > 0
@@ -195,8 +198,10 @@ class PatchTransformer(nn.Module):
                 + (1 - self.current_epoch / self.warmup_epochs) * batch["target"]
             )
 
-        # Cast the coarse predictions to long to use them as indices
-        coarse_preds = coarse_preds.detach().long()
+        # Keep float precision: PatchExtractor casts to long internally for indexing,
+        # and the transformer accepts float coords for its coordinate embedding.
+        # refined_preds = float_coarse + offsets preserves sub-voxel refinement.
+        coarse_preds = coarse_preds.detach()
 
         patches = self.patch_feature_extractor(batch["input"], coarse_preds)
 
