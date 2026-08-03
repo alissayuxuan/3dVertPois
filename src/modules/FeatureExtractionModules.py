@@ -32,6 +32,7 @@ class SADenseNet(nn.Module):
         block_config: Sequence[int] = (6, 12, 24, 16),
         bn_size: int = 4,
         dropout_prob: float = 0.0,
+        skip_last_transition_pool: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -48,7 +49,8 @@ class SADenseNet(nn.Module):
             block_config=block_config,
             bn_size=bn_size,
             dropout_prob=dropout_prob,
-            weight_features=True
+            weight_features=True,
+            skip_last_transition_pool=skip_last_transition_pool,
         )
 
         self.soft_argmax = SoftArgmax3D()

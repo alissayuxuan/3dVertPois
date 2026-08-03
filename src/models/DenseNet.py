@@ -143,6 +143,33 @@ class _Transition(nn.Sequential):
         self.add_module("pool", pool_type(kernel_size=2, stride=2))
 
 
+class _TransitionNoPool(nn.Sequential):
+    """Same as `_Transition` but omits the 2× spatial pool — used when we want
+    to halve channels between dense blocks without further downsampling, so the
+    final heatmap comes out at higher resolution."""
+
+    def __init__(
+        self,
+        spatial_dims: int,
+        in_channels: int,
+        out_channels: int,
+        act: str | tuple = ("relu", {"inplace": True}),
+        norm: str | tuple = "batch",
+    ) -> None:
+        super().__init__()
+
+        conv_type: Callable = Conv[Conv.CONV, spatial_dims]
+
+        self.add_module(
+            "norm",
+            get_norm_layer(name=norm, spatial_dims=spatial_dims, channels=in_channels),
+        )
+        self.add_module("relu", get_act_layer(name=act))
+        self.add_module(
+            "conv", conv_type(in_channels, out_channels, kernel_size=1, bias=False)
+        )
+
+
 class HeatmapDenseNet(nn.Module):
     """
     Densenet based on: `Densely Connected Convolutional Networks <https://arxiv.org/pdf/1608.06993.pdf>`_.
@@ -178,12 +205,14 @@ class HeatmapDenseNet(nn.Module):
         act: str | tuple = ("relu", {"inplace": True}),
         norm: str | tuple = "batch",
         dropout_prob: float = 0.0,
-        weight_features: bool = True
+        weight_features: bool = True,
+        skip_last_transition_pool: bool = False,
     ) -> None:
         super().__init__()
 
         self.n_landmarks = n_landmarks
         self.feature_l = feature_l
+        self.skip_last_transition_pool = skip_last_transition_pool
 
         conv_type: type[nn.Conv1d | nn.Conv2d | nn.Conv3d] = Conv[
             Conv.CONV, spatial_dims
@@ -241,7 +270,15 @@ class HeatmapDenseNet(nn.Module):
                 )
             else:
                 _out_channels = in_channels // 2
-                trans = _Transition(
+                # For the transition right before the final dense block, optionally
+                # skip the 2× spatial pool so the heatmap ends up at 2× resolution.
+                is_last_transition = i == len(block_config) - 2
+                trans_cls = (
+                    _TransitionNoPool
+                    if (is_last_transition and self.skip_last_transition_pool)
+                    else _Transition
+                )
+                trans = trans_cls(
                     spatial_dims,
                     in_channels=in_channels,
                     out_channels=_out_channels,
