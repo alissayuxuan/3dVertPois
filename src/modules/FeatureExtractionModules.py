@@ -33,25 +33,46 @@ class SADenseNet(nn.Module):
         bn_size: int = 4,
         dropout_prob: float = 0.0,
         skip_last_transition_pool: bool = False,
+        backbone: str = "densenet",
+        decoder_channels: int = 128,
         **kwargs,
     ):
         super().__init__()
 
         self.loss_fn = get_loss_fn(loss_fn)
 
-        self.feature_extractor = HeatmapDenseNet(
-            spatial_dims=3,
-            in_channels=in_channels,
-            n_landmarks=n_landmarks,
-            init_features=init_features,
-            feature_l=feature_l,
-            growth_rate=growth_rate,
-            block_config=block_config,
-            bn_size=bn_size,
-            dropout_prob=dropout_prob,
-            weight_features=True,
-            skip_last_transition_pool=skip_last_transition_pool,
-        )
+        if backbone == "densenet":
+            self.feature_extractor = HeatmapDenseNet(
+                spatial_dims=3,
+                in_channels=in_channels,
+                n_landmarks=n_landmarks,
+                init_features=init_features,
+                feature_l=feature_l,
+                growth_rate=growth_rate,
+                block_config=block_config,
+                bn_size=bn_size,
+                dropout_prob=dropout_prob,
+                weight_features=True,
+                skip_last_transition_pool=skip_last_transition_pool,
+            )
+        elif backbone == "unet":
+            # Imported lazily to keep the DenseNet path free of the extra symbol.
+            from models.DenseNet import UNetHeatmapDenseNet
+            self.feature_extractor = UNetHeatmapDenseNet(
+                spatial_dims=3,
+                in_channels=in_channels,
+                n_landmarks=n_landmarks,
+                init_features=init_features,
+                feature_l=feature_l,
+                growth_rate=growth_rate,
+                block_config=block_config,
+                bn_size=bn_size,
+                dropout_prob=dropout_prob,
+                weight_features=True,
+                decoder_channels=decoder_channels,
+            )
+        else:
+            raise ValueError(f"Unknown backbone: {backbone}")
 
         self.soft_argmax = SoftArgmax3D()
         self.project_gt = project_gt

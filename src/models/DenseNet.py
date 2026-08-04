@@ -339,3 +339,118 @@ class HeatmapDenseNet(nn.Module):
             landmark_features = global_features.unsqueeze(1).expand(-1, N, -1)  # (B, N, feature_l)
 
         return normalized_heatmaps, landmark_features, feature_map
+
+
+class UNetHeatmapDenseNet(nn.Module):
+    """DenseNet encoder + one-stage UNet-style decoder that lifts the heatmap
+    to 2x the encoder's output resolution (32x32x36 with the default 128x128x144
+    input and block_config=[6,12,12]). Skips the encoder's last transition
+    pool (like ``skip_last_transition_pool=True`` on HeatmapDenseNet), then
+    adds one tconv upsample fused with the skip from denseblock1 output.
+    """
+
+    def __init__(
+        self,
+        spatial_dims: int,
+        in_channels: int,
+        n_landmarks: int,
+        init_features: int = 64,
+        feature_l: int = 256,
+        growth_rate: int = 32,
+        block_config: Sequence[int] = (6, 12, 12),
+        bn_size: int = 4,
+        act: str | tuple = ("relu", {"inplace": True}),
+        norm: str | tuple = "batch",
+        dropout_prob: float = 0.0,
+        weight_features: bool = True,
+        decoder_channels: int = 128,
+    ) -> None:
+        super().__init__()
+
+        assert spatial_dims == 3, "UNetHeatmapDenseNet is 3D-only"
+        assert len(block_config) == 3, "expected 3 dense blocks"
+
+        self.n_landmarks = n_landmarks
+        self.feature_l = feature_l
+        self.weight_features = weight_features
+
+        conv_type = Conv[Conv.CONV, spatial_dims]
+        pool_type = Pool[Pool.MAX, spatial_dims]
+        tconv_type = nn.ConvTranspose3d
+
+        # ----- Stem -----
+        self.stem = nn.Sequential(
+            conv_type(in_channels, init_features, kernel_size=7, stride=2, padding=3, bias=False),
+            get_norm_layer(name=norm, spatial_dims=spatial_dims, channels=init_features),
+            get_act_layer(name=act),
+            pool_type(kernel_size=3, stride=2, padding=1),
+        )
+        # After stem: spatial 128 → 32, channels = init_features (64)
+
+        # ----- Encoder blocks -----
+        c = init_features
+        self.denseblock1 = _DenseBlock(spatial_dims, block_config[0], c, bn_size, growth_rate, dropout_prob, act, norm)
+        c1 = c + block_config[0] * growth_rate                        # skip1 channels (32x32x36)
+        self.transition1 = _Transition(spatial_dims, c1, c1 // 2, act, norm)  # downsample to 16x16x18
+        c = c1 // 2
+
+        self.denseblock2 = _DenseBlock(spatial_dims, block_config[1], c, bn_size, growth_rate, dropout_prob, act, norm)
+        c2 = c + block_config[1] * growth_rate
+        # No pool on this transition — keep 16x16x18
+        self.transition2 = _TransitionNoPool(spatial_dims, c2, c2 // 2, act, norm)
+        c = c2 // 2
+
+        self.denseblock3 = _DenseBlock(spatial_dims, block_config[2], c, bn_size, growth_rate, dropout_prob, act, norm)
+        c3 = c + block_config[2] * growth_rate                         # deep channels (16x16x18)
+
+        # ----- Decoder: one 2x upsample fused with skip1 → 32x32x36 -----
+        self.decoder_up = tconv_type(c3, decoder_channels, kernel_size=2, stride=2)
+        # After upsample: (B, decoder_channels, 32, 32, 36)
+        # Concat with skip1 (c1 channels) → (decoder_channels + c1)
+        self.decoder_refine = nn.Sequential(
+            get_norm_layer(name=norm, spatial_dims=spatial_dims, channels=decoder_channels + c1),
+            get_act_layer(name=act),
+            conv_type(decoder_channels + c1, decoder_channels, kernel_size=3, padding=1, bias=False),
+            get_norm_layer(name=norm, spatial_dims=spatial_dims, channels=decoder_channels),
+            get_act_layer(name=act),
+        )
+        # ----- Head -----
+        self.conv_final = conv_type(decoder_channels, n_landmarks + feature_l, kernel_size=1, bias=False)
+
+        # Kaiming init for convs
+        for m in self.modules():
+            if isinstance(m, (nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose3d)):
+                nn.init.kaiming_normal_(m.weight)
+            elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x: torch.Tensor):
+        x = x.float()
+        s0 = self.stem(x)                       # (B, 64, 32, 32, 36)
+        b1 = self.denseblock1(s0)               # (B, c1, 32, 32, 36)   ← skip
+        t1 = self.transition1(b1)               # (B, c1/2, 16, 16, 18)
+        b2 = self.denseblock2(t1)               # (B, c2, 16, 16, 18)
+        t2 = self.transition2(b2)               # (B, c2/2, 16, 16, 18) — no pool
+        b3 = self.denseblock3(t2)               # (B, c3, 16, 16, 18)
+
+        up = self.decoder_up(b3)                # (B, decoder_channels, 32, 32, 36)
+        fused = torch.cat([up, b1], dim=1)      # skip concat
+        dec = self.decoder_refine(fused)        # (B, decoder_channels, 32, 32, 36)
+
+        out = self.conv_final(dec)              # (B, N+F, 32, 32, 36)
+        heatmaps, feature_map = out.split([self.n_landmarks, self.feature_l], dim=1)
+
+        B, N, *spatial = heatmaps.shape
+        normalized_heatmaps = torch.softmax(heatmaps.view(B, N, -1), dim=-1).view(B, N, *spatial)
+
+        feature_map_expanded = feature_map.unsqueeze(1)
+        if self.weight_features:
+            landmark_features = (
+                normalized_heatmaps.unsqueeze(2).detach() * feature_map_expanded
+            ).sum(dim=(3, 4, 5))
+        else:
+            global_features = feature_map.mean(dim=(2, 3, 4))
+            landmark_features = global_features.unsqueeze(1).expand(-1, N, -1)
+
+        return normalized_heatmaps, landmark_features, feature_map
