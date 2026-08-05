@@ -142,13 +142,14 @@ class PatchTransformer(nn.Module):
         num_heads: int = 4,
         dropout: float = 0.2,
         lr: float = 1e-5,
+        patch_in_channels: int = 1,
     ):
         super().__init__()
 
         self.patch_feature_extractor = PatchExtractor(
             patch_size=patch_size,
             feature_extraction_model=Regressor(
-                in_shape=(1, patch_size, patch_size, patch_size),
+                in_shape=(patch_in_channels, patch_size, patch_size, patch_size),
                 out_shape=(patch_feature_l,),
                 channels=(8, 16, 32),
                 strides=(2, 2, 2),

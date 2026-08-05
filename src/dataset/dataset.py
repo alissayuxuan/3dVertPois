@@ -152,6 +152,19 @@ class PoiDataset(Dataset):
                 verbose=False,
             )
             data_dict["input"] = surface_msk * mask
+        elif self.input_data_type == "surface_msk+ct":
+            # 2-channel input: surface mask + normalised CT, both masked to the
+            # current vertebra. Gives the coarse encoder anatomical context
+            # (cortical bone / disc space) on top of the pure surface geometry.
+            surface_msk, _ = self.preprocess_nifti(
+                surface_msk_path,
+                is_img=False,
+                verbose=False,
+            )
+            ct, _ = self.preprocess_nifti(ct_path, is_img=True)
+            data_dict["input"] = torch.cat(
+                [surface_msk * mask, ct * mask], dim=0
+            )  # (2, H, W, D)
         else:
             raise ValueError(f"Unknown input data type: {self.input_data_type}")
 
