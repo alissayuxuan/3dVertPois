@@ -35,11 +35,16 @@ class SADenseNet(nn.Module):
         skip_last_transition_pool: bool = False,
         backbone: str = "densenet",
         decoder_channels: int = 128,
+        use_coord_head: bool = False,
+        coord_head_init_logit: float = -6.0,
         **kwargs,
     ):
         super().__init__()
 
         self.loss_fn = get_loss_fn(loss_fn)
+        self.n_landmarks = n_landmarks
+        self.feature_l = feature_l
+        self.use_coord_head = use_coord_head
 
         if backbone == "densenet":
             self.feature_extractor = HeatmapDenseNet(
@@ -78,6 +83,13 @@ class SADenseNet(nn.Module):
         self.project_gt = project_gt
         self.project_pred = project_pred
 
+        if use_coord_head:
+            import torch.nn as nn
+            self.coord_head = nn.Linear(feature_l, n_landmarks * 3)
+            self.coord_gate_logit = nn.Parameter(
+                torch.full((n_landmarks,), coord_head_init_logit)
+            )
+
     def forward(self, batch):
         x = batch["input"]
 
@@ -98,6 +110,15 @@ class SADenseNet(nn.Module):
         scaled_coarse_preds = coarse_preds * torch.tensor(scale_factor).to(
             coarse_preds.device
         )
+
+        if self.use_coord_head:
+            B = feature_maps.shape[0]
+            pooled = feature_maps.mean(dim=(2, 3, 4))
+            head_pred = self.coord_head(pooled).view(B, self.n_landmarks, 3)
+            gate = torch.sigmoid(self.coord_gate_logit).view(1, self.n_landmarks, 1)
+            scaled_coarse_preds = (
+                (1.0 - gate) * scaled_coarse_preds + gate * head_pred
+            )
 
         batch["coarse_preds"] = scaled_coarse_preds  # (batch_size, n_landmarks, 3)
         if self.project_pred:
