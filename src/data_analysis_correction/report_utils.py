@@ -201,6 +201,112 @@ SUBREGION_SOFTCONSTRAINT_DICT = {
 }
 
 
+_OPPOSITE_DIRECTION = {"S": "I", "I": "S", "A": "P", "P": "A", "L": "R", "R": "L"}
+
+
+def is_truncated(v_msk: NII, margin: int = 0, directions: tuple[str, ...] | None = ("S", "I")) -> bool:
+    """Does this vertebra's mask run into the edge of the scanned volume?
+
+    A vertebra touching the superior or inferior face is only partially imaged, so some of its
+    POIs describe anatomy that was never scanned. That is a field-of-view limitation, not a
+    prediction error, and is the honest reason to exempt a vertebra from the ordering
+    constraints - being the first or last vertebra in the scan is only a proxy for it.
+
+    Only the superior/inferior faces count by default. Measured on the verse test sets, half
+    of the vertebrae touching *any* face are clipped left/right instead, including several
+    mid-scan ones; those are still fully imaged head-to-foot, so their superior/inferior
+    ordering is perfectly judgeable and exempting them would widen the exemption rather than
+    narrow it. Pass `directions=None` to test every face.
+
+    `margin` widens the test to voxels within that distance of a face, for data where the
+    segmentation stops just short of the boundary.
+    """
+    arr = np.asarray(v_msk.get_array())
+    if directions is None:
+        axes = list(range(arr.ndim))
+    else:
+        wanted = {d.upper() for d in directions}
+        wanted |= {_OPPOSITE_DIRECTION[d] for d in wanted if d in _OPPOSITE_DIRECTION}
+        axes = [i for i, code in enumerate(v_msk.orientation) if code.upper() in wanted]
+    for axis in axes:
+        n = arr.shape[axis]
+        width = min(margin + 1, n)
+        if arr.take(range(width), axis=axis).any():
+            return True
+        if arr.take(range(n - width, n), axis=axis).any():
+            return True
+    return False
+
+
+def normalize_report_key(vert, location) -> tuple[int, int]:
+    """(vertebra, location) as plain ints.
+
+    `Location` is a plain `Enum`, not an `IntEnum`, so `Location(117) != 117` and the two
+    hash differently. Every report lookup goes through here so callers can pass either.
+    """
+    v = int(vert.value) if isinstance(vert, Vertebra_Instance) else int(vert)
+    s = int(location.value) if isinstance(location, Location) else int(location)
+    return v, s
+
+
+def report_keys(reports: list[LogicReport]) -> set[tuple[int, int]]:
+    """The set of (vertebra, location) a report list blames."""
+    return {normalize_report_key(r.vertebra, r.location) for r in reports}
+
+
+def report_severity(reports: list[LogicReport]) -> float:
+    """Total severity of a report list, used as the scalar objective of `guarded_apply`."""
+    return float(sum(float(r.severity) for r in reports))
+
+
+def guarded_apply(
+    poi: POI,
+    changes: dict[tuple[int, int], tuple],
+    score_fn,
+    require_strict: bool = True,
+    verbose: bool = False,
+) -> bool:
+    """Apply `changes` to `poi` in place, but only if the reports get strictly better.
+
+    `score_fn(poi, affected_verts) -> list[LogicReport]` must score the same scope before
+    and after; it is called twice. The change is kept only when the total severity drops
+    *and* no `(vertebra, location)` is newly blamed - so a corrector can never trade one
+    error for another. Reverts and returns False otherwise.
+    """
+    if not changes:
+        return False
+
+    affected = {normalize_report_key(v, s)[0] for v, s in changes}
+    before = score_fn(poi, affected)
+
+    previous: dict[tuple[int, int], tuple | None] = {}
+    for key, new_coord in changes.items():
+        previous[key] = tuple(poi[key]) if key in poi else None
+        poi[key] = tuple(float(x) for x in new_coord)
+
+    after = score_fn(poi, affected)
+
+    keys_before, keys_after = report_keys(before), report_keys(after)
+    sev_before, sev_after = report_severity(before), report_severity(after)
+    new_keys = keys_after - keys_before
+    improved = sev_after < sev_before if require_strict else sev_after <= sev_before
+    accepted = improved and not new_keys
+
+    if not accepted:
+        for key, old_coord in previous.items():
+            if old_coord is None:
+                poi.remove_(key)
+            else:
+                poi[key] = old_coord
+        if verbose:
+            reason = f"new errors {sorted(new_keys)}" if new_keys else f"severity {sev_before:.2f} -> {sev_after:.2f}"
+            logger.print(f"  reverted {sorted(changes)}: {reason}", Log_Type.WARNING)
+    elif verbose:
+        logger.print(f"  kept {sorted(changes)}: severity {sev_before:.2f} -> {sev_after:.2f}", Log_Type.OK)
+
+    return accepted
+
+
 def load_agg_report_df(root: str, prefix: str, der_name: str, file_name: str = "aggregated_poi_report.xlsx") -> pd.DataFrame | None:
     report_path = Path(root).joinpath(f"{prefix}{der_name}", file_name)
     if not report_path.exists():
@@ -214,31 +320,36 @@ def convert_agg_report_to_reported_bool_dict(
     df: pd.DataFrame,
     severity_threshold=0.0,
     vertebra_from: int = 8,
-) -> dict[str, dict[int, dict[Location, bool]]]:
+) -> dict[str, dict[tuple[int, int], bool]]:
+    """subject -> {(vertebra, location): True} for every reported POI.
+
+    Keys are plain ints (see `normalize_report_key`); look them up via `is_poi_reported`.
+    """
     report_dict = {}
     for _, row in df.iterrows():
         subject_name = row["subject_name"]
         vert = row["vertebra"]
         if vert < vertebra_from:
             continue
-        location = Location(row["location"])
         severity = row["severity"]
         if subject_name not in report_dict:
             report_dict[subject_name] = {}
         if severity >= severity_threshold:
-            report_dict[subject_name][(vert, location)] = True
+            report_dict[subject_name][normalize_report_key(vert, row["location"])] = True
     return report_dict
 
 
 def is_poi_reported(report_dict, subject_ct_id, vert, location):
     if subject_ct_id in report_dict:
-        if (vert, location) in report_dict[subject_ct_id]:
-            return report_dict[subject_ct_id][(vert, location)]
+        key = normalize_report_key(vert, location)
+        if key in report_dict[subject_ct_id]:
+            return report_dict[subject_ct_id][key]
     return False
 
 
 def is_vert_reported(report_dict, subject_ct_id, vert):
     if subject_ct_id in report_dict:
+        vert = normalize_report_key(vert, 0)[0]
         for v, location in report_dict[subject_ct_id]:
             if v == vert:
                 return True

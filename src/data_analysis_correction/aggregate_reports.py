@@ -33,7 +33,10 @@ def aggregate_in_dir(dir: Path, ds_names: list[str]) -> None | pd.DataFrame:
 
 
 if __name__ == "__main__":
+    import sys
+
     ROOT = Path("/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/")
+    PREFIX = "TEST_"
 
     ds_names = [
         "dataset-verse19training_1mmiso",
@@ -44,7 +47,15 @@ if __name__ == "__main__":
         "dataset-verse20test_1mmiso",
     ]
 
-    for dir in ROOT.iterdir():
+    # Optional derivative names (without the TEST_ prefix) restrict the run to those
+    # directories; without them every directory is re-aggregated as before.
+    selected = sys.argv[1:]
+    # a name may already include its prefix, or be a bare derivative name
+    dirs = (
+        [ROOT / n if (ROOT / n).is_dir() else ROOT / f"{PREFIX}{n}" for n in selected] if selected else list(ROOT.iterdir())
+    )
+
+    for dir in dirs:
         if not dir.is_dir():
             continue
 

@@ -85,6 +85,12 @@ class TrainedModelInfo(Enum):
         "sad-pt-epoch=19-fine_mean_distance_val=1.38",
     )
 
+    T_S_SURFACE_SWEEP2WINNER = (
+        "SecondIterSweep2Winner/winner/surface_cc3",
+        0,
+        "sad-pt-epoch=194-fine_mean_distance_val=1.00",
+    )
+
     ####################################################
     # Single best training MAE
     GRUBER_S_SURFACE = (

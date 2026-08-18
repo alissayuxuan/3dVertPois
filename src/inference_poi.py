@@ -142,7 +142,7 @@ class GruberInferenceDataset(Dataset):
 
         subject = row["subject"]
 
-        if self.input_data_type == "ct":
+        if self.input_data_type in ("ct", "surface_msk+ct"):
             input_data = NII.load(input_data_path, seg=False)
             input_data.normalize_ct(min_out=0, max_out=1, inplace=True)
         else:
@@ -151,10 +151,12 @@ class GruberInferenceDataset(Dataset):
         surface = NII.load(surface_path, seg=True)
         surface.extract_label_(surface.unique())
 
-        assert input_data.shape == vertseg.shape
-        assert input_data.orientation == vertseg.orientation
+        assert input_data.shape == vertseg.shape, f"shape mismatch input={input_data.shape} vert={vertseg.shape}"
+        assert input_data.orientation == vertseg.orientation, f"orientation mismatch input={input_data.orientation} vert={vertseg.orientation}"
         assert input_data.orientation == ("L", "A", "S")
-        assert input_data.zoom == vertseg.zoom
+        assert all(abs(a - b) < 1e-3 for a, b in zip(input_data.zoom, vertseg.zoom)), (
+            f"zoom mismatch input={input_data.zoom} vert={vertseg.zoom}"
+        )
 
         print("zoom in __getitem__: ", input_data.zoom)
 
@@ -188,6 +190,9 @@ class GruberInferenceDataset(Dataset):
         input_data_t = torch.from_numpy(input_data_arr.astype(np.float32)).unsqueeze(0)
         vertseg_t = torch.from_numpy(vertseg_arr.astype(np.float32)).unsqueeze(0)
         surface_t = torch.from_numpy(surface_arr.astype(np.float32)).unsqueeze(0)
+
+        if self.input_data_type == "surface_msk+ct":
+            input_data_t = torch.cat([surface_t, input_data_t], dim=0)
 
         poi_indices = self.poi_indices
         poi_list_idx = torch.tensor([self.poi_idx_to_list_idx[poi.item()] for poi in poi_indices])
@@ -226,6 +231,15 @@ def safe_collate(batch):
     if len(batch) == 0:
         return None
     return default_collate(batch)
+
+
+def _load_ct(container, split_info) -> NII:
+    ct_query = container.new_query(flatten=True)
+    ct_query.filter_format("ct")
+    ct_query.filter_filetype("nii.gz")
+    if split_info is not None:
+        ct_query.filter("split", split_info)
+    return ct_query.candidates[0].open_nii()
 
 
 def preprocess_segmentation_masks(
@@ -394,9 +408,13 @@ def create_prediction_poi_files(
     elif input_data_type == "ct":
         if container is None:
             raise ValueError("container must be provided when input_data_type='ct'")
-        input_data = get_ct(container, split=split_info)
+        input_data = _load_ct(container, split_info)
     elif input_data_type == "surface_msk":
         input_data = vert_msk.compute_surface_mask(connectivity=3, dilated_surface=False)
+    elif input_data_type == "surface_msk+ct":
+        if container is None:
+            raise ValueError("container must be provided when input_data_type='surface_msk+ct'")
+        input_data = _load_ct(container, split_info)
     else:
         raise ValueError(f"Unknown input data type: {input_data_type}")
 
@@ -588,7 +606,7 @@ if __name__ == "__main__":
             ds_path = f"/DATA/NAS/datasets_processed/CT_spine/dataset-verse-challenge/{ds_name}/"
             bgi = BIDS_Global_info(
                 datasets=[ds_path],
-                parents=[DER_MSK],
+                parents=[DER_MSK, "rawdata"],
             )
 
             der_out = f"{opt.der_out_base}{model_dir}-v{model_info.version}"

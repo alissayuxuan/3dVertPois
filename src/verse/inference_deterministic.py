@@ -133,9 +133,9 @@ def _proc(name, subject, der_out: str):
                 SKIPPED_SUBJECTS.append(name)
                 return  # Direkt zurück → dieses Subjekt wird geskippt
             det_poi = det_poi.round(2)
-            # det_poi.save(out_det)
+            det_poi.save(out_det)
 
-            # det_poi.to_global().save_mrk(out_det_global, split_by_region=True)
+            det_poi.to_global().save_mrk(out_det_global, split_by_region=True)
 
             # det_poi_nii = det_poi.make_point_cloud_nii()[1]
             # det_poi_nii.save(out_det.parent.joinpath("nifty.nii.gz"))
@@ -149,11 +149,11 @@ def _proc(name, subject, der_out: str):
 
 if __name__ == "__main__":
     ds_names = [
-        # "dataset-verse19training_1mmiso",
-        # "dataset-verse20training_1mmiso",
-        # "dataset-verse19validation_1mmiso",
-        # "dataset-verse20validation_1mmiso",
-        # "dataset-verse19test_1mmiso",
+        "dataset-verse19training_1mmiso",
+        "dataset-verse20training_1mmiso",
+        "dataset-verse19validation_1mmiso",
+        "dataset-verse20validation_1mmiso",
+        "dataset-verse19test_1mmiso",
         "dataset-verse20test_1mmiso",
     ]
 
@@ -165,15 +165,15 @@ if __name__ == "__main__":
             parents=["derivatives_combined"],
         )
 
-        der_out = "derivatives_poi_deterministic"
+        der_out = "derivatives_poi_deterministic_v2"
 
-        # Parallel(n_jobs=5, backend="threading")(
-        #    delayed(_proc)(name, subject, der_out) for name, subject in bgi.enumerate_subjects(sort=True)
-        # )
-        for name, subject in bgi.enumerate_subjects(sort=True):
-            # if "601" not in name:
-            #    #    continue
-            _proc(name, subject, der_out)
+        Parallel(n_jobs=5, backend="threading")(
+            delayed(_proc)(name, subject, der_out) for name, subject in bgi.enumerate_subjects(sort=True)
+        )
+        #for name, subject in bgi.enumerate_subjects(sort=True):
+        #    if "648" not in name:
+        #        continue
+        #    _proc(name, subject, der_out)
         #    break
 
         if len(SKIPPED_SUBJECTS) > 0:

@@ -37,6 +37,8 @@ def make_poi_report_corpus_lanes(
     debug: bool = False,
     ignore_poi: list[Location] = [],
     vertebra_from: int = 6,
+    verbose: bool = True,
+    show_progress: bool = True,
     # surface_msk: NII,
 ) -> list[LogicReport]:
     report_lines: list[LogicReport] = []
@@ -57,7 +59,7 @@ def make_poi_report_corpus_lanes(
     # lane -> {vert_idx: (loc, coords)} for inter-lane distance check
     corpus_points_per_vert: dict[int, dict[int, tuple[int, np.ndarray]]] = {0: {}, 1: {}, 2: {}}
 
-    for idx, vert in enumerate(tqdm(vert_in_order, desc="Processing vertebrae", unit="vertebra")):
+    for idx, vert in enumerate(tqdm(vert_in_order, desc="Processing vertebrae", unit="vertebra", disable=not show_progress)):
         for lane_id in range(3):
             for loc in corpus_points_anterior_locations[lane_id]:
                 if (vert, loc) in poi_ref:
@@ -140,7 +142,8 @@ def make_poi_report_corpus_lanes(
             description = f"Lane {lane_names[lane_id]} sharp bend at loc {loc}: angle {ang:.1f} deg"
             relevant = {"lane": lane_names[lane_id], "angle_deg": ang, "loc": loc}
             report_lines.append(LogicReport(subject_id, vert, Location(loc), ang, relevant, description))
-            logger.print(f"{subject_id} vert {vert}: {description}", Log_Type.OK)
+            if verbose:
+                logger.print(f"{subject_id} vert {vert}: {description}", Log_Type.OK)
 
     # detect inter-lane distance changes between consecutive vertebrae
     # compute per-vert left-center and center-right distances
@@ -193,9 +196,9 @@ def _proc(subject: Path, ds_dir: Path, opt):
         subject_ct_id = img_path.name.split(".")[0]
         #
         out_excel = opt.out_root.joinpath(opt.der_out_prefix + opt.der_poi_mainpred, ds_dir.name, f"{subject_ct_id}_poi_neighbor_angle_report.xlsx")
-        if out_excel.exists():
+        if out_excel.exists() and not opt.overwrite:
             logger.print(f"{subject_ct_id}: POI report already exists, skipping: {out_excel}", Log_Type.WARNING)
-            #continue
+            continue
         out_excel.parent.mkdir(parents=True, exist_ok=True)
         #
 

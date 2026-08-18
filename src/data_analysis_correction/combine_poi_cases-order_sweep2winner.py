@@ -11,11 +11,13 @@ from panoptica import Metric
 from utils.filepaths import search_path_single, search_path
 from utils.vertebra_rotation import (
     calc_orientation_from_poi,
+    calc_orientation_from_poi_checked,
     move_poi_along_axis,
     find_extreme_point_along_axis,
     get_axis_direction_vector,
 )
 import numpy as np
+import pandas as pd
 from report_utils import SUBREGION_CONSTRAINT_DICT, load_agg_report_df, convert_agg_report_to_reported_bool_dict, is_poi_reported
 import shutil
 from utils.misc import surface_project_poi_vert_wise
@@ -28,18 +30,11 @@ DERIV_SUBREG = "derivatives_combined"  # "derivatives_subreg"
 DERIV_VERT = "derivatives_combined"
 #
 DERIV_POI_PREDS = [
-    "derivatives_poi_SecondIter/surface_cc3-bs32-v1",
-    "derivatives_poi_SecondIter/surface_cc3-bs32-v1_flipped",
-    "derivatives_poi_automatic_correction-v4-onlygood",
-    # TODO: take best 5 models here, and make v5 version, see how well that worked
-    "derivatives_poi_FirstIter/surface_cc3-bs32-v3",
-    "derivatives_poi_FirstIter/surface_cc3-bs32-v3_flipped",
-    "derivatives_poi_FirstIter/surface_cc3-bs32-v5",
-    "derivatives_poi_FirstIter/surface_cc3-bs32-v5_flipped",
+    "derivatives_poi_SecondIterSweep2Winner/winner/surface_cc3-v0",
 ]
-DERIV_DET = "derivatives_poi_deterministic"
+DERIV_DET = "derivatives_poi_deterministic_v2"
 #
-DERIV_OUT = "derivatives_poi_automatic_correction-v5-onlygood"
+DERIV_OUT = "derivatives_poi_SecondIterSweep2Winner_combined_v2"
 # v3-6 war nur die
 # "derivatives_poi_ForVerse/surface_cc3-bs32-v3",
 #    "derivatives_poi_ForVerse/surface_cc3-bs32-v3_flipped",
@@ -57,10 +52,15 @@ DERIV_OUT = "derivatives_poi_automatic_correction-v5-onlygood"
 ###
 REPORT_ROOT = "/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/"
 REPORT_PREFIX = "TEST_"
-REPORT_AGG_NAME = "aggregated_poi_report.xlsx"
+REPORT_AGG_NAMES = ["aggregated_poi_report.xlsx", "aggregated_poi_neighbor_angle_report.xlsx"]
+# Drop a source's prediction for a POI that its own report flags. Only useful with a real
+# ensemble: with a single model the only remaining source is the (much worse) deterministic
+# POI, and `_proc` then keeps the flagged point anyway.
+USE_REPORT_VETO = False
+VETO_VERTEBRA_FROM = 6
 # Trim (voxels) for the "most extreme candidate" picks. A plain argmax over the ensemble is
 # decided by whichever prediction is most wrong; candidates further than this beyond the
-# median are ignored. Inert with fewer than three candidates.
+# median are ignored. Inert with fewer than three candidates, i.e. for a single-model config.
 EXTREMUM_TRIM_VOXEL = 4.0
 
 
@@ -132,15 +132,26 @@ def _proc(
             continue
 
         vert_labels_all = list(vert_nii.unique())
-        first_last_verts = {vert_labels_all[0], vert_labels_all[-1]}
 
-        # calc orientation of every vertebra to be used later
+        # Orientation of every vertebra, including the first and last of the scan.
+        #
+        # These two used to be skipped, which left them without any of the orientation-based
+        # adjustments below - so the worst vertebrae in a scan also received the least
+        # correction. The reason to skip them no longer holds: the outermost vertebrae had
+        # unreliable direction frames in derivatives_poi_deterministic, and that is what
+        # `calc_orientation_from_poi_checked` now reports on (and _v2 fixes at the source).
+        # A vertebra whose frame is still not trustworthy gets None and is skipped as before.
         vert_orientations = {}
-        for idx, vert in enumerate(vert_labels_all):  # skip first and last
-            if DERIV_DET in poi_dict and poi_dict[DERIV_DET] is not None and idx != 0 and idx != len(vert_labels_all) - 1:
-                vert_orientations[vert] = calc_orientation_from_poi(poi_dict[DERIV_DET], vert)[2]
-            else:
-                vert_orientations[vert] = None
+        det_poi = poi_dict.get(DERIV_DET)
+        for vert in vert_labels_all:
+            vert_orientations[vert] = None
+            if det_poi is None or any((vert, loc) not in det_poi for loc in (50, 128, 129, 130)):
+                continue
+            _, _, rel_to_corpus, _, status = calc_orientation_from_poi_checked(det_poi, vert)
+            if rel_to_corpus is None:
+                logger.print(f"{subject_ct_id} V{vert}: direction frame {status}, no orientation-based correction", Log_Type.WARNING)
+                continue
+            vert_orientations[vert] = rel_to_corpus
 
         # per-vertebra caches (hoisted out of the per-POI loop below)
         vert_mask_cache: dict[int, NII] = {}
@@ -162,14 +173,23 @@ def _proc(
 
         poi_source_priority_order = list(poi_dict.keys())
         primus = poi_dict[poi_source_priority_order[0]]
+        # Single output object. The chosen source varies per POI, so writing into
+        # `poi_dict[new_primus]` would scatter the results across several POI objects and
+        # only the last one would be saved.
+        out_poi = primus.copy()
 
-        for r, s, c in primus.items():
-            is_first_or_last_v = r in first_last_verts
+        for r, s, c in list(primus.items()):
             vert_instance = Vertebra_Instance(r)
             s_location = Location(s)
             # throw all out if it's marked in the report as an issue for this subject/vert/location
 
-            other_reported_err = [k for k in report_der2dict if is_poi_reported(report_der2dict, subject_ct_id, r, s)]  # type: ignore
+            other_reported_err = (
+                [k for k, d in report_der2dict.items() if is_poi_reported(d, subject_ct_id, r, s)] if USE_REPORT_VETO else []
+            )
+            # Never let the veto promote the deterministic POI: it is far worse than any
+            # model prediction, so a flagged model point is still the better choice.
+            if all(k in other_reported_err or k == DERIV_DET for k in poi_dict):
+                other_reported_err = []
             other_c = {k: np.asarray(v[r, s]) for k, v in poi_dict.items() if [r, s] in v and k not in other_reported_err}  # type: ignore
 
             # if all are reported, use current primus
@@ -210,7 +230,7 @@ def _proc(
                 # move towards up for a couple voxels
                 # axis_idx = poi_ref.get_axis("S")
                 shift = 3
-                if not is_first_or_last_v and vert_orientations[r] is not None:
+                if vert_orientations[r] is not None:
                     c_new = move_poi_along_axis(c_new, poi_ref, "S", vert_orientations[r], 3)
                 # inversed = poi_ref.orientation[axis_idx] != "S"
                 # shift = 3 * (1 if not inversed else -1)
@@ -230,7 +250,7 @@ def _proc(
                     all_x = [pc for k, pc in other_c.items() if k in ks] + [c_new]
                     c_new = np.mean(all_x, axis=0)
                     # move a little back
-                    if not is_first_or_last_v and vert_orientations[r] is not None:
+                    if vert_orientations[r] is not None:
                         c_new = move_poi_along_axis(c_new, poi_ref, "P", vert_orientations[r], 3)
                     logger.print(
                         f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Spinosus POI adjusted to mean of closest predictions of {all_x}",
@@ -247,7 +267,7 @@ def _proc(
                     all_x = [pc for k, pc in other_c.items() if k in ks if "neighbor" in k] + [c_new]
                     c_new = np.mean(all_x, axis=0)
 
-                    if not is_first_or_last_v and vert_orientations[r] is not None:
+                    if vert_orientations[r] is not None:
                         # calculate center of mass of corresponding subregion in vert mask
                         vert_mask = _vert_mask(r)
                         subreg_label = 47 if s == Location.Muscle_Inserts_Articulate_Process_Inferior_Left.value else 48
@@ -291,7 +311,7 @@ def _proc(
                     f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Anterior POI selected from {candidates}", verbose=verbose
                 )
                 # c_new = all_a_sorted[k_best]
-                if not is_first_or_last_v and vert_orientations[r] is not None:
+                if vert_orientations[r] is not None:
                     c_new = move_poi_along_axis(c_new, poi_ref, "A", vert_orientations[r], 3)
 
             ######################################################
@@ -316,7 +336,7 @@ def _proc(
                         f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Lumbar Inferior Articulate POI adjusted to extremum of closest predictions of {all_x}",
                         verbose=verbose,
                     )
-                    if not is_first_or_last_v and vert_orientations[r] is not None:
+                    if vert_orientations[r] is not None:
                         c_new = move_poi_along_axis(c_new, poi_ref, "I", vert_orientations[r], 2)
 
             ######################################################
@@ -334,20 +354,20 @@ def _proc(
                     f"{subject_ct_id} V{vert_instance.value} {s_location.name}: Costal Process POI adjusted to extremum of closest predictions of {all_x}",
                     verbose=verbose,
                 )
-                if not is_first_or_last_v and vert_orientations[r] is not None:
+                if vert_orientations[r] is not None:
                     c_new = move_poi_along_axis(c_new, poi_ref, dir, vert_orientations[r], 2)
 
             ######################################################
             ######################################################
 
-            poi_ref[r, s] = tuple(c_new)
+            out_poi[r, s] = tuple(c_new)
 
         for rp in remove_pois:
-            poi_ref.remove_(rp)
+            out_poi.remove_(rp)
         if len(remove_pois) > 0:
             logger.print(f"Removed the points {remove_pois} from POI of {subject_ct_id}", Log_Type.STRANGE)
 
-        poi_ref_proj = surface_project_poi_vert_wise(poi_ref, vert_nii, requires_filling=False)
+        poi_ref_proj = surface_project_poi_vert_wise(out_poi, vert_nii, requires_filling=False)
 
         left_post_corpus_points = [112, 114, 110]
         right_post_corpus_points = [118, 122, 120]
@@ -434,12 +454,16 @@ if __name__ == "__main__":
 
         subjects = sorted(list(raw_dir.iterdir()), key=lambda x: x.name)
 
-        # load reports
+        # load reports (normal + corpus-lane angle) per prediction source
         report_der2dict = {}
         for der_name in DERIV_POI_PREDS:
-            report_df = load_agg_report_df(REPORT_ROOT, REPORT_PREFIX, der_name, REPORT_AGG_NAME)
-            if report_df is not None:
-                report_der2dict[der_name] = convert_agg_report_to_reported_bool_dict(report_df)
+            dfs = [load_agg_report_df(REPORT_ROOT, REPORT_PREFIX, der_name, name) for name in REPORT_AGG_NAMES]
+            dfs = [df for df in dfs if df is not None]
+            if dfs:
+                merged = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else dfs[0]
+                report_der2dict[der_name] = convert_agg_report_to_reported_bool_dict(
+                    merged, vertebra_from=VETO_VERTEBRA_FROM
+                )
 
         Parallel(n_jobs=12)(delayed(_proc)(subject, ds_dir, report_der2dict) for subject in subjects)
         # for subject in subjects:

@@ -12,7 +12,7 @@ from panoptica import Metric
 from utils.filepaths import search_path_single, search_path
 import numpy as np
 from utils.misc import surface_project_poi
-from utils.vertebra_rotation import rotate_3darray, calc_orientation_from_poi
+from utils.vertebra_rotation import rotate_3darray, calc_orientation_from_poi, calc_orientation_from_poi_checked
 from report_utils import (
     LogicReport,
     SPATIAL_LOGIC_CONSTRAINTS_DICT,
@@ -20,6 +20,7 @@ from report_utils import (
     poi_touches_subreg,
     save_logic_report,
     SUBREGION_SOFTCONSTRAINT_DICT,
+    is_truncated,
 )
 from report_config import PipelineConfig as InferenceConfig
 from tqdm import tqdm
@@ -41,6 +42,7 @@ def make_single_vert_poi_report(
     c_orig: COORDINATE,
     c_orig_proj: COORDINATE,
     is_first_or_last: bool,
+    exempt_spatial: bool = False,
 ):
     report_lines: list[LogicReport] = []
 
@@ -86,7 +88,9 @@ def make_single_vert_poi_report(
     # check spatial logic constraints
     # region SpatialLogicConstraints
     spatial_lc_list = SPATIAL_LOGIC_CONSTRAINTS_DICT.get(poi_loc.value, [])
-    if is_first_or_last:
+    if exempt_spatial:
+        # Exempt from the ordering constraints only: the surface-distance and subregion checks
+        # still apply. See `spatial_exemption` in report_config.py for which vertebrae qualify.
         spatial_lc_list = []
     for lc in spatial_lc_list:
         loc1 = poi_loc
@@ -136,6 +140,137 @@ def make_single_vert_poi_report(
     return report_lines
 
 
+def make_vertebra_poi_report(
+    poi_ref: POI,
+    poi_ref_proj: POI | None,
+    subject_id: str,
+    vert: int,
+    vert_msk: NII,
+    subreg_msk: NII,
+    is_first_or_last: bool,
+    vert_neighbor: int | None = None,
+    debug: bool = False,
+    spatial_exemption: str = "truncated",
+    truncation_margin: int = 0,
+    do_rotate_around_corpus: bool = True,
+    ignore_poi: list[Location] = [],
+    first_v: bool = False,
+) -> list[LogicReport]:
+    """Report all logic violations for a single vertebra.
+
+    Split out of `make_poi_report` so the correction scripts can re-score one vertebra
+    after a candidate change (see `report_utils.guarded_apply`) without rerunning the
+    whole subject.
+    """
+    report_lines: list[LogicReport] = []
+
+    v_msk = vert_msk.extract_label(vert)
+
+    # Which vertebrae are exempt from the spatial ordering constraints.
+    #   "truncated"  - only those running into the edge of the scanned volume (default)
+    #   "first_last" - the outermost vertebra of the scan, whether or not it is truncated
+    #   "none"       - nobody is exempt
+    if spatial_exemption == "none":
+        exempt_spatial = False
+    elif spatial_exemption == "first_last":
+        exempt_spatial = is_first_or_last
+    else:
+        exempt_spatial = is_truncated(v_msk, margin=truncation_margin)
+
+    v_poi = poi_ref
+    if poi_ref_proj is None:
+        surface_msk = v_msk  # .compute_surface_mask(connectivity=3, dilated_surface=False)
+        v_poi_proj = surface_project_poi(v_poi.extract_region(vert), surface_msk, requires_filling=False)
+    else:
+        v_poi_proj = poi_ref_proj.extract_region(vert)
+
+    crop = v_msk.compute_crop(dist=16)
+    # crop = v_poi.
+    v_msk_crop = v_msk.apply_crop(crop)
+    if debug:
+        v_msk_crop.save(
+            f"/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/debug/{subject_id}-v{vert}_vmsk_crop.nii.gz"
+        )
+
+    # project everything
+    # surf_crop = v_msk_crop.compute_surface_mask(connectivity=3, dilated_surface=False)
+
+    subreg_crop = subreg_msk.apply_crop(crop) * v_msk_crop
+    poi_crop = v_poi.apply_crop(crop)
+    poi_proj_crop = v_poi_proj.apply_crop(crop)
+
+    if do_rotate_around_corpus:
+        R, corpus_com, rel_to_corpus, PIR_angle_degrees, frame_status = calc_orientation_from_poi_checked(poi_crop, vert)
+        if frame_status != "ok":
+            # A skewed frame silently flips every spatial check for this vertebra, so say so
+            # rather than emitting dozens of bogus violations without explanation.
+            logger.print(
+                f"{subject_id}-v={vert}: vertebra direction frame {frame_status}"
+                + ("; spatial checks use the global image axes" if rel_to_corpus is None else ""),
+                Log_Type.WARNING,
+            )
+        if rel_to_corpus is None:
+            do_rotate_around_corpus = False
+
+    if do_rotate_around_corpus:
+        # print("rel_to_corpus", rel_to_corpus)
+        # print("R", R)
+        # v_msk_crop = v_msk_crop.set_array(rotate_3darray(v_msk_crop.get_array(), R, center=corpus_com))
+        # subreg_crop = subreg_crop.set_array(rotate_3darray(subreg_crop.get_array(), R, center=corpus_com))
+        if debug:
+            v_r_msk_crop = v_msk_crop.set_array(rotate_3darray(v_msk_crop.get_array(), R, center=corpus_com))
+            v_r_msk_crop.save(
+                f"/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/debug/{subject_id}-v{vert}_vmsk_crop_rotated.nii.gz"
+            )
+
+        def apply_rotation_fun(x, y, z) -> COORDINATE:
+            coord = np.subtract(np.asarray((x, y, z)), corpus_com)
+            rotated_coord = np.dot(coord, R)
+            rotated_coord = np.add(rotated_coord, corpus_com)
+            return tuple(rotated_coord)
+
+        poi_r_crop = poi_crop.apply_all(apply_rotation_fun)
+        poi_r_proj_crop = poi_proj_crop.apply_all(apply_rotation_fun)
+        # poi_r_proj_crop = surface_project_poi(poi_r_proj_crop, surf_crop)
+    else:
+        poi_r_crop = poi_crop
+        poi_r_proj_crop = poi_proj_crop
+    # poi_proj_crop = surface_project_poi(poi_proj_crop, surf_crop)
+
+    for poi_loc_val in poi_ref.keys_subregion():
+        # if poi_loc_val != 82:
+        #    continue
+        poi_loc = Location(poi_loc_val)
+        if poi_loc in ignore_poi:
+            continue
+
+        if (vert, poi_loc) not in poi_r_crop:
+            continue
+        c = poi_r_crop[vert, poi_loc]
+        c_proj = poi_r_proj_crop[vert, poi_loc]
+        print(poi_loc.value, poi_proj_crop[vert, poi_loc], c, c_proj) if first_v and debug else None
+
+        new_reports = make_single_vert_poi_report(
+            c,
+            c_proj,
+            subject_id,
+            vert,
+            poi_loc,
+            vert_neighbor,
+            poi_r_crop,
+            poi_r_proj_crop,
+            subreg_crop,
+            poi_crop[vert, poi_loc],
+            poi_proj_crop[vert, poi_loc],
+            is_first_or_last,
+            exempt_spatial=exempt_spatial,
+        )
+        if new_reports is not None:
+            report_lines.extend(new_reports)
+
+    return report_lines
+
+
 def make_poi_report(
     poi_ref: POI,
     poi_ref_proj: POI | None,
@@ -146,6 +281,8 @@ def make_poi_report(
     do_rotate_around_corpus: bool = True,
     ignore_poi: list[Location] = [],
     vertebra_from: int = 6,
+    spatial_exemption: str = "truncated",
+    truncation_margin: int = 0,
     # surface_msk: NII,
 ) -> list[LogicReport]:
     report_lines: list[LogicReport] = []
@@ -161,86 +298,26 @@ def make_poi_report(
         #    continue
         # if vert not in [10, 28]:
         #    continue
-        v_msk = vert_msk.extract_label(vert)
         vert_neighbor = vert_in_order[idx + 1] if idx + 1 < len(vert_in_order) else None
 
-        v_poi = poi_ref
-        if poi_ref_proj is None:
-            surface_msk = v_msk  # .compute_surface_mask(connectivity=3, dilated_surface=False)
-            v_poi_proj = surface_project_poi(v_poi.extract_region(vert), surface_msk, requires_filling=False)
-        else:
-            v_poi_proj = poi_ref_proj.extract_region(vert)
-
-        crop = v_msk.compute_crop(dist=16)
-        # crop = v_poi.
-        v_msk_crop = v_msk.apply_crop(crop)
-        if debug:
-            v_msk_crop.save(
-                f"/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/debug/{subject_id}-v{vert}_vmsk_crop.nii.gz"
-            )
-
-        # project everything
-        # surf_crop = v_msk_crop.compute_surface_mask(connectivity=3, dilated_surface=False)
-
-        subreg_crop = subreg_msk.apply_crop(crop) * v_msk_crop
-        poi_crop = v_poi.apply_crop(crop)
-        poi_proj_crop = v_poi_proj.apply_crop(crop)
-
-        if do_rotate_around_corpus:
-            R, corpus_com, rel_to_corpus, PIR_angle_degrees = calc_orientation_from_poi(poi_crop, vert)
-            # print("rel_to_corpus", rel_to_corpus)
-            # print("R", R)
-            # v_msk_crop = v_msk_crop.set_array(rotate_3darray(v_msk_crop.get_array(), R, center=corpus_com))
-            # subreg_crop = subreg_crop.set_array(rotate_3darray(subreg_crop.get_array(), R, center=corpus_com))
-            if debug:
-                v_r_msk_crop = v_msk_crop.set_array(rotate_3darray(v_msk_crop.get_array(), R, center=corpus_com))
-                v_r_msk_crop.save(
-                    f"/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis/debug/{subject_id}-v{vert}_vmsk_crop_rotated.nii.gz"
-                )
-
-            def apply_rotation_fun(x, y, z) -> COORDINATE:
-                coord = np.subtract(np.asarray((x, y, z)), corpus_com)
-                rotated_coord = np.dot(coord, R)
-                rotated_coord = np.add(rotated_coord, corpus_com)
-                return tuple(rotated_coord)
-
-            poi_r_crop = poi_crop.apply_all(apply_rotation_fun)
-            poi_r_proj_crop = poi_proj_crop.apply_all(apply_rotation_fun)
-            # poi_r_proj_crop = surface_project_poi(poi_r_proj_crop, surf_crop)
-        else:
-            poi_r_crop = poi_crop
-            poi_r_proj_crop = poi_proj_crop
-        # poi_proj_crop = surface_project_poi(poi_proj_crop, surf_crop)
-
-        for poi_loc_val in poi_ref.keys_subregion():
-            # if poi_loc_val != 82:
-            #    continue
-            poi_loc = Location(poi_loc_val)
-            if poi_loc in ignore_poi:
-                continue
-
-            if (vert, poi_loc) not in poi_r_crop:
-                continue
-            c = poi_r_crop[vert, poi_loc]
-            c_proj = poi_r_proj_crop[vert, poi_loc]
-            print(poi_loc.value, poi_proj_crop[vert, poi_loc], c, c_proj) if first_v and debug else None
-
-            new_reports = make_single_vert_poi_report(
-                c,
-                c_proj,
+        report_lines.extend(
+            make_vertebra_poi_report(
+                poi_ref,
+                poi_ref_proj,
                 subject_id,
                 vert,
-                poi_loc,
-                vert_neighbor,
-                poi_r_crop,
-                poi_r_proj_crop,
-                subreg_crop,
-                poi_crop[vert, poi_loc],
-                poi_proj_crop[vert, poi_loc],
+                vert_msk,
+                subreg_msk,
                 is_first_or_last,
+                vert_neighbor=vert_neighbor,
+                debug=debug,
+                do_rotate_around_corpus=do_rotate_around_corpus,
+                ignore_poi=ignore_poi,
+                first_v=first_v,
+                spatial_exemption=spatial_exemption,
+                truncation_margin=truncation_margin,
             )
-            if new_reports is not None:
-                report_lines.extend(new_reports)
+        )
 
         first_v = False
     return report_lines
@@ -258,7 +335,7 @@ def _proc(subject: Path, ds_dir: Path, opt):
         subject_ct_id = img_path.name.split(".")[0]
         #
         out_excel = opt.out_root.joinpath(opt.der_out_prefix + opt.der_poi_mainpred, ds_dir.name, f"{subject_ct_id}_poi_report.xlsx")
-        if out_excel.exists():
+        if out_excel.exists() and not opt.overwrite:
             logger.print(f"{subject_ct_id}: POI report already exists, skipping: {out_excel}", Log_Type.WARNING)
             continue
         out_excel.parent.mkdir(parents=True, exist_ok=True)
@@ -338,6 +415,8 @@ def _proc(subject: Path, ds_dir: Path, opt):
             do_rotate_around_corpus=poi_4_rotation_p is not None,
             ignore_poi=opt.ignore_poi,
             vertebra_from=opt.vertebra_from,
+            spatial_exemption=opt.spatial_exemption,
+            truncation_margin=opt.truncation_margin,
         )
 
         if len(report_lines) > 0:
