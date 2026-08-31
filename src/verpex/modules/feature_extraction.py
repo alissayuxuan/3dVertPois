@@ -283,9 +283,8 @@ class HeatmapFeatureDenseNet(nn.Module):
     def calculate_loss(self, batch) -> torch.Tensor:
         """Return the coarse-stage loss for ``batch``, computed in millimetres."""
         target = batch["target"]
+        surface = batch["surface"]
         if self.project_gt:
-            # Project targets to surface
-            surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
 
         zoom = batch["zoom"].to(target.device)
@@ -298,7 +297,7 @@ class HeatmapFeatureDenseNet(nn.Module):
             coarse_preds_mm,
             target_mm,
             batch["loss_mask"],
-            None,
+            surface,
             # Set by PoiNeighborPredictionModule; absent for single-vertebra batches.
             batch.get("poi_loss_weights"),
         )
@@ -414,16 +413,19 @@ class SMDenseNet(nn.Module):
     def calculate_loss(self, batch) -> torch.Tensor:
         """Return the coarse-stage loss for ``batch``, computed in millimetres."""
         target = batch["target"]
+        surface = batch["surface"]
         if self.project_gt:
-            # Project targets to surface
-            surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
 
+        # Scale to millimetres, as SADenseNet does, so the loss means the same thing
+        # at any voxel spacing and is comparable across coarse modules.
+        zoom = batch["zoom"].to(target.device).unsqueeze(1)
+
         return self.loss_fn(
-            batch["coarse_preds"],
-            target,
+            batch["coarse_preds"] * zoom,
+            target * zoom,
             batch["loss_mask"],
-            None,
+            surface,
             # Set by PoiNeighborPredictionModule; absent for single-vertebra batches.
             batch.get("poi_loss_weights"),
         )
@@ -446,7 +448,10 @@ class SMDenseNet(nn.Module):
             metrics[f"coarse_projection_dist_{mode}"] = projection_dist.mean()
 
         # Calculate the mean Euclidean distance between the predicted and target landmarks
-        distances = torch.norm(coarse_preds - target, dim=-1)
+        # Millimetres, as in the dense coarse modules, so the numbers logged by
+        # the sparse backbones are comparable with everything else.
+        zoom = batch["zoom"].to(target.device).unsqueeze(1)
+        distances = torch.norm((coarse_preds - target) * zoom, dim=-1)
 
         distances_mean, distances_std = distances.mean(), distances.std()
 
@@ -550,16 +555,19 @@ class SMSADenseNet(nn.Module):
     def calculate_loss(self, batch) -> torch.Tensor:
         """Return the coarse-stage loss for ``batch``, computed in millimetres."""
         target = batch["target"]
+        surface = batch["surface"]
         if self.project_gt:
-            # Project targets to surface
-            surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
 
+        # Scale to millimetres, as SADenseNet does, so the loss means the same thing
+        # at any voxel spacing and is comparable across coarse modules.
+        zoom = batch["zoom"].to(target.device).unsqueeze(1)
+
         return self.loss_fn(
-            batch["coarse_preds"],
-            target,
+            batch["coarse_preds"] * zoom,
+            target * zoom,
             batch["loss_mask"],
-            None,
+            surface,
             # Set by PoiNeighborPredictionModule; absent for single-vertebra batches.
             batch.get("poi_loss_weights"),
         )
@@ -582,7 +590,10 @@ class SMSADenseNet(nn.Module):
             metrics[f"coarse_projection_dist_{mode}"] = projection_dist.mean()
 
         # Calculate the mean Euclidean distance between the predicted and target landmarks
-        distances = torch.norm(coarse_preds - target, dim=-1)  # (batch_size, n_landmarks)
+        # Millimetres, as in the dense coarse modules, so the numbers logged by
+        # the sparse backbones are comparable with everything else.
+        zoom = batch["zoom"].to(target.device).unsqueeze(1)
+        distances = torch.norm((coarse_preds - target) * zoom, dim=-1)
         distances_mean, distances_std = distances.mean(), distances.std()
 
         metrics[f"coarse_mean_distance_{mode}"] = distances_mean

@@ -145,6 +145,22 @@ explicitly; an explicit setting in a config is honoured rather than warned about
 **A neighbour config that omitted `flip_prob` previously flipped and now does not** —
 if you want flipping, set it explicitly, and it will now be correct.
 
+### The sparse coarse backbones computed loss and metrics in voxels
+
+`SMDenseNet` and `SMSADenseNet` compared coordinates directly, while `SADenseNet` and
+`HeatmapFeatureDenseNet` scale to millimetres first. Their loss therefore optimised a
+different objective on anisotropic data, and their `coarse_mean_distance_*` metrics
+were in voxels while every number logged beside them was in millimetres.
+
+Separately, `HeatmapFeatureDenseNet`, `SMDenseNet` and `SMSADenseNet` passed `None`
+where the loss expects the surface, so a `SurfaceDistanceLoss` term compounded into
+their loss silently contributed zero. In `HeatmapFeatureDenseNet` the surface was also
+bound only inside the `if self.project_gt:` branch, so reading it unconditionally
+would have raised `UnboundLocalError` — it is now hoisted, as in `SADenseNet`.
+
+**Now:** all four coarse modules scale to millimetres and pass the surface through.
+`SADenseNet` — the only one any historical config uses — is untouched.
+
 ### Patch extraction truncated instead of rounding
 
 `PatchExtractor.extract_patches` cast centres with `.long()`, which truncates toward
