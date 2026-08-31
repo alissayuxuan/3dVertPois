@@ -1,8 +1,25 @@
+"""Converting between landmark coordinates and the heatmaps the model predicts.
+
+The coarse stage regresses one heatmap per landmark; decoding it back to a
+coordinate is a coordinate expectation over the (already normalised) heatmap,
+which keeps the result differentiable and sub-voxel accurate.
+"""
+
 import torch
 from torch import nn
 
 
-def coords_to_heatmaps(coords, target_shape, lambda_decay=1):
+def coords_to_heatmaps(coords, target_shape, lambda_decay=1) -> torch.Tensor:
+    """Render landmark coordinates as normalised exponential-decay heatmaps.
+
+    Args:
+        coords: Coordinates, ``(n_landmarks, 3)`` or ``(batch, n_landmarks, 3)``.
+        target_shape: Spatial shape ``(height, width, depth)`` of each heatmap.
+        lambda_decay: Decay length in voxels; larger spreads the peak further.
+
+    Returns:
+        Heatmaps summing to 1 over the spatial dimensions, batched to match ``coords``.
+    """
     # Get the coords shape so we can handle batched and unbatched inputs
     unbatched = coords.dim() == 2
     if unbatched:
@@ -41,9 +58,8 @@ def coords_to_heatmaps(coords, target_shape, lambda_decay=1):
     return heatmaps
 
 
-def heatmaps_to_coords(pred_heatmaps):
-    """Compute 3D coordinates from a batch of heatmaps, by taking the weighted average
-    of the heatmap coordinates.
+def heatmaps_to_coords(pred_heatmaps) -> torch.Tensor:
+    """Decode heatmaps to coordinates by taking their coordinate expectation.
 
     Args:
         pred_heatmaps (torch.Tensor): Batch of heatmaps of shape (batch_size, n_pois, height, width, depth).
@@ -79,7 +95,15 @@ def heatmaps_to_coords(pred_heatmaps):
     return coords.to(device)
 
 
-def create_coordinate_tensor(shape):
+def create_coordinate_tensor(shape) -> torch.Tensor:
+    """Build a coordinate grid.
+
+    Args:
+        shape: Spatial shape ``(height, width, depth)``.
+
+    Returns:
+        A ``(3, *shape)`` tensor whose channel ``i`` holds the index along axis ``i``.
+    """
     # Generate a grid of coordinates along each dimension
     indices = [torch.arange(s, dtype=torch.float32) for s in shape]
     grid = torch.meshgrid(indices, indexing="ij")
@@ -91,13 +115,20 @@ def create_coordinate_tensor(shape):
 
 
 class SoftArgmax3D(nn.Module):
+    """Decode a normalised 3D heatmap to coordinates, differentiably.
+
+    Takes the coordinate expectation over the heatmap. It does **not** apply a
+    softmax first, so the input must already sum to 1 over its spatial dimensions.
+    """
+
     def __init__(self):
         super().__init__()
 
-    def forward(self, heatmap):
-        """Apply the soft-argmax operation on a 3D heatmap. The heatmap is expected to
-        be a valid probability distribution, i.e. the sum of all elements along the
-        spatial dimensions should be 1.
+    def forward(self, heatmap) -> torch.Tensor:
+        """Apply the soft-argmax operation on a 3D heatmap.
+
+        The heatmap must already be a valid probability distribution: its elements
+        must sum to 1 over the spatial dimensions.
 
         Args:
             heatmap (torch.Tensor): Input tensor of shape (b, n, h, w, d)

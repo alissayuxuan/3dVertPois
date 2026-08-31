@@ -1,22 +1,20 @@
 import nibabel as nib
 import numpy as np
 import torch
+from nibabel.nifti1 import Nifti1Image
+from scipy.ndimage import distance_transform_edt
+from skimage import measure
 
 # from scipy.ndimage import distance_transform_edt
-import torch.nn.functional as F
-from skimage import measure
+from torch.nn import functional as F  # noqa: N812
 
 # from BIDS import NII, POI
 from TPTBox import NII
+from TPTBox.core.np_utils import np_fill_holes
 from TPTBox.core.poi import POI
+from TPTBox.core.poi_fun.ray_casting import max_distance_ray_cast_convex_np, max_distance_ray_cast_convex_npfast, trilinear_interpolate
 
 from vertpois.paths import get_path
-
-
-from nibabel.nifti1 import Nifti1Image
-from scipy.ndimage import distance_transform_edt
-from TPTBox.core.np_utils import np_fill_holes
-from TPTBox.core.poi_fun.ray_casting import max_distance_ray_cast_convex_np, max_distance_ray_cast_convex_npfast, trilinear_interpolate
 
 # from utils.raycast_torch import max_distance_ray_cast_convex_torch
 
@@ -41,20 +39,26 @@ def np_to_bids_nii(array: np.ndarray) -> NII:
     return NII(nifty1img)
 
 
-def one_hot_encode_batch(batch_tensor: torch.Tensor) -> torch.Tensor:
-    """One hot encodes a batch of labels."""
-    batch_tensor = batch_tensor.squeeze(1).long()
-
-    num_classes = 11
-    batch_tensor = batch_tensor - 40
-    batch_tensor[batch_tensor < 0] = 0
-
-    batch_tensor = torch.nn.functional.one_hot(batch_tensor, num_classes=num_classes).permute(0, 4, 1, 2, 3).float()
-
-    return batch_tensor
 
 
-def surface_project_poi_vert_wise(poi: POI, surface_nii: NII, requires_filling: bool = True):
+def surface_project_poi_vert_wise(poi: POI, surface_nii: NII, requires_filling: bool = True) -> POI:
+    """Project a multi-vertebra POI onto the surface, one vertebra at a time.
+
+    Projecting per vertebra keeps each landmark on its own bone: a whole-spine
+    projection would let a landmark snap to a neighbouring vertebra's surface
+    wherever two vertebrae nearly touch.
+
+    Args:
+        poi: Landmarks spanning one or more vertebrae.
+        surface_nii: Surface mask labelled by vertebra.
+        requires_filling: Fill interior holes in the mask before projecting.
+
+    Returns:
+        A new POI with every landmark projected onto its own vertebra's surface.
+
+    Raises:
+        AssertionError: If a vertebra present in ``poi`` is absent from ``surface_nii``.
+    """
     poi_new = poi.make_empty_POI()
     for v in poi.keys_region():
         assert v in surface_nii.unique(), f"Surface NII does not contain vertebra {v}"
@@ -73,7 +77,21 @@ def surface_project_poi(
     surface_nii: NII,
     requires_filling: bool = True,
     debug: bool = False,
-):
+) -> POI:
+    """Project a single vertebra's landmarks onto its surface mask.
+
+    Works on a crop around the surface for speed, then maps the result back into
+    the original frame.
+
+    Args:
+        poi: Landmarks for one vertebra.
+        surface_nii: Binary surface mask for that vertebra.
+        requires_filling: Fill interior holes in the mask before projecting.
+        debug: Write intermediate masks to the configured scratch directory.
+
+    Returns:
+        A new POI with projected coordinates, in the input's frame.
+    """
     crop = surface_nii.compute_crop(dist=4)
     poi_crop = poi.apply_crop(crop)
     # convert poi to coordinates tensor
@@ -106,74 +124,32 @@ def surface_project_coords(
     surface,
     debug=False,
     requires_filling: bool = True,
-):
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Project predicted coordinates onto the surface of a binary mask.
+
+    This is the projection used on the live training and inference path. It
+    delegates to the continuous marching-cubes implementation, which returns
+    sub-voxel positions on the reconstructed mesh rather than snapping to voxel
+    centres.
+
+    Args:
+        coordinates: Coordinates to project, ``(batch, n_landmarks, 3)``.
+        surface: Binary surface mask, ``(batch, depth, height, width)``.
+        debug: Write intermediate masks to the configured scratch directory.
+        requires_filling: Fill interior holes in the mask before projecting.
+
+    Returns:
+        A tuple of the projected coordinates and the distance each one moved.
+    """
     return surface_project_coords_marchingcubes_continuous(coordinates, surface, debug=debug, requires_filling=requires_filling)
 
 
-def fill_holes_3d(surface_mask):
-    """Proper hole filling: flood-fill outside -> invert -> keep only internal cavities.
-    Does NOT dilate or overfill the object.
-
-    surface_mask: (B,1,D,H,W) boolean tensor:
-        True = object (surface or any filled region)
-
-    Returns:
-        filled: same shape, boolean:
-            object + internal cavities filled
-    """
-    surf = surface_mask.bool()
-    B, _, D, H, W = surf.shape
-    device = surf.device
-
-    # --- Step 1: treat object as solid
-    solid = surf.clone()
-
-    # --- Step 2: create "outside" mask (everything not solid)
-    outside = ~solid
-
-    # --- Step 3: seeds = all border voxels that are outside
-    seeds = torch.zeros_like(outside)
-    seeds[:, :, 0, :, :] = True
-    seeds[:, :, -1, :, :] = True
-    seeds[:, :, :, 0, :] = True
-    seeds[:, :, :, -1, :] = True
-    seeds[:, :, :, :, 0] = True
-    seeds[:, :, :, :, -1] = True
-
-    seeds = seeds & outside  # only start flood from true outside
-
-    # --- Step 4: flood fill outside
-    kernel = torch.ones((1, 1, 3, 3, 3), device=device)
-
-    cur = seeds.clone()
-
-    # Iterate until stable
-    while True:
-        # Dilate current region
-        expanded = F.conv3d(cur.float(), kernel, padding=1) > 0
-        # Only expand into true outside
-        expanded = expanded & outside
-
-        if torch.equal(expanded, cur):
-            break
-
-        cur = expanded
-
-    outside_filled = cur
-    inside = ~outside_filled  # inside object + holes
-
-    # --- Step 5: holes = inside but not originally solid
-    holes = inside & (~solid)
-
-    # --- Step 6: final = original object + holes filled
-    filled = solid | holes
-
-    return filled
 
 
-def fill_holes_3d_6conn(surface_mask):
-    """Fill holes using STRICT 6-connectivity (no diagonal connectivity).
-    Works on GPU. Does not overfill thin structures.
+def fill_holes_3d_6conn(surface_mask) -> torch.Tensor:
+    """Fill holes using strict 6-connectivity (no diagonal connectivity).
+
+    Runs on GPU and does not overfill thin structures, unlike a 26-connected fill.
 
     surface_mask: (B,1,D,H,W) boolean or int tensor
         True = object/surface voxels
@@ -183,7 +159,7 @@ def fill_holes_3d_6conn(surface_mask):
             original object + filled 6-connected cavities
     """
     surf = surface_mask.bool()
-    B, _, D, H, W = surf.shape
+    _B, _, _D, _H, _W = surf.shape
     device = surf.device
 
     # Step 1 — solid voxels as-is
@@ -238,29 +214,41 @@ def fill_holes_3d_6conn(surface_mask):
     return filled
 
 
-def extract_surface_vertices(mask, level=0.5):
-    # mask: (Z,Y,X) numpy array
-    # mask = fill_holes_3d_6conn(mask)
-    verts, faces, _, _ = measure.marching_cubes(
+def extract_surface_vertices(mask, level=0.5) -> np.ndarray:
+    """Extract surface vertices from a binary mask via marching cubes.
+
+    Args:
+        mask: Binary mask, ``(depth, height, width)``.
+        level: Iso-surface level passed to marching cubes.
+
+    Returns:
+        The surface vertex coordinates, ``(n_vertices, 3)``.
+    """
+    verts, _, _, _ = measure.marching_cubes(
         mask.astype(float),
         level=level,
     )
     return torch.from_numpy(verts.copy()).float()  # (M, 3)
 
 
-def surface_project_coords_marchingcubes(
+def surface_project_coords_marchingcubes(  # noqa: ANN201
     coordinates,
     surface_mask,
     level=0.5,
     debug=False,
     requires_filling: bool = False,
 ):
-    """coordinates: (B, N, 3) or (N, 3)
-    surface_mask: (B, Z, Y, X) or (Z, Y, X)
+    """Project coordinates onto the nearest marching-cubes surface vertex.
+
+    Snaps to mesh vertices, so results land on discrete positions. Prefer
+    :func:`surface_project_coords_marchingcubes_continuous` for sub-voxel accuracy.
+
+    Args:
+        coordinates: ``(batch, n_landmarks, 3)`` or ``(n_landmarks, 3)``.
+        surface: Binary mask, ``(batch, depth, height, width)`` or ``(depth, height, width)``.
 
     Returns:
-        surface_projected_targets: (B, N, 3) int64
-        surface_projection_dist:   (B, N)   float
+        A tuple of the projected coordinates and the distance each one moved.
     """
     # ---------- Handle batching ----------
     unbatched_coords = coordinates.ndim == 2
@@ -271,7 +259,7 @@ def surface_project_coords_marchingcubes(
     if unbatched_surface:
         surface_mask = surface_mask.unsqueeze(0)
 
-    B, N, _ = coordinates.shape
+    B, _, _ = coordinates.shape
     device = coordinates.device
 
     # ---------- Extract marching cubes surfaces for each batch ----------
@@ -337,56 +325,9 @@ def surface_project_coords_marchingcubes(
     return projected, surface_projection_dist
 
 
-def closest_point_on_triangle(p, a, b, c):
-    """Exact closest point on triangle ABC to point P.
-    All inputs: (3,)
-    """
-    ab = b - a
-    ac = c - a
-    ap = p - a
-
-    d1 = np.dot(ab, ap)
-    d2 = np.dot(ac, ap)
-
-    if d1 <= 0.0 and d2 <= 0.0:
-        return a
-
-    bp = p - b
-    d3 = np.dot(ab, bp)
-    d4 = np.dot(ac, bp)
-
-    if d3 >= 0.0 and d4 <= d3:
-        return b
-
-    vc = d1 * d4 - d3 * d2
-    if vc <= 0.0 and d1 >= 0.0 and d3 <= 0.0:
-        v = d1 / (d1 - d3)
-        return a + v * ab
-
-    cp = p - c
-    d5 = np.dot(ab, cp)
-    d6 = np.dot(ac, cp)
-
-    if d6 >= 0.0 and d5 <= d6:
-        return c
-
-    vb = d5 * d2 - d1 * d6
-    if vb <= 0.0 and d2 >= 0.0 and d6 <= 0.0:
-        w = d2 / (d2 - d6)
-        return a + w * ac
-
-    va = d3 * d6 - d5 * d4
-    if va <= 0.0 and (d4 - d3) >= 0.0 and (d5 - d6) >= 0.0:
-        w = (d4 - d3) / ((d4 - d3) + (d5 - d6))
-        return b + w * (c - b)
-
-    denom = 1.0 / (va + vb + vc)
-    v = vb * denom
-    w = vc * denom
-    return a + ab * v + ac * w
 
 
-def closest_point_on_triangle_batch(p, a, b, c):
+def closest_point_on_triangle_batch(p, a, b, c) -> torch.Tensor:
     """Batched closest point on triangles.
 
     p : (N,3)
@@ -436,19 +377,25 @@ def closest_point_on_triangle_batch(p, a, b, c):
 # -------------------------------------------------------------
 
 
-def surface_project_coords_marchingcubes_continuous(
+def surface_project_coords_marchingcubes_continuous(  # noqa: ANN201
     coordinates,
     surface_mask,
     level=0.5,
-    debug=False,
+    debug=False,  # noqa: ARG001 - kept so both projection variants share one signature
     requires_filling: bool = False,
 ):
-    """coordinates: (B, N, 3) or (N, 3)
-    surface_mask: (B, Z, Y, X) or (Z, Y, X)
+    """Project coordinates onto the closest point of the marching-cubes mesh.
+
+    Unlike the vertex-snapping variant, this finds the closest point on the mesh
+    *triangles*, so the result is continuous and sub-voxel accurate. This is what
+    :func:`surface_project_coords` uses.
+
+    Args:
+        coordinates: ``(batch, n_landmarks, 3)`` or ``(n_landmarks, 3)``.
+        surface: Binary mask, ``(batch, depth, height, width)`` or ``(depth, height, width)``.
 
     Returns:
-        projected: (B, N, 3) float  -- TRUE continuous surface points
-        surface_projection_dist: (B, N) float
+        A tuple of the projected coordinates and the distance each one moved.
     """
     # ---------------- batching ----------------
     unbatched_coords = coordinates.ndim == 2
@@ -549,136 +496,3 @@ def surface_project_coords_marchingcubes_continuous(
 
 # POI Visualization
 # Define some useful utility functions
-def get_dd_ctd(dd, poi_list=None):
-    ctd = {}
-    vertebra = dd["vertebra"]
-
-    for poi_coords, poi_idx in zip(dd["target"], dd["target_indices"]):
-        coords = (poi_coords[0].item(), poi_coords[1].item(), poi_coords[2].item())
-        if poi_list is None or poi_idx in poi_list:
-            ctd[vertebra, poi_idx.item()] = coords
-
-    ctd = POI(centroids=ctd, orientation=("L", "A", "S"), zoom=(1, 1, 1), shape=(128, 128, 96))
-    return ctd
-
-
-def get_ctd(target, target_indices, vertebra, poi_list):
-    ctd = {}
-    for poi_coords, poi_idx in zip(target, target_indices):
-        coords = (poi_coords[0].item(), poi_coords[1].item(), poi_coords[2].item())
-        if poi_list is None or poi_idx in poi_list:
-            ctd[vertebra, poi_idx.item()] = coords
-
-    ctd = POI(centroids=ctd, orientation=("L", "A", "S"), zoom=(1, 1, 1), shape=(128, 128, 96))
-    return ctd
-
-
-def get_vert_msk_nii(dd):
-    vertebra = dd["vertebra"]
-    msk = dd["input"].squeeze(0)
-    return vertseg_to_vert_msk_nii(vertebra, msk)
-
-
-def vertseg_to_vert_msk_nii(vertebra, msk):
-    vert_msk = (msk != 0) * vertebra
-    vert_msk_nii = np_to_bids_nii(vert_msk.numpy().astype(np.int32))
-    vert_msk_nii.seg = True
-    return vert_msk_nii
-
-
-def get_vertseg_nii(dd):
-    vertseg = dd["input"].squeeze(0)
-    vertseg_nii = np_to_bids_nii(vertseg.numpy().astype(np.int32))
-    vertseg_nii.seg = True
-    return vertseg_nii
-
-
-def get_vert_points(dd):
-    msk = dd["input"].squeeze(0)
-    vert_points = torch.where(msk)
-    vert_points = torch.stack(vert_points, dim=1)
-    return vert_points
-
-
-def get_target_entry_points(dd):
-    ctd = get_ctd(dd)
-    vertebra = dd["vertebra"]
-    p_90 = torch.tensor(ctd[vertebra, 90])
-    p_92 = torch.tensor(ctd[vertebra, 92])
-
-    p_91 = torch.tensor(ctd[vertebra, 91])
-    p_93 = torch.tensor(ctd[vertebra, 93])
-
-    return p_90, p_92, p_91, p_93
-
-
-def tensor_to_ctd(
-    t,
-    vertebra,
-    origin,
-    rotation,
-    idx_list=None,
-    shape=(128, 128, 96),
-    zoom=(1, 1, 1),
-    offset=(0, 0, 0),
-):
-    ctd = {}
-    for i, coords in enumerate(t):
-        coords = coords.float() - torch.tensor(offset)
-        coords = (coords[0].item(), coords[1].item(), coords[2].item())
-        if idx_list is None:
-            ctd[vertebra, i] = coords
-        elif i < len(idx_list):
-            ctd[vertebra, idx_list[i]] = coords
-
-    ctd = POI(
-        centroids=ctd,
-        orientation=("L", "A", "S"),
-        zoom=zoom,
-        shape=shape,
-        origin=origin,
-        rotation=rotation,
-    )
-    return ctd
-
-
-if __name__ == "__main__":
-    # simple test
-    volume = torch.tensor(
-        [
-            [
-                [0, 1, 1, 1, 0],
-                [0, 1, 1, 1, 0],
-                [0, 1, 1, 1, 0],
-                [0, 0, 0, 0, 0],
-            ],
-            [
-                [0, 1, 1, 1, 0],
-                [0, 1, 0, 1, 0],
-                [0, 1, 1, 1, 0],
-                [0, 0, 0, 0, 0],
-            ],
-            [
-                [0, 1, 1, 0, 0],
-                [0, 1, 1, 1, 0],
-                [0, 1, 1, 1, 0],
-                [0, 0, 0, 0, 0],
-            ],
-            [
-                [0, 1, 1, 0, 0],
-                [0, 1, 1, 0, 0],
-                [0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0],
-            ],
-        ]
-    )
-    print(volume.shape)
-    print(volume)
-
-    volume = fill_holes_3d_6conn(volume.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0)
-
-    print(volume)
-
-    coord = torch.Tensor([2, 2, 2])
-    projected, proj_dist = surface_project_coords_sdf(coord, volume)
-    print(projected, proj_dist)

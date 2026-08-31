@@ -11,24 +11,35 @@ from vertpois.paths import get_path
 
 
 class TrainedModelInfo(Enum):
+    """A trained model, identified by a short name usable on the command line.
+
+    Each member's value is ``(model_dir, version, checkpoint_name)``, resolved
+    against the configured ``model_root``.
+    """
+
     @property
-    def model_dir(self):
+    def model_dir(self) -> str:
+        """Training directory, relative to ``model_root``."""
         return self.value[0]
 
     @property
-    def version(self):
+    def version(self) -> int:
+        """Lightning logger version number within the training directory."""
         return self.value[1]
 
     @property
-    def checkpoint_name(self):
+    def checkpoint_name(self) -> str:
+        """Checkpoint file name, without the ``.ckpt`` suffix."""
         return self.value[2]
 
     @property
-    def data_module_params_path(self):
+    def data_module_params_path(self) -> str:
+        """Absolute path to the data module configuration saved with this run."""
         return str(get_path("model_root") / self.model_dir / f"version_{self.version}" / "data_module_params.json")
 
     @property
-    def model_path(self):
+    def model_path(self) -> str:
+        """Absolute path to this model's checkpoint file."""
         return str(get_path("model_root") / self.model_dir / f"version_{self.version}" / "checkpoints" / f"{self.checkpoint_name}.ckpt")
 
     # POST MICCAI (with more sorted out for training)

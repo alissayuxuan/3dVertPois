@@ -1,8 +1,11 @@
 import ast
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 import torch
+
+if TYPE_CHECKING:
+    from TPTBox import POI
 
 
 def batch_to_device(batch: dict, device) -> dict:
@@ -48,7 +51,7 @@ def extract_space_meta(batch: dict, prefix: str) -> SpaceMeta:
     )
 
 
-def revert_poi_to_original_space(poi, cutout_offset, orig_meta: SpaceMeta):
+def revert_poi_to_original_space(poi, cutout_offset, orig_meta: SpaceMeta) -> "POI":
     """Transform a POI from preprocessed cutout space back to original patient space.
 
     Steps: shift by cutout offset → rescale to original zoom → set shape → reorient.
