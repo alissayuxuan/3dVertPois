@@ -386,7 +386,15 @@ def create_prediction_poi_files(
     container=None,
     project_to_surface=False,
     inference_flipped=False,
+    vert_msk_override: NII | None = None,
+    input_data_override: NII | None = None,
 ):
+    """
+    The *_override arguments let a caller supply masks that are not on disk, for datasets
+    whose masks have to be built at read time (see src/myelom/run_inference.py). When they
+    are None this behaves exactly as before and everything is read via vert_msk_ref and
+    the BIDS container.
+    """
     dm_params = json.load(open(dm_path, "r"))
     print(dm_params)
     input_shape = dm_params["input_shape"]
@@ -396,25 +404,23 @@ def create_prediction_poi_files(
     zoom = dm_params.get("zoom", (1, 1, 1))
     print("zoom: ", zoom)
 
-    vert_msk = vert_msk_ref.open_nii()
+    vert_msk = vert_msk_ref.open_nii() if vert_msk_override is None else vert_msk_override
     vert_list = [v for v in vert_list if v in vert_msk.unique()]
     split_info = vert_msk_ref.info["split"] if "split" in vert_msk_ref.info else None
+
+    def _from_container(kind: str) -> NII:
+        if input_data_override is not None:
+            return input_data_override
+        if container is None:
+            raise ValueError(f"container must be provided when input_data_type='{kind}'")
+        return get_subreg(container, split=split_info) if kind == "subreg" else _load_ct(container, split_info)
+
     if input_data_type == "vertseg":
         input_data = vert_msk
-    elif input_data_type == "subreg":
-        if container is None:
-            raise ValueError("container must be provided when input_data_type='subreg'")
-        input_data = get_subreg(container, split=split_info)
-    elif input_data_type == "ct":
-        if container is None:
-            raise ValueError("container must be provided when input_data_type='ct'")
-        input_data = _load_ct(container, split_info)
+    elif input_data_type in ("subreg", "ct", "surface_msk+ct"):
+        input_data = _from_container(input_data_type)
     elif input_data_type == "surface_msk":
         input_data = vert_msk.compute_surface_mask(connectivity=3, dilated_surface=False)
-    elif input_data_type == "surface_msk+ct":
-        if container is None:
-            raise ValueError("container must be provided when input_data_type='surface_msk+ct'")
-        input_data = _load_ct(container, split_info)
     else:
         raise ValueError(f"Unknown input data type: {input_data_type}")
 

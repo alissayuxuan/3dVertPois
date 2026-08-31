@@ -15,6 +15,7 @@ from utils.misc import surface_project_poi
 from utils.vertebra_rotation import rotate_3darray, calc_orientation_from_poi
 from scipy.interpolate import splprep, splev
 from report_utils import (
+    load_vert_subreg,
     LogicReport,
     SPATIAL_LOGIC_CONSTRAINTS_DICT,
     SUBREGION_CONSTRAINT_DICT,
@@ -190,7 +191,9 @@ def _proc(subject: Path, ds_dir: Path, opt):
         return
 
     # find all rawdata ct files
-    img_paths = search_path(ds_dir / opt.rawdata / subject_id, f"{subject_id}*_ct.nii.gz")
+    # recursive + a leading wildcard: myelom nests CTs under ses- dirs and its subject
+    # folders drop the "sub-" prefix that the filenames still carry
+    img_paths = search_path(ds_dir / opt.rawdata / subject_id, f"**/*{subject_id}*_ct.nii.gz")
     assert len(img_paths) > 0, f"No CT image found for subject {subject_id}"
     for img_path in img_paths:
         subject_ct_id = img_path.name.split(".")[0]
@@ -205,19 +208,6 @@ def _proc(subject: Path, ds_dir: Path, opt):
         # logger.print("Subject:", subject_ct_id)
         # img_path = search_path_single(ds_dir / RAWDATA / subject_id, f"{subject_id}*_ct.nii.gz")
         img_bidsf = BIDS_FILE(img_path, dataset=ds_dir)
-        split_info = img_bidsf.info["split"] if "split" in img_bidsf.info else None
-        vert_path = img_bidsf.get_changed_path(file_type="nii.gz", bids_format="msk", info={"seg": "vert"}, parent=opt.der_vert)
-        # VERT MASK IS NOT MODIFIED, so just copy
-        assert vert_path.exists(), f"{subject_ct_id}: Original vert mask does not exist: {vert_path}"
-        subreg_path = img_bidsf.get_changed_path(file_type="nii.gz", bids_format="msk", info={"seg": "subreg"}, parent=opt.der_subreg)
-        assert subreg_path.exists(), f"{subject_ct_id}: NO subreg mask exists: {subreg_path}"
-
-        # load both masks
-        subreg_nii = NII.load(subreg_path, seg=True).reorient_()
-        subreg_nii.map_labels_({51: 49, 50: 49}, verbose=False)
-        vert_nii = NII.load(vert_path, seg=True).reorient_()
-        subreg_nii.assert_affine(other=vert_nii, verbose=logger, raise_error=True)
-
         poi_ref_path = img_bidsf.get_changed_path(
             file_type="json", bids_format="poi", info={"seg": "vert", "mod": "ct"}, parent=opt.der_poi_mainpred
         )
@@ -228,12 +218,17 @@ def _proc(subject: Path, ds_dir: Path, opt):
                 info={"seg": "vert", "mod": None, "source": "deterministic"},
                 parent=opt.der_poi_mainpred,
             )
-        poi_proj_ref_path = img_bidsf.get_changed_path(
-            file_type="json", bids_format="poi", info={"seg": "vert", "mod": "ct"}, parent=opt.der_poi_mainpred + "_sproj"
-        )
         if not poi_ref_path.exists():
             logger.print(f"{subject_ct_id}: Main POI prediction file does not exist: {poi_ref_path}", Log_Type.FAIL)
             continue
+
+        # only now load the masks: with a dataset_adapter this resamples whole-body
+        # segmentations, which is far too expensive to do for a subject we then skip
+        vert_nii, subreg_nii = load_vert_subreg(img_bidsf, opt)
+
+        poi_proj_ref_path = img_bidsf.get_changed_path(
+            file_type="json", bids_format="poi", info={"seg": "vert", "mod": "ct"}, parent=opt.der_poi_mainpred + "_sproj"
+        )
         poi_ref = POI.load(poi_ref_path).reorient_()
         #if poi_proj_ref_path.exists():
         #    poi_ref_proj = POI.load(poi_proj_ref_path).reorient_()
@@ -241,14 +236,17 @@ def _proc(subject: Path, ds_dir: Path, opt):
         #    logger.print(f"{subject_ct_id}: Projection pred does not exist: {poi_proj_ref_path}", Log_Type.FAIL)
         #    continue
 
-        if split_info is None:
-            poi_4_rotation_p = search_path_single(
-                ds_dir / opt.der_direction / subject_id, f"**/{subject_ct_id.split('_')[0]}*_seg-vert*poi.json"
-            )
-        else:
-            poi_4_rotation_p = search_path_single(
-                ds_dir / opt.der_direction / subject_id, f"**/{subject_ct_id.split('_')[0]}*split-{split_info}_seg-vert*poi.json"
-            )
+        # name it off this CT rather than globbing the subject dir: the old pattern keyed
+        # on subject alone, which matches every session of a multi-session subject and
+        # made search_path_single return None, silently dropping the vertebra frame
+        poi_4_rotation_p = img_bidsf.get_changed_path(
+            file_type="json",
+            bids_format="poi",
+            info={"seg": "vert", "source": "deterministic"},
+            parent=opt.der_direction,
+        )
+        if not poi_4_rotation_p.exists():
+            poi_4_rotation_p = None
         if poi_4_rotation_p is not None and poi_4_rotation_p.exists():
             poi_4_rotation = POI.load(poi_4_rotation_p).reorient_()
             for v in poi_ref.keys_region():
@@ -311,7 +309,10 @@ if __name__ == "__main__":
 
             logger.print("Processing dataset dir:", ds_dir.name, Log_Type.STAGE)
 
-            subjects = list(raw_dir.iterdir())
+            subjects = sorted(raw_dir.iterdir())
+            if opt.subjects:
+                wanted = {s.removeprefix("sub-") for s in opt.subjects}
+                subjects = [s for s in subjects if s.name.removeprefix("sub-") in wanted]
 
             if not opt.cprofile_this:
                 Parallel(n_jobs=opt.num_threads)(delayed(_proc)(subject, ds_dir, opt) for subject in subjects)

@@ -26,6 +26,11 @@ class PipelineConfig(Class_to_ArgParse):
     der_subreg: str = "derivatives_combined"  # "derivatives_subreg"
     der_vert: str = "derivatives_combined"
     der_direction: str = "derivatives_poi_deterministic"
+    # Non-empty selects a dataset whose masks are not on disk and must be built at read
+    # time; see report_utils.load_vert_subreg. "myelom" is the only one so far, and it
+    # makes der_subreg / der_vert unused.
+    dataset_adapter: str = ""
+    cache_dir: str = ""  # optional cache for masks built by a dataset_adapter
     out_root: Path = Path("/DATA/NAS/ongoing_projects/hendrik/poi_prediction/3dVertPois/data_analysis")
     vertebra_from: int = 6
     overwrite: bool = False  # regenerate reports / corrected POIs even if the output already exists
@@ -92,3 +97,6 @@ class PipelineConfig(Class_to_ArgParse):
         ]
     )
     num_threads: int = 10
+    # restrict the run to these subjects (folder names under rawdata); empty = all.
+    # myelom has 240 subjects with up to 14 sessions each, so pilots need this.
+    subjects: list[str] = field(default_factory=list)

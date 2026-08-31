@@ -1,6 +1,6 @@
 import pandas as pd
 from dataclasses import dataclass
-from TPTBox import Location, NII, POI, Vertebra_Instance, No_Logger, Log_Type
+from TPTBox import BIDS_FILE, Location, NII, POI, Vertebra_Instance, No_Logger, Log_Type
 from TPTBox.core.vert_constants import DIRECTIONS, COORDINATE
 from pathlib import Path
 import numpy as np
@@ -41,6 +41,38 @@ class LogicReport:
             "relevant_data": relevant_data_rounded,
             "description": self.description,
         }
+
+
+def load_vert_subreg(img_bidsf: BIDS_FILE, opt) -> tuple[NII, NII]:
+    """
+    The vertebra and subregion masks belonging to a CT, in the CT's own space.
+
+    Normally both sit on disk next to each other in opt.der_vert / opt.der_subreg. A
+    dataset whose masks have to be built at read time selects itself with
+    opt.dataset_adapter; dataset-myelom does, because its segmentations live in a
+    different derivative on a different grid and are resampled onto the crop in memory
+    (src/myelom/adapter.py). opt.der_vert and opt.der_subreg are unused in that case.
+    """
+    adapter = getattr(opt, "dataset_adapter", "")
+    if adapter == "myelom":
+        from myelom.adapter import load_vert_subreg_for_ct
+
+        vert_nii, subreg_nii = load_vert_subreg_for_ct(img_bidsf.file["nii.gz"], cache_dir=getattr(opt, "cache_dir", "") or None)
+        return vert_nii.reorient_(), subreg_nii.reorient_()
+    if adapter:
+        raise ValueError(f"unknown dataset_adapter: {adapter!r}")
+
+    ct_id = img_bidsf.file["nii.gz"].name.split(".")[0]
+    vert_path = img_bidsf.get_changed_path(file_type="nii.gz", bids_format="msk", info={"seg": "vert"}, parent=opt.der_vert)
+    assert vert_path.exists(), f"{ct_id}: Original vert mask does not exist: {vert_path}"
+    subreg_path = img_bidsf.get_changed_path(file_type="nii.gz", bids_format="msk", info={"seg": "subreg"}, parent=opt.der_subreg)
+    assert subreg_path.exists(), f"{ct_id}: NO subreg mask exists: {subreg_path}"
+
+    subreg_nii = NII.load(subreg_path, seg=True).reorient_()
+    subreg_nii.map_labels_({51: 49, 50: 49}, verbose=False)
+    vert_nii = NII.load(vert_path, seg=True).reorient_()
+    subreg_nii.assert_affine(other=vert_nii, raise_error=True)
+    return vert_nii, subreg_nii
 
 
 def save_logic_report(report_list: list[LogicReport], save_path: str | Path, round_d=3) -> None:

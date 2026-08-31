@@ -50,15 +50,22 @@ def extract_space_meta(batch: dict, prefix: str) -> SpaceMeta:
 def revert_poi_to_original_space(poi, cutout_offset, orig_meta: SpaceMeta):
     """Transform a POI from preprocessed cutout space back to original patient space.
 
-    Steps: rescale to original zoom → shift by cutout offset → set shape → reorient.
+    Steps: shift by cutout offset → rescale to original zoom → set shape → reorient.
     Modifies poi in-place and returns it.
+
+    The offset must be applied before the rescale. preprocess_segmentation_masks derives
+    it from a crop taken after the volume was rescaled to the model's zoom, so it counts
+    voxels in that preprocessed grid, not in the original one. Rescaling first would add
+    preprocessed-grid voxels to original-grid coordinates, displacing every POI by
+    (zoom_ratio - 1) * offset - which is zero only when the two spacings agree, as they do
+    for 1mm-iso data like verse, and is tens of millimetres along the spine at 0.8mm.
     """
-    poi.rescale_(orig_meta.zoom, verbose=False)
     new_centroids = {}
     for v, p_idx, c in poi.centroids.items():
         new_coords = np.array(c) + cutout_offset
         new_centroids[(v, p_idx)] = (new_coords[0], new_coords[1], new_coords[2])
     poi.centroids = new_centroids
+    poi.rescale_(orig_meta.zoom, verbose=False)
     poi.shape = orig_meta.shape
     poi.reorient_(orig_meta.orientation, verbose=False)
     return poi

@@ -45,6 +45,7 @@ if __name__ == "__main__":
         "dataset-verse20validation_1mmiso",
         "dataset-verse19test_1mmiso",
         "dataset-verse20test_1mmiso",
+        "dataset-myelom",
     ]
 
     # Optional derivative names (without the TEST_ prefix) restrict the run to those
