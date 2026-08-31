@@ -124,6 +124,19 @@ this repository is derived from work on clinical data.
 was extracted from, including several fixes that change numerical results. Read it before
 comparing against older runs.
 
+## Exporting this branch to a new repository
+
+Export the **working tree**, not the git history. The history of the repository this was
+extracted from contains material that must not be published (see `CHANGES.md` and the
+notes below), and `git archive` copies only tracked files, so nothing ignored comes along:
+
+```bash
+mkdir ../vertpois && git archive clean-repo | tar -x -C ../vertpois
+cd ../vertpois && git init && git add -A && git commit -m "Initial commit"
+```
+
+Before pushing anywhere public, settle `LICENSE.TODO.md` and `AUTHORS.md`.
+
 ## Citation and provenance
 
 This code descends from the master's thesis *Automated Point-of-Interest Prediction on CT
