@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 import torch
 
-from vertpois.geometry.heatmaps import SoftArgmax3D
-from vertpois.models.patch_extraction import PatchExtractor
-from vertpois.models.poi_transformer import FlexiblePoiTransformer, PoiTransformer
+from verpex.geometry.heatmaps import SoftArgmax3D
+from verpex.models.patch_extraction import PatchExtractor
+from verpex.models.poi_transformer import FlexiblePoiTransformer, PoiTransformer
 
 
 def test_soft_argmax_recovers_the_peak_of_a_one_hot_heatmap():

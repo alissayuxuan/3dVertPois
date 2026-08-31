@@ -3,11 +3,11 @@ from collections.abc import Sequence
 import torch
 from torch import nn
 
-from vertpois.geometry.heatmaps import SoftArgmax3D
-from vertpois.geometry.surface import surface_project_coords
-from vertpois.loss.loss_modules import get_loss_fn
-from vertpois.models.densenet import HeatmapDenseNet
-from vertpois.models.subm_densenet import HeatmapSubmDenseNet, SubmDenseNet
+from verpex.geometry.heatmaps import SoftArgmax3D
+from verpex.geometry.surface import surface_project_coords
+from verpex.loss.loss_modules import get_loss_fn
+from verpex.models.densenet import HeatmapDenseNet
+from verpex.models.subm_densenet import HeatmapSubmDenseNet, SubmDenseNet
 
 
 class SADenseNet(nn.Module):
@@ -575,7 +575,7 @@ class SMSADenseNet(nn.Module):
 
 
 #: Config ``"type"`` string -> coarse (feature-extraction) module.
-#: Consumed by :func:`vertpois.modules.poi_module.create_feature_extraction_module`.
+#: Consumed by :func:`verpex.modules.poi_module.create_feature_extraction_module`.
 FEATURE_EXTRACTION_MODULES = {
     "SADenseNet": SADenseNet,
     "HeatmapFeatureDenseNet": HeatmapFeatureDenseNet,

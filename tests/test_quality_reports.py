@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from TPTBox import Location, Vertebra_Instance
 
-from vertpois.data.quality_reports import (
+from verpex.data.quality_reports import (
     convert_agg_report_to_reported_bool_dict,
     is_poi_reported,
     is_vert_reported,

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from vertpois.modules.data_modules import DATA_MODULES
-from vertpois.modules.feature_extraction import FEATURE_EXTRACTION_MODULES
-from vertpois.modules.poi_module import PREDICTION_MODULES
-from vertpois.modules.refinement import REFINEMENT_MODULES
-from vertpois.registry import UnknownTypeError, build, resolve
-from vertpois.training_utils import CALLBACKS
+from verpex.modules.data_modules import DATA_MODULES
+from verpex.modules.feature_extraction import FEATURE_EXTRACTION_MODULES
+from verpex.modules.poi_module import PREDICTION_MODULES
+from verpex.modules.refinement import REFINEMENT_MODULES
+from verpex.registry import UnknownTypeError, build, resolve
+from verpex.training_utils import CALLBACKS
 
 #: Every type string that appears in a historical experiment config. These must keep
 #: resolving, or previously working configs break.

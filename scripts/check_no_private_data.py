@@ -60,7 +60,7 @@ def main(argv: list[str]) -> int:
         for finding in findings:
             print(f"  {finding}")
         print(
-            "\nUse the path config (vertpois.paths.get_path) instead of an absolute path.\n"
+            "\nUse the path config (verpex.paths.get_path) instead of an absolute path.\n"
             "If a match is genuinely fine, append '# noqa: private-data' to that line."
         )
         return 1

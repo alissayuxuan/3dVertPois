@@ -16,15 +16,15 @@ import pandas as pd
 from TPTBox import NII
 from TPTBox.core.poi import POI
 
-from vertpois.geometry.spaces import batch_to_device
-from vertpois.geometry.surface import (
+from verpex.geometry.spaces import batch_to_device
+from verpex.geometry.surface import (
     surface_project_coords,
     surface_project_coords_marchingcubes,
     surface_project_coords_marchingcubes_continuous,
 )
-from vertpois.modules.data_modules import POIDataModule
-from vertpois.modules.poi_module import PoiPredictionModule
-from vertpois.paths import get_path
+from verpex.modules.data_modules import POIDataModule
+from verpex.modules.poi_module import PoiPredictionModule
+from verpex.paths import get_path
 
 # ---------------------------------------------------------------------------
 # Internal helpers

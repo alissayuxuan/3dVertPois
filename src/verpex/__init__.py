@@ -7,4 +7,10 @@ refines those coarse coordinates using local image patches.
 See the README for the training and inference workflows.
 """
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    #: Derived from the latest git tag at build time by poetry-dynamic-versioning.
+    __version__ = version("verpex")
+except PackageNotFoundError:  # running from a source tree that was never installed
+    __version__ = "0.0.0+unknown"

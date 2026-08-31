@@ -8,7 +8,7 @@ from typing import Any
 
 import pytorch_lightning as pl
 
-from vertpois.registry import build
+from verpex.registry import build
 
 #: Config ``"type"`` string -> Lightning callback.
 #:

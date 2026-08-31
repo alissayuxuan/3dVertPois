@@ -14,7 +14,7 @@ from TPTBox.core.np_utils import np_fill_holes
 from TPTBox.core.poi import POI
 from TPTBox.core.poi_fun.ray_casting import max_distance_ray_cast_convex_np, max_distance_ray_cast_convex_npfast, trilinear_interpolate
 
-from vertpois.paths import get_path
+from verpex.paths import get_path
 
 # from utils.raycast_torch import max_distance_ray_cast_convex_torch
 

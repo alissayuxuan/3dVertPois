@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from vertpois import paths
-from vertpois.paths import KNOWN_KEYS, PathConfigError, env_var_for, get_path
+from verpex import paths
+from verpex.paths import KNOWN_KEYS, PathConfigError, env_var_for, get_path
 
 
 @pytest.fixture(autouse=True)
 def _isolated_config(tmp_path, monkeypatch):
     """Point the loader at an empty temp config and clear all env overrides."""
     config = tmp_path / "paths.yaml"
-    monkeypatch.setenv("VERTPOIS_CONFIG", str(config))
+    monkeypatch.setenv("VERPEX_CONFIG", str(config))
     for key in KNOWN_KEYS:
         monkeypatch.delenv(env_var_for(key), raising=False)
     paths.reset_cache()
@@ -27,7 +27,7 @@ def write(config, text):
 
 def test_env_var_wins_over_the_config_file(_isolated_config, monkeypatch):
     write(_isolated_config, "model_root: /from/yaml\n")
-    monkeypatch.setenv("VERTPOIS_MODEL_ROOT", "/from/env")
+    monkeypatch.setenv("VERPEX_MODEL_ROOT", "/from/env")
     assert str(get_path("model_root")) == "/from/env"
 
 
@@ -45,7 +45,7 @@ def test_missing_key_names_the_env_var_and_the_file(_isolated_config):
     with pytest.raises(PathConfigError) as excinfo:
         get_path("model_root")
     message = str(excinfo.value)
-    assert "VERTPOIS_MODEL_ROOT" in message
+    assert "VERPEX_MODEL_ROOT" in message
     assert "model_root" in message
     assert "paths.example.yaml" in message
 

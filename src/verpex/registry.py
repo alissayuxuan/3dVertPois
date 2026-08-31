@@ -12,7 +12,7 @@ what is actually available.
 
 The config file format is unchanged: every ``type`` string that worked before still
 resolves, including the refinement ablation names, which are now aliases for flag
-combinations of a single class (see :mod:`vertpois.modules.refinement`).
+combinations of a single class (see :mod:`verpex.modules.refinement`).
 """
 
 from __future__ import annotations

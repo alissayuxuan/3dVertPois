@@ -1,4 +1,4 @@
-# vertpois
+# verpex
 
 Deep-learning prediction of anatomical points-of-interest (POIs) on vertebrae, from CT
 and MRI spine segmentations.
@@ -15,8 +15,8 @@ NIfTI I/O and POI containers.
 Requires Python 3.10 or newer.
 
 ```bash
-conda create -n vertpois python=3.10
-conda activate vertpois
+conda create -n verpex python=3.10
+conda activate verpex
 
 pip install -e .
 ```
@@ -39,10 +39,10 @@ cp config/paths.example.yaml config/paths.yaml
 | `cutout_root` | where `prepare-data` writes cutouts and `master_df.csv` |
 | `model_root` | trained model directories and their checkpoints |
 | `output_root` | evaluation and inference results |
-| `tmp_root` | scratch space (defaults to `/tmp/vertpois`) |
+| `tmp_root` | scratch space (defaults to `/tmp/verpex`) |
 
 Every key can be overridden by an environment variable — `data_root` becomes
-`VERTPOIS_DATA_ROOT`, and so on — which takes precedence over the file. A key that is
+`VERPEX_DATA_ROOT`, and so on — which takes precedence over the file. A key that is
 needed but unset raises a `PathConfigError` naming exactly what to set.
 
 ## Preparing data
@@ -59,7 +59,7 @@ Whole scans do not fit in GPU memory, so each vertebra is cut out, brought to a 
 orientation and spacing, and written to disk once up front:
 
 ```bash
-vertpois-prepare-data --data_path $DATASET --derivatives_name derivatives --save_path $CUTOUTS
+verpex-prepare-data --data_path $DATASET --derivatives_name derivatives --save_path $CUTOUTS
 ```
 
 This writes one directory per vertebra plus a `master_df.csv` listing them. Paths in that
@@ -73,7 +73,7 @@ Experiments are described by a JSON config. `configs/example_train.json` is a wo
 starting point; fill in `master_df` and the subject splits.
 
 ```bash
-vertpois-train --config configs/example_train.json
+verpex-train --config configs/example_train.json
 ```
 
 Components are addressed by a `"type"` string resolved through an explicit registry, so a
@@ -83,22 +83,40 @@ config names a model rather than importing one:
 {"type": "PatchTransformer", "params": {"n_landmarks": 35, "patch_size": 16}}
 ```
 
-Registered names live in `vertpois.registry` and the `*_MODULES` dicts beside each family
+Registered names live in `verpex.registry` and the `*_MODULES` dicts beside each family
 of components. An unknown name raises an error listing the valid ones.
 
 Pass `--config-dir` instead to run every config in a directory in sequence, or use
-`vertpois-train-cv --n_folds 5` for cross-validation.
+`verpex-train-cv --n_folds 5` for cross-validation.
 
 ## Evaluating and predicting
 
 ```bash
-vertpois-eval  --checkpoint_path $CKPT --split test --project
-vertpois-infer --datasets $DATASET_NAME --der_msk derivatives
+verpex-eval  --checkpoint_path $CKPT --split test --project
+verpex-infer --datasets $DATASET_NAME --der_msk derivatives
 ```
 
-`vertpois-eval` writes per-POI, per-vertebra and per-subject metric CSVs plus an outlier
-list. All errors are in millimetres. `vertpois-infer` runs the full pipeline from raw
+`verpex-eval` writes per-POI, per-vertebra and per-subject metric CSVs plus an outlier
+list. All errors are in millimetres. `verpex-infer` runs the full pipeline from raw
 masks to a BIDS POI file.
+
+## Versioning
+
+The version is not written in `pyproject.toml`; it is derived from the latest git tag at
+build time by [poetry-dynamic-versioning](https://github.com/mtkennerly/poetry-dynamic-versioning),
+the same way TPTBox does it. `version = "0.0.0"` in `pyproject.toml` is only a placeholder.
+
+Release by tagging:
+
+```bash
+git tag v0.1.0 && git push --tags
+```
+
+Between tags the version reads as `0.1.0.post<n>.dev0+<sha>`. **A repository with no tags
+at all builds as `0.0.0.post<n>.dev0+<sha>`** — so tag once after the initial commit.
+
+`verpex.__version__` reads the installed package metadata, so it always agrees with the
+built version. It reports `0.0.0+unknown` when the source tree was never installed.
 
 ## Development
 
@@ -131,8 +149,9 @@ extracted from contains material that must not be published (see `CHANGES.md` an
 notes below), and `git archive` copies only tracked files, so nothing ignored comes along:
 
 ```bash
-mkdir ../vertpois && git archive clean-repo | tar -x -C ../vertpois
-cd ../vertpois && git init && git add -A && git commit -m "Initial commit"
+mkdir ../verpex && git archive clean-repo | tar -x -C ../verpex
+cd ../verpex && git init && git add -A && git commit -m "Initial commit"
+git tag v0.1.0    # dynamic versioning needs a tag; see Versioning above
 ```
 
 Before pushing anywhere public, settle `LICENSE.TODO.md` and `AUTHORS.md`.

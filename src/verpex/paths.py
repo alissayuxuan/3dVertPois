@@ -4,7 +4,7 @@ Every filesystem location this project needs is looked up through :func:`get_pat
 rather than hard-coded, so the same code runs on any machine. Values come from,
 in order of precedence:
 
-1. an environment variable, e.g. ``VERTPOIS_MODEL_ROOT``;
+1. an environment variable, e.g. ``VERPEX_MODEL_ROOT``;
 2. ``config/paths.yaml`` at the repository root (git-ignored);
 3. nothing - a missing key raises :class:`PathConfigError` naming exactly what to set.
 
@@ -30,9 +30,9 @@ KNOWN_KEYS: dict[str, str] = {
 }
 
 #: Only this key has a sensible machine-independent default.
-_DEFAULTS: dict[str, str] = {"tmp_root": "/tmp/vertpois"}
+_DEFAULTS: dict[str, str] = {"tmp_root": "/tmp/verpex"}
 
-_ENV_PREFIX = "VERTPOIS_"
+_ENV_PREFIX = "VERPEX_"
 
 
 class PathConfigError(RuntimeError):

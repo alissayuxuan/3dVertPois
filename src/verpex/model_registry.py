@@ -1,13 +1,13 @@
 """Registry of trained model checkpoints, addressable by short name.
 
 Each member records a training directory, a logger version and a checkpoint file
-name, relative to the configured ``model_root`` (see :mod:`vertpois.paths`). The
+name, relative to the configured ``model_root`` (see :mod:`verpex.paths`). The
 checkpoints themselves are not distributed with this repository.
 """
 
 from enum import Enum
 
-from vertpois.paths import get_path
+from verpex.paths import get_path
 
 
 class TrainedModelInfo(Enum):

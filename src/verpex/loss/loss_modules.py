@@ -12,7 +12,7 @@ same thing regardless of the voxel spacing the sample was acquired at.
 import torch
 from torch import nn
 
-from vertpois.geometry.surface import surface_project_coords
+from verpex.geometry.surface import surface_project_coords
 
 
 class SurfaceDistanceLoss(nn.Module):

@@ -92,7 +92,7 @@ class SubmTransition(SparseModule):
 class HeatmapSubmDenseNet(SparseModule):
     """Sparse-convolution DenseNet producing one heatmap per landmark.
 
-    The sparse counterpart of :class:`~vertpois.models.densenet.HeatmapDenseNet`,
+    The sparse counterpart of :class:`~verpex.models.densenet.HeatmapDenseNet`,
     for inputs where most voxels are background.
     """
 

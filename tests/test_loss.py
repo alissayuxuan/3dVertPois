@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from vertpois.loss.loss_modules import CompoundLoss, L1LossMasked, get_loss_fn
+from verpex.loss.loss_modules import CompoundLoss, L1LossMasked, get_loss_fn
 
 
 @pytest.mark.parametrize("name", ["L1", "L2", "WingLoss", "SD"])

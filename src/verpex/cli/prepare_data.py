@@ -14,12 +14,12 @@ from pqdm.processes import pqdm
 from TPTBox import BIDS_FILE, NII, BIDS_Global_info, Log_Type, No_Logger, Subject_Container, np_utils
 from TPTBox.core.poi import POI
 
-from vertpois.data.quality_reports import (
+from verpex.data.quality_reports import (
     convert_agg_report_to_reported_bool_dict,
     is_vert_reported,
     load_agg_report_df,
 )
-from vertpois.paths import get_path
+from verpex.paths import get_path
 
 logger = No_Logger(prefix="prepare_data")
 
@@ -427,7 +427,7 @@ def process_container(  # noqa: ANN201
                     "vertebra": vert,
                     # Written relative to save_path so the resulting master_df.csv is
                     # portable; PoiDataset resolves it against the configured
-                    # cutout_root (see vertpois.data.dataset.resolve_cutout_dir).
+                    # cutout_root (see verpex.data.dataset.resolve_cutout_dir).
                     "file_dir": os.path.join(subject, str(vert)),
                     "bad_poi_list": get_bad_poi_list(f"sub-{subject}", vert, exclusion_dict),
                 }

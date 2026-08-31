@@ -12,13 +12,13 @@ from torch.utils.data import Dataset
 from TPTBox import NII
 from TPTBox.core.poi import POI
 
-from vertpois.data.dataloading import compute_surface, get_gt_pois, pad_array_to_shape
-from vertpois.data.transforms import (  # was src.transforms.transforms
+from verpex.data.dataloading import compute_surface, get_gt_pois, pad_array_to_shape
+from verpex.data.transforms import (  # was src.transforms.transforms
     Compose,
     LandMarksRandHorizontalFlip,
     LandMarksRandHorizontalFlipNeighbor,
 )
-from vertpois.paths import get_path
+from verpex.paths import get_path
 
 
 def resolve_cutout_dir(file_dir: str) -> str:

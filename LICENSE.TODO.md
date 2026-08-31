@@ -12,7 +12,7 @@ released under terms more permissive than its source. If it carries no license a
 you need the author's explicit permission before publishing this.
 
 It also vendors code adapted from [MONAI](https://github.com/Project-MONAI/MONAI)
-(Apache-2.0) in `src/vertpois/models/densenet.py` and `subm_densenet.py`, and depends on
+(Apache-2.0) in `src/verpex/models/densenet.py` and `subm_densenet.py`, and depends on
 [TPTBox](https://github.com/Hendrik-code/TPTBox) (Apache-2.0). Apache-2.0 requires that
 you retain the attribution already present in those files' module docstrings.
 

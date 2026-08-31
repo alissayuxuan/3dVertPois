@@ -9,7 +9,7 @@ Given vertebra and subregion segmentation masks plus a trained model, this pipel
 5. runs the model and extracts the predicted landmarks;
 6. reverts the landmarks to the original space (un-pad, rescale, reorient, add the
    cutout offset - in that order, see
-   :func:`vertpois.geometry.spaces.revert_poi_to_original_space`);
+   :func:`verpex.geometry.spaces.revert_poi_to_original_space`);
 7. saves them as a BIDS POI file and removes the temporary directory.
 """
 
@@ -28,13 +28,13 @@ from TPTBox import BIDS_FILE, NII, BIDS_Global_info, np_utils, v_idx_order
 from TPTBox.core.poi import POI
 from TypeSaveArgParse import Class_to_ArgParse
 
-import vertpois.evaluation.metrics as ev
-from vertpois.data.dataloading import compute_surface, get_ct, get_subreg, get_vertseg, get_vertseg_bfile, pad_array_to_shape
-from vertpois.evaluation.metrics import combine_centroids
-from vertpois.geometry.spaces import batch_to_device, extract_space_meta, revert_poi_to_original_space
-from vertpois.geometry.surface import surface_project_coords
-from vertpois.model_registry import TrainedModelInfo
-from vertpois.paths import get_path
+import verpex.evaluation.metrics as ev
+from verpex.data.dataloading import compute_surface, get_ct, get_subreg, get_vertseg, get_vertseg_bfile, pad_array_to_shape
+from verpex.evaluation.metrics import combine_centroids
+from verpex.geometry.spaces import batch_to_device, extract_space_meta, revert_poi_to_original_space
+from verpex.geometry.surface import surface_project_coords
+from verpex.model_registry import TrainedModelInfo
+from verpex.paths import get_path
 
 poi_flip_pairs = {
     # These are the middle points, i.e. the ones that are not flipped

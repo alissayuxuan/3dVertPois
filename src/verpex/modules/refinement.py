@@ -3,10 +3,10 @@ import torch
 from monai.networks.nets.regressor import Regressor
 from torch import nn
 
-from vertpois.geometry.surface import surface_project_coords
-from vertpois.loss.loss_modules import get_loss_fn
-from vertpois.models.patch_extraction import PatchExtractor
-from vertpois.models.poi_transformer import FlexiblePoiTransformer, PoiTransformer
+from verpex.geometry.surface import surface_project_coords
+from verpex.loss.loss_modules import get_loss_fn
+from verpex.models.patch_extraction import PatchExtractor
+from verpex.models.poi_transformer import FlexiblePoiTransformer, PoiTransformer
 
 
 class RefinementModule(pl.LightningModule):
@@ -149,7 +149,7 @@ class PatchTransformer(nn.Module):
         coord_embedding_l: Width of the coordinate embedding.
         poi_embedding_l: Width of the landmark-identity embedding.
         vert_embedding_l: Width of the vertebra-identity embedding.
-        loss_fn: Name of the loss, resolved by :func:`vertpois.loss.loss_modules.get_loss_fn`.
+        loss_fn: Name of the loss, resolved by :func:`verpex.loss.loss_modules.get_loss_fn`.
         project_gt: Project ground-truth landmarks onto the surface before computing loss.
         project_pred: Project refined predictions onto the surface after refinement.
         warmup_epochs: Blend ground truth into the coarse predictions for this many
@@ -399,7 +399,7 @@ def _variant(**flags):
 
 
 #: Config ``"type"`` string -> refinement module.
-#: Consumed by :func:`vertpois.modules.poi_module.create_refinement_module`.
+#: Consumed by :func:`verpex.modules.poi_module.create_refinement_module`.
 #:
 #: The ``No*`` entries were separate classes until they were merged into
 #: :class:`PatchTransformer`; they remain valid config values.

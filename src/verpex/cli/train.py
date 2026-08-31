@@ -9,10 +9,10 @@ from pathlib import Path
 import pytorch_lightning as pl
 import torch
 
-from vertpois.modules.data_modules import create_data_module
-from vertpois.modules.poi_module import PREDICTION_MODULES
-from vertpois.registry import build
-from vertpois.training_utils import create_callbacks, save_data_module_config
+from verpex.modules.data_modules import create_data_module
+from verpex.modules.poi_module import PREDICTION_MODULES
+from verpex.registry import build
+from verpex.training_utils import create_callbacks, save_data_module_config
 
 
 def run_experiment(experiment_config) -> None:

@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from vertpois.modules.data_modules import DATA_MODULES
-from vertpois.modules.feature_extraction import FEATURE_EXTRACTION_MODULES
-from vertpois.modules.poi_module import PREDICTION_MODULES
-from vertpois.modules.refinement import REFINEMENT_MODULES
-from vertpois.registry import build, resolve
-from vertpois.training_utils import CALLBACKS
+from verpex.modules.data_modules import DATA_MODULES
+from verpex.modules.feature_extraction import FEATURE_EXTRACTION_MODULES
+from verpex.modules.poi_module import PREDICTION_MODULES
+from verpex.modules.refinement import REFINEMENT_MODULES
+from verpex.registry import build, resolve
+from verpex.training_utils import CALLBACKS
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "configs"
 CONFIGS = sorted(CONFIG_DIR.glob("*.json"))

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from vertpois import paths
-from vertpois.data.dataset import resolve_cutout_dir
+from verpex import paths
+from verpex.data.dataset import resolve_cutout_dir
 
 
 @pytest.fixture(autouse=True)
 def _cutout_root(tmp_path, monkeypatch):
-    monkeypatch.setenv("VERTPOIS_CUTOUT_ROOT", str(tmp_path / "cutouts"))
+    monkeypatch.setenv("VERPEX_CUTOUT_ROOT", str(tmp_path / "cutouts"))
     paths.reset_cache()
     yield tmp_path / "cutouts"
     paths.reset_cache()

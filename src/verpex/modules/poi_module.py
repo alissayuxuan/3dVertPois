@@ -18,9 +18,9 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 
-from vertpois.modules.feature_extraction import FEATURE_EXTRACTION_MODULES
-from vertpois.modules.refinement import REFINEMENT_MODULES
-from vertpois.registry import build
+from verpex.modules.feature_extraction import FEATURE_EXTRACTION_MODULES
+from verpex.modules.refinement import REFINEMENT_MODULES
+from verpex.registry import build
 
 
 class PoiPredictionModule(pl.LightningModule):

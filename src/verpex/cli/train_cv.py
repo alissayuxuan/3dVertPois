@@ -8,10 +8,10 @@ import pytorch_lightning as pl
 import torch
 from sklearn.model_selection import KFold
 
-from vertpois.modules.data_modules import create_data_module
-from vertpois.modules.poi_module import PREDICTION_MODULES
-from vertpois.registry import build
-from vertpois.training_utils import create_callbacks, save_data_module_config
+from verpex.modules.data_modules import create_data_module
+from verpex.modules.poi_module import PREDICTION_MODULES
+from verpex.registry import build
+from verpex.training_utils import create_callbacks, save_data_module_config
 
 
 def run_cv(n_folds, experiment_config, save_predictions=False, poi_file_ending=None) -> None:

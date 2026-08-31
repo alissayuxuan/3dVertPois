@@ -1,11 +1,13 @@
 [tool.poetry]
-name = "vertpois"
-version = "0.1.0"
+name = "verpex"
+# Placeholder: the real version is derived from the latest git tag at build time by
+# poetry-dynamic-versioning (see [tool.poetry-dynamic-versioning] below).
+version = "0.0.0"
 description = "Deep-learning prediction of anatomical points-of-interest (POIs) on vertebrae from CT/MRI spine segmentations."
 authors = ["See AUTHORS.md"]
 license = "Apache-2.0"
 readme = "README.md"
-packages = [{ include = "vertpois", from = "src" }]
+packages = [{ include = "verpex", from = "src" }]
 
 [tool.poetry.dependencies]
 python = "^3.10 || ^3.11 || ^3.12"
@@ -29,6 +31,7 @@ tensorboard = "*"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0"
+poetry-dynamic-versioning = ">=1.0.0,<2.0.0"
 ruff = ">=0.11"
 pre-commit = "*"
 coverage = ">=7.0"
@@ -39,15 +42,18 @@ coverage = ">=7.0"
 spconv-cu120 = "*"
 
 [tool.poetry.scripts]
-vertpois-prepare-data = "vertpois.cli.prepare_data:main"
-vertpois-train = "vertpois.cli.train:main"
-vertpois-train-cv = "vertpois.cli.train_cv:main"
-vertpois-eval = "vertpois.evaluation.metrics:main"
-vertpois-infer = "vertpois.cli.infer:main"
+verpex-prepare-data = "verpex.cli.prepare_data:main"
+verpex-train = "verpex.cli.train:main"
+verpex-train-cv = "verpex.cli.train_cv:main"
+verpex-eval = "verpex.evaluation.metrics:main"
+verpex-infer = "verpex.cli.infer:main"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
+
+[tool.poetry-dynamic-versioning]
+enable = true
 
 [tool.ruff]
 exclude = [".git", ".ruff_cache", ".venv", "venv", "build", "dist", "__pypackages__", "*.ipynb"]
@@ -99,7 +105,7 @@ convention = "google"
 # Largely a vendored copy of MONAI's affine transforms, kept close to upstream so it
 # stays diffable against it. The project's own transforms are at the top of the file
 # and are documented; MONAI's docstring and typing style is left as-is.
-"src/vertpois/data/transforms.py" = [
+"src/verpex/data/transforms.py" = [
     "D101", "D102", "D103", "D205", "D415", "ANN201", "ARG002", "PGH003", "RUF012",
     "N803", "N806", "UP035", "UP045", "RUF005", "B028", "C408",
 ]

@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 # from BIDS import BIDS_Global_info
 from TPTBox import BIDS_Global_info
 
-from vertpois.data.dataloading import (
+from verpex.data.dataloading import (
     get_ct,
     get_files,
     get_gruber_poi,
@@ -26,9 +26,9 @@ from vertpois.data.dataloading import (
     get_vertseg,
     process_container,
 )
-from vertpois.data.dataset import GruberDataset, GruberNeighborDataset, PoiDataset
-from vertpois.data.transforms import create_transform
-from vertpois.registry import build
+from verpex.data.dataset import GruberDataset, GruberNeighborDataset, PoiDataset
+from verpex.data.transforms import create_transform
+from verpex.registry import build
 
 
 def _seed_worker(worker_id):

@@ -13,13 +13,13 @@ import pkgutil
 import sys
 import traceback
 
-import vertpois
+import verpex
 
 
 def main() -> int:
-    """Import every submodule of :mod:`vertpois`. Returns a process exit code."""
+    """Import every submodule of :mod:`verpex`. Returns a process exit code."""
     failures: list[tuple[str, str]] = []
-    names = [name for _, name, _ in pkgutil.walk_packages(vertpois.__path__, prefix="vertpois.")]
+    names = [name for _, name, _ in pkgutil.walk_packages(verpex.__path__, prefix="verpex.")]
 
     for name in sorted(names):
         try:

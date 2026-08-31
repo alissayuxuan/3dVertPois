@@ -14,7 +14,7 @@ import pytest
 import torch
 from TPTBox import POI
 
-from vertpois.geometry.spaces import SpaceMeta, batch_to_device, extract_space_meta, revert_poi_to_original_space
+from verpex.geometry.spaces import SpaceMeta, batch_to_device, extract_space_meta, revert_poi_to_original_space
 
 
 def make_poi(centroids, zoom=(1.0, 1.0, 1.0), shape=(32, 32, 32)):
