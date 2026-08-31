@@ -321,7 +321,7 @@ call sites and were removed — about 790 lines in total.
 
 ### Out-of-scope code
 
-Dropped from the public tree (still present on the `claude_redo` branch): the POI
+Dropped from the public tree (still present in the internal repository): the POI
 correction/report tooling, VerSe and myeloma dataset scripts, MICCAI study scripts,
 notebooks, and the personal working directories.
 

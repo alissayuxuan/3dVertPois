@@ -88,9 +88,14 @@ htmlcov/
 *.log
 
 # ---------------------------------------------------------------------------
-# Editors / OS
+# Editors / OS / assistant tooling
 # ---------------------------------------------------------------------------
 .vscode/
+.claude/
+CLAUDE.md
+.cursor/
+.aider*
+.github/copilot-instructions.md
 .idea/
 .ipynb_checkpoints
 .DS_Store
