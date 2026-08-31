@@ -1,3 +1,5 @@
+"""Train a POI prediction model from a JSON experiment config."""
+
 import argparse
 import json
 import os
@@ -13,7 +15,16 @@ from vertpois.registry import build
 from vertpois.training_utils import create_callbacks, save_data_module_config
 
 
-def run_experiment(experiment_config):
+def run_experiment(experiment_config) -> None:
+    """Train one model from a JSON experiment config.
+
+    Seeds every RNG and enables deterministic algorithms, so two runs of the same
+    config produce the same weights.
+
+    Args:
+        experiment_config: A parsed experiment config, with ``data_module_config``,
+            ``module_config``, ``callbacks_config`` and ``trainer_config`` keys.
+    """
     pl.seed_everything(42, workers=True)
     torch.set_float32_matmul_precision("high")
     # warn_only=True would let 3D CUDA convs run non-deterministically.

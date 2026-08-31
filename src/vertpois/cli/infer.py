@@ -1,15 +1,16 @@
-"""Inference Pipeline:
-Given a path to a vert and subreg segmentation mask, model and data module, this pipeline will:
-1. Load the vert and subreg mask
-2. Create vertebra-wise cutouts and a master_df in a temporary directory
-3. Reorient and rescale the cutouts to (1,1,1) mm resolution
-4. Pad the cutouts to a fixed size
-5. Arrange the cutouts into a batch
-6. Pass the batch through the model
-7. Extract the predicted landmarks from the model output
-8. Revert the predicted landmarks to the original space (remove padding, rescale, reorient, remove margin, add offset)
-9. Save the predicted landmarks to a BIDS POI file (.json)
-10. Delete the temporary directory
+"""End-to-end POI inference from segmentation masks.
+
+Given vertebra and subregion segmentation masks plus a trained model, this pipeline:
+
+1. loads the masks;
+2. cuts out each vertebra and builds a master_df in a temporary directory;
+3. reorients and rescales the cutouts to 1 mm isotropic;
+4. pads them to a fixed size and arranges them into a batch;
+5. runs the model and extracts the predicted landmarks;
+6. reverts the landmarks to the original space (un-pad, rescale, reorient, add the
+   cutout offset - in that order, see
+   :func:`vertpois.geometry.spaces.revert_poi_to_original_space`);
+7. saves them as a BIDS POI file and removes the temporary directory.
 """
 
 import json
@@ -257,7 +258,15 @@ class GruberInferenceDataset(Dataset):
         }
 
 
-def safe_collate(batch):
+def safe_collate(batch) -> dict | None:
+    """Collate a batch, dropping samples the dataset returned as None.
+
+    Args:
+        batch: Samples from the dataset, some of which may be None.
+
+    Returns:
+        The collated batch, or None if every sample was dropped.
+    """
     batch = [b for b in batch if b is not None]
     if len(batch) == 0:
         return None
@@ -273,7 +282,7 @@ def _load_ct(container, split_info) -> NII:
     return ct_query.candidates[0].open_nii()
 
 
-def preprocess_segmentation_masks(
+def preprocess_segmentation_masks(  # noqa: ANN201
     subject,
     vert_msk: NII,
     input_data: NII | None,
@@ -406,7 +415,7 @@ def preprocess_segmentation_masks(
     return master_df, temp_dir
 
 
-def create_prediction_poi_files(
+def create_prediction_poi_files(  # noqa: ANN201
     subject,
     vert_msk_ref: BIDS_FILE,
     dm_path,
@@ -420,12 +429,14 @@ def create_prediction_poi_files(
     vert_msk_override: NII | None = None,
     input_data_override: NII | None = None,
 ):
-    """The *_override arguments let a caller supply masks that are not on disk, for datasets
-    whose masks have to be built at read time (see src/myelom/run_inference.py). When they
-    are None this behaves exactly as before and everything is read via vert_msk_ref and
-    the BIDS container.
+    """Run the model over one subject and write its predicted POI file.
+
+    The ``*_override`` arguments let a caller supply masks that are not on disk, for
+    datasets whose masks have to be built at read time. When they are None,
+    everything is read through ``vert_msk_ref`` and the BIDS container.
     """
-    dm_params = json.load(open(dm_path))
+    with open(dm_path, encoding="utf-8") as handle:
+        dm_params = json.load(handle)
     print(dm_params)
     input_shape = dm_params["input_shape"]
     input_data_type = dm_params["input_data_type"]
@@ -436,7 +447,7 @@ def create_prediction_poi_files(
 
     vert_msk = vert_msk_ref.open_nii() if vert_msk_override is None else vert_msk_override
     vert_list = [v for v in vert_list if v in vert_msk.unique()]
-    split_info = vert_msk_ref.info["split"] if "split" in vert_msk_ref.info else None
+    split_info = vert_msk_ref.info.get("split")
 
     def _from_container(kind: str) -> NII:
         if input_data_override is not None:
@@ -493,12 +504,12 @@ def create_prediction_poi_files(
         if batch is None:
             continue
 
-        batch = batch_to_device(batch, model.device)
+        batch = batch_to_device(batch, model.device)  # noqa: PLW2901
         if inference_flipped:
             flip_axis = input_data.get_axis("L") + 2
             batch["input"] = torch.flip(batch["input"], dims=[flip_axis])
 
-        batch = model(batch)
+        batch = model(batch)  # noqa: PLW2901
 
         refined_preds_batch = batch["refined_preds"]
         if inference_flipped:
@@ -592,7 +603,7 @@ def create_prediction_poi_files(
             }
         )
 
-    sub, pois = combine_centroids(partial_centroids)
+    _sub, pois = combine_centroids(partial_centroids)
 
     pois.save(poi_out)
     pois.to_global().save_mrk(poi_global_out, split_by_region=True)
@@ -603,6 +614,8 @@ def create_prediction_poi_files(
 
 @dataclass
 class InferenceConfig(Class_to_ArgParse):
+    """Command-line configuration for :func:`main`."""
+
     datasets: list[str] = field(
         default_factory=lambda: [
             "dataset-verse19training_1mmiso",

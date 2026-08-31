@@ -1,3 +1,5 @@
+"""Train a POI prediction model with k-fold cross-validation."""
+
 import argparse
 import json
 import os
@@ -12,7 +14,12 @@ from vertpois.registry import build
 from vertpois.training_utils import create_callbacks, save_data_module_config
 
 
-def run_cv(n_folds, experiment_config, save_predictions=False, poi_file_ending=None):
+def run_cv(n_folds, experiment_config, save_predictions=False, poi_file_ending=None) -> None:
+    """Train one model per cross-validation fold.
+
+    The configured train and validation subject lists are merged and re-split into
+    ``n_folds`` random folds; each fold trains into its own ``fold_{i}`` directory.
+    """
     # If the predictions are saved the file ending must be set
     if save_predictions and not poi_file_ending:
         raise ValueError("If predictions are saved the poi file ending must be set")
