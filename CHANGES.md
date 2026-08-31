@@ -111,6 +111,27 @@ raises `NotImplementedError` with an explanation. Restoring the feature means
 re-deriving it against the current zoom/offset conventions in
 `vertpois.geometry.spaces.revert_poi_to_original_space`.
 
+### `L1LossMasked` and `L2LossMasked` crashed without a mask
+
+Both assigned the reduced loss only inside `if mask is not None:` and then returned
+it unconditionally, so any call that omitted the optional `mask` raised
+`UnboundLocalError`.
+
+**Now:** an unmasked call returns the mean over all landmarks. No effect on the
+training path, which always passes a mask.
+
+### A stale `.gitignore` pattern hid the `data` package
+
+The initial `.gitignore` had a bare `data/` entry meant for datasets. Git patterns
+without a leading slash match at any depth, so it also matched
+`src/vertpois/data/` — the package holding `dataset.py`, `transforms.py` and
+`dataloading.py`. Those files stayed tracked only because they predated the rule, but
+ruff (which honours `.gitignore`) silently skipped 2,600 lines of source, and any new
+file added there would not have been committed.
+
+**Now:** every dataset-shaped pattern is anchored to the repository root (`/data/`,
+`/results/`, `/logs/`, …). Worth knowing about if you copy the `.gitignore` elsewhere.
+
 ### Unused surface-projection variants
 
 `surface_project_coords_sdf_continuous`, `surface_project_coords_center_raycast`,
@@ -118,6 +139,17 @@ re-deriving it against the current zoom/offset conventions in
 sites (361 lines). Removed, along with `utils/raycast_torch.py`, whose only consumer
 was the raycast variant. `surface_project_coords` and the two marching-cubes variants
 are unchanged.
+
+### Other uncalled code
+
+`utils/misc.py` also held eleven uncalled helpers (`get_dd_ctd`, `get_ctd`,
+`tensor_to_ctd`, `one_hot_encode_batch`, `fill_holes_3d`, …) and a `__main__` demo
+block calling an undefined `surface_project_coords_sdf`; `dataloading.py` held a
+duplicate heatmap-decoding chain (`heatmaps_to_coords`, `create_coordinate_tensor`,
+`get_density`, `embed_patch`, `get_gt_hm*`) shadowing the one in
+`vertpois.geometry.heatmaps`, plus `compute_zoom`, `one_hot_encode_3d`,
+`get_subreg_com`, `get_implants_poi` and `get_gruber_registration_poi`. All had zero
+call sites and were removed — about 790 lines in total.
 
 ### Out-of-scope code
 

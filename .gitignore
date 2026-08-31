@@ -17,20 +17,23 @@ config/paths.yaml
 *.mrk.json
 *.dcm
 *.nrrd
-data/
-datasets/
-cutouts/
-cutout-folder/
-trainings/
-predictions/
-results/
-logs/
-lightning_logs/
-runs/
-k_fold/
-data_analysis/
-experiments/
 master_df*.csv
+# Anchored to the repository root with a leading slash. Without it, a bare
+# `data/` would also match the `src/vertpois/data/` package directory, hiding
+# real source files from git and from tools that honour .gitignore (ruff).
+/data/
+/datasets/
+/cutouts/
+/cutout-folder/
+/trainings/
+/predictions/
+/results/
+/logs/
+/lightning_logs/
+/runs/
+/k_fold/
+/data_analysis/
+/experiments/
 
 # Legacy research tree: superseded directories that may still exist on disk in a
 # working checkout but are not part of the package. Never commit them.

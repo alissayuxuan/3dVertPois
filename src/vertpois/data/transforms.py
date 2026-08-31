@@ -1,7 +1,20 @@
+"""Data augmentation transforms for landmark-annotated volumes.
+
+The project's own transforms are at the top of this module: they apply an
+augmentation to the image *and* carry the landmark coordinates through the same
+transform, which the stock MONAI transforms do not do.
+
+Below the marked divider is a vendored copy of MONAI's affine-transform internals,
+adapted so the sampled affine can be recovered and applied to the landmarks. It is
+kept close to upstream so it stays easy to diff against MONAI; it is excluded from
+this project's docstring lint for that reason (see per-file-ignores in pyproject.toml).
+"""
+
 from __future__ import annotations
 
 import warnings
-from typing import Any, Optional, Sequence, Tuple, Union
+from collections.abc import Sequence
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -200,7 +213,13 @@ cupy, _ = optional_import("cupy")
 cupy_ndi, _ = optional_import("cupyx.scipy.ndimage")
 np_ndi, _ = optional_import("scipy.ndimage")
 
-RandRange = Optional[Union[Sequence[Union[Tuple[float, float], float]], float]]
+RandRange = Optional[Union[Sequence[Union[tuple[float, float], float]], float]]
+
+
+# ---------------------------------------------------------------------------
+# Vendored from MONAI (Apache-2.0), adapted to expose the sampled affine.
+# https://github.com/Project-MONAI/MONAI  -  keep close to upstream.
+# ---------------------------------------------------------------------------
 
 
 class Resample(Transform):
@@ -263,8 +282,7 @@ class Resample(Transform):
         dtype: DtypeLike = None,
         align_corners: bool | None = None,
     ) -> torch.Tensor:
-        """
-        Args:
+        """Args:
             img: shape must be (num_channels, H, W[, D]).
             grid: shape must be (3, H, W) for 2D or (4, H, W, D) for 3D.
                 if ``norm_coords`` is True, the grid values must be in `[-(size-1)/2, (size-1)/2]`.
@@ -292,7 +310,7 @@ class Resample(Transform):
             align_corners: Defaults to ``self.align_corners``.
                 See also: https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html
 
-        See also:
+        See Also:
             :py:const:`monai.config.USE_COMPILED`
         """
         img = convert_to_tensor(img, track_meta=get_track_meta())
@@ -436,6 +454,7 @@ class AffineGrid(LazyTransform):
             lazy: a flag to indicate whether this transform should execute lazily or not
                 during this call. Setting this to False or True overrides the ``lazy`` flag set
                 during initialization for this call. Defaults to None.
+
         Raises:
             ValueError: When ``grid=None`` and ``spatial_size=None``. Incompatible values.
         """
@@ -506,8 +525,7 @@ class RandAffineGrid(Randomizable, LazyTransform):
         dtype: DtypeLike = np.float32,
         lazy: bool = False,
     ) -> None:
-        """
-        Args:
+        """Args:
             rotate_range: angle range in radians. If element `i` is a pair of (min, max) values, then
                 `uniform[-rotate_range[i][0], rotate_range[i][1])` will be used to generate the rotation parameter
                 for the `i`th spatial dimension. If not, `uniform[-rotate_range[i], rotate_range[i])` will be used.
@@ -536,7 +554,7 @@ class RandAffineGrid(Randomizable, LazyTransform):
             lazy: a flag to indicate whether this transform should execute lazily or not.
                 Defaults to False
 
-        See also:
+        See Also:
             - :py:meth:`monai.transforms.utils.create_rotate`
             - :py:meth:`monai.transforms.utils.create_shear`
             - :py:meth:`monai.transforms.utils.create_translate`
@@ -582,8 +600,7 @@ class RandAffineGrid(Randomizable, LazyTransform):
         randomize: bool = True,
         lazy: bool | None = None,
     ) -> torch.Tensor:
-        """
-        Args:
+        """Args:
             spatial_size: output grid size.
             grid: grid to be transformed. Shape must be (3, H, W) for 2D or (4, H, W, D) for 3D.
             randomize: boolean as to whether the grid parameters governing the grid should be randomized.
@@ -619,8 +636,7 @@ class RandAffineGrid(Randomizable, LazyTransform):
 
 
 class Affine(InvertibleTransform, LazyTransform):
-    """
-    Transform ``img`` given the affine parameters.
+    """Transform ``img`` given the affine parameters.
     A tutorial is available: https://github.com/Project-MONAI/tutorials/blob/0.6.0/modules/transforms_demo_2d.ipynb.
 
     This transform is capable of lazy execution. See the :ref:`Lazy Resampling topic<lazy_resampling>`
@@ -739,29 +755,28 @@ class Affine(InvertibleTransform, LazyTransform):
         padding_mode: str | None = None,
         lazy: bool | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, NdarrayOrTensor]:
-        """
-        Args:
-            img: shape must be (num_channels, H, W[, D]),
-            spatial_size: output image spatial size.
-                if `spatial_size` and `self.spatial_size` are not defined, or smaller than 1,
-                the transform will use the spatial size of `img`.
-                if `img` has two spatial dimensions, `spatial_size` should have 2 elements [h, w].
-                if `img` has three spatial dimensions, `spatial_size` should have 3 elements [h, w, d].
-            mode: {``"bilinear"``, ``"nearest"``} or spline interpolation order 0-5 (integers).
-                Interpolation mode to calculate output values. Defaults to ``self.mode``.
-                See also: https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html
-                When it's an integer, the numpy (cpu tensor)/cupy (cuda tensor) backends will be used
-                and the value represents the order of the spline interpolation.
-                See also: https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.map_coordinates.html
-            padding_mode: {``"zeros"``, ``"border"``, ``"reflection"``}
-                Padding mode for outside grid values. Defaults to ``self.padding_mode``.
-                See also: https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html
-                When `mode` is an integer, using numpy/cupy backends, this argument accepts
-                {'reflect', 'grid-mirror', 'constant', 'grid-constant', 'nearest', 'mirror', 'grid-wrap', 'wrap'}.
-                See also: https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.map_coordinates.html
-            lazy: a flag to indicate whether this transform should execute lazily or not
-                during this call. Setting this to False or True overrides the ``lazy`` flag set
-                during initialization for this call. Defaults to None.
+        """Args:
+        img: shape must be (num_channels, H, W[, D]),
+        spatial_size: output image spatial size.
+            if `spatial_size` and `self.spatial_size` are not defined, or smaller than 1,
+            the transform will use the spatial size of `img`.
+            if `img` has two spatial dimensions, `spatial_size` should have 2 elements [h, w].
+            if `img` has three spatial dimensions, `spatial_size` should have 3 elements [h, w, d].
+        mode: {``"bilinear"``, ``"nearest"``} or spline interpolation order 0-5 (integers).
+            Interpolation mode to calculate output values. Defaults to ``self.mode``.
+            See also: https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html
+            When it's an integer, the numpy (cpu tensor)/cupy (cuda tensor) backends will be used
+            and the value represents the order of the spline interpolation.
+            See also: https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.map_coordinates.html
+        padding_mode: {``"zeros"``, ``"border"``, ``"reflection"``}
+            Padding mode for outside grid values. Defaults to ``self.padding_mode``.
+            See also: https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html
+            When `mode` is an integer, using numpy/cupy backends, this argument accepts
+            {'reflect', 'grid-mirror', 'constant', 'grid-constant', 'nearest', 'mirror', 'grid-wrap', 'wrap'}.
+            See also: https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.map_coordinates.html
+        lazy: a flag to indicate whether this transform should execute lazily or not
+            during this call. Setting this to False or True overrides the ``lazy`` flag set
+            during initialization for this call. Defaults to None.
         """
         img = convert_to_tensor(img, track_meta=get_track_meta())
         img_size = img.peek_pending_shape() if isinstance(img, MetaTensor) else img.shape[1:]
@@ -822,8 +837,7 @@ class Affine(InvertibleTransform, LazyTransform):
 
 
 class RandAffine(RandomizableTransform, InvertibleTransform, LazyTransform):
-    """
-    Random affine transform.
+    """Random affine transform.
     A tutorial is available: https://github.com/Project-MONAI/tutorials/blob/0.6.0/modules/transforms_demo_2d.ipynb.
 
     This transform is capable of lazy execution. See the :ref:`Lazy Resampling topic<lazy_resampling>`
@@ -846,8 +860,7 @@ class RandAffine(RandomizableTransform, InvertibleTransform, LazyTransform):
         device: torch.device | None = None,
         lazy: bool = False,
     ) -> None:
-        """
-        Args:
+        """Args:
             prob: probability of returning a randomized affine grid.
                 defaults to 0.1, with 10% chance returns a randomized grid.
             rotate_range: angle range in radians. If element `i` is a pair of (min, max) values, then
@@ -897,7 +910,7 @@ class RandAffine(RandomizableTransform, InvertibleTransform, LazyTransform):
             lazy: a flag to indicate whether this transform should execute lazily or not.
                 Defaults to False
 
-        See also:
+        See Also:
             - :py:class:`RandAffineGrid` for the random affine parameters configurations.
             - :py:class:`Affine` for the affine transformation parameters configurations.
 
@@ -927,7 +940,8 @@ class RandAffine(RandomizableTransform, InvertibleTransform, LazyTransform):
 
     def _init_identity_cache(self, lazy: bool):
         """Create cache of the identity grid if cache_grid=True and spatial_size is
-        known."""
+        known.
+        """
         if lazy:
             return None
         if self.spatial_size is None:
@@ -988,31 +1002,30 @@ class RandAffine(RandomizableTransform, InvertibleTransform, LazyTransform):
         grid=None,
         lazy: bool | None = None,
     ) -> torch.Tensor:
-        """
-        Args:
-            img: shape must be (num_channels, H, W[, D]),
-            spatial_size: output image spatial size.
-                if `spatial_size` and `self.spatial_size` are not defined, or smaller than 1,
-                the transform will use the spatial size of `img`.
-                if `img` has two spatial dimensions, `spatial_size` should have 2 elements [h, w].
-                if `img` has three spatial dimensions, `spatial_size` should have 3 elements [h, w, d].
-            mode: {``"bilinear"``, ``"nearest"``} or spline interpolation order 0-5 (integers).
-                Interpolation mode to calculate output values. Defaults to ``self.mode``.
-                See also: https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html
-                When it's an integer, the numpy (cpu tensor)/cupy (cuda tensor) backends will be used
-                and the value represents the order of the spline interpolation.
-                See also: https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.map_coordinates.html
-            padding_mode: {``"zeros"``, ``"border"``, ``"reflection"``}
-                Padding mode for outside grid values. Defaults to ``self.padding_mode``.
-                See also: https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html
-                When `mode` is an integer, using numpy/cupy backends, this argument accepts
-                {'reflect', 'grid-mirror', 'constant', 'grid-constant', 'nearest', 'mirror', 'grid-wrap', 'wrap'}.
-                See also: https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.map_coordinates.html
-            randomize: whether to execute `randomize()` function first, default to True.
-            grid: precomputed grid to be used (mainly to accelerate `RandAffined`).
-            lazy: a flag to indicate whether this transform should execute lazily or not
-                during this call. Setting this to False or True overrides the ``lazy`` flag set
-                during initialization for this call. Defaults to None.
+        """Args:
+        img: shape must be (num_channels, H, W[, D]),
+        spatial_size: output image spatial size.
+            if `spatial_size` and `self.spatial_size` are not defined, or smaller than 1,
+            the transform will use the spatial size of `img`.
+            if `img` has two spatial dimensions, `spatial_size` should have 2 elements [h, w].
+            if `img` has three spatial dimensions, `spatial_size` should have 3 elements [h, w, d].
+        mode: {``"bilinear"``, ``"nearest"``} or spline interpolation order 0-5 (integers).
+            Interpolation mode to calculate output values. Defaults to ``self.mode``.
+            See also: https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html
+            When it's an integer, the numpy (cpu tensor)/cupy (cuda tensor) backends will be used
+            and the value represents the order of the spline interpolation.
+            See also: https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.map_coordinates.html
+        padding_mode: {``"zeros"``, ``"border"``, ``"reflection"``}
+            Padding mode for outside grid values. Defaults to ``self.padding_mode``.
+            See also: https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html
+            When `mode` is an integer, using numpy/cupy backends, this argument accepts
+            {'reflect', 'grid-mirror', 'constant', 'grid-constant', 'nearest', 'mirror', 'grid-wrap', 'wrap'}.
+            See also: https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.map_coordinates.html
+        randomize: whether to execute `randomize()` function first, default to True.
+        grid: precomputed grid to be used (mainly to accelerate `RandAffined`).
+        lazy: a flag to indicate whether this transform should execute lazily or not
+            during this call. Setting this to False or True overrides the ``lazy`` flag set
+            during initialization for this call. Defaults to None.
         """
         if randomize:
             self.randomize()

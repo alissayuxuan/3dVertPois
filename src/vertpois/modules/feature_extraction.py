@@ -359,7 +359,6 @@ class SMDenseNet(nn.Module):
         dropout_prob: float = 0.0,
         **kwargs,  # noqa: ARG002 - absorbs config keys that other coarse modules use
     ):
-
         super().__init__()
 
         self.loss_fn = get_loss_fn(loss_fn)

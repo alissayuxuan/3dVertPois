@@ -18,7 +18,7 @@ CONFIG_DIR = Path(__file__).resolve().parents[1] / "configs"
 CONFIGS = sorted(CONFIG_DIR.glob("*.json"))
 
 #: Guards against a leak reappearing in a committed config.
-FORBIDDEN = ("/DATA/", "/home/", "/media/", "/mnt/", "WS-")
+FORBIDDEN = ("/DATA/", "/home/", "/media/", "/mnt/", "WS-")  # noqa: private-data
 
 
 def test_at_least_one_example_config_is_shipped():

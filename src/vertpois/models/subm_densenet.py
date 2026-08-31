@@ -197,7 +197,6 @@ class SubmDenseNet(SparseModule):
         bn_size: int = 4,
         dropout_prob: float = 0.0,
     ) -> None:
-
         super().__init__()
         self.n_landmarks = n_landmarks
         self.feature_l = feature_l

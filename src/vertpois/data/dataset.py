@@ -1,15 +1,23 @@
-import ast
-from pathlib import Path
-import os
+"""Datasets serving per-vertebra cutouts and their landmark annotations."""
 
-import torch
+import ast
+import os
+from pathlib import Path
+
 import numpy as np
+import torch
+from torch.utils.data import Dataset
 
 # from BIDS import NII, POI
 from TPTBox import NII
 from TPTBox.core.poi import POI
-from torch.utils.data import Dataset
 
+from vertpois.data.dataloading import compute_surface, get_gt_pois, pad_array_to_shape
+from vertpois.data.transforms import (  # was src.transforms.transforms
+    Compose,
+    LandMarksRandHorizontalFlip,
+    LandMarksRandHorizontalFlipNeighbor,
+)
 from vertpois.paths import get_path
 
 
@@ -32,11 +40,12 @@ def resolve_cutout_dir(file_dir: str) -> str:
     return str(get_path("cutout_root") / path)
 
 
-from vertpois.data.transforms import Compose, LandMarksRandHorizontalFlip, LandMarksRandHorizontalFlipNeighbor  # was src.transforms.transforms
-from vertpois.data.dataloading import compute_surface, get_gt_pois, pad_array_to_shape
-
-
 class PoiDataset(Dataset):
+    """Base dataset: one item per vertebra cutout listed in ``master_df``.
+
+    Loads the cutout's image and masks, extracts the ground-truth landmarks, and
+    builds the loss mask that excludes landmarks flagged as bad annotations.
+    """
 
     def __init__(
         self,
@@ -55,7 +64,6 @@ class PoiDataset(Dataset):
         show_neighbors=False,
         neighbor_drop_prob=0.05,
     ):
-
         # If master_df has a column use_sample, filter on it
         if "use_sample" in master_df.columns:
             master_df = master_df[master_df["use_sample"]]
@@ -80,7 +88,18 @@ class PoiDataset(Dataset):
     def __len__(self):
         return len(self.master_df)
 
-    def preprocess_nifti(self, nii_path, is_img=False, verbose=False):
+    def preprocess_nifti(self, nii_path, is_img=False, verbose=False):  # noqa: ANN201
+        """Load a cutout NIfTI and bring it to the dataset's orientation and spacing.
+
+        Args:
+            nii_path: Path to the cutout file.
+            is_img: True for intensity images, False for segmentation masks, which
+                selects nearest-neighbour rather than linear resampling.
+            verbose: Print the path being loaded.
+
+        Returns:
+            The loaded and resampled array.
+        """
         if verbose:
             print(f"Loading from {nii_path}")
         nii = NII.load(nii_path, seg=not is_img)
@@ -183,9 +202,7 @@ class PoiDataset(Dataset):
                 verbose=False,
             )
             ct, _ = self.preprocess_nifti(ct_path, is_img=True)
-            data_dict["input"] = torch.cat(
-                [surface_msk * mask, ct * mask], dim=0
-            )  # (2, H, W, D)
+            data_dict["input"] = torch.cat([surface_msk * mask, ct * mask], dim=0)  # (2, H, W, D)
         else:
             raise ValueError(f"Unknown input data type: {self.input_data_type}")
 
@@ -299,6 +316,7 @@ class PoiDataset(Dataset):
 
 
 class GruberDataset(PoiDataset):
+    """Single-vertebra cutout dataset."""
 
     def __init__(
         self,
@@ -320,42 +338,41 @@ class GruberDataset(PoiDataset):
             master_df,
             poi_indices=(
                 include_poi_list
-                if include_poi_list
-                else (
+                or (
                     [
                         81,
-                        82,  #
+                        82,
                         83,
                         84,
                         85,
                         86,
                         87,
                         88,
-                        89,  #
+                        89,
                         101,
                         102,
                         103,
                         104,
-                        105,  #
-                        106,  #
-                        107,  #
-                        108,  #
+                        105,
+                        106,
+                        107,
+                        108,
                         109,
                         110,
                         111,
                         112,
-                        113,  #
-                        114,  #
-                        115,  #
-                        116,  #
+                        113,
+                        114,
+                        115,
+                        116,
                         117,
                         118,
                         119,
                         120,
-                        121,  #
-                        122,  #
-                        123,  #
-                        124,  #
+                        121,
+                        122,
+                        123,
+                        124,
                         125,
                         127,
                         41,
@@ -372,38 +389,38 @@ class GruberDataset(PoiDataset):
                     if include_com
                     else [
                         81,
-                        82,  #
+                        82,
                         83,
                         84,
                         85,
                         86,
                         87,
                         88,
-                        89,  #
+                        89,
                         101,
                         102,
                         103,
                         104,
-                        105,  #
-                        106,  #
-                        107,  #
-                        108,  #
+                        105,
+                        106,
+                        107,
+                        108,
                         109,
                         110,
                         111,
                         112,
-                        113,  #
-                        114,  #
-                        115,  #
-                        116,  #
+                        113,
+                        114,
+                        115,
+                        116,
                         117,
                         118,
                         119,
                         120,
-                        121,  #
-                        122,  #
-                        123,  #
-                        124,  #
+                        121,
+                        122,
+                        123,
+                        124,
                         125,
                         127,
                     ]
@@ -411,8 +428,7 @@ class GruberDataset(PoiDataset):
             ),
             include_vert_list=(
                 include_vert_list
-                if include_vert_list
-                else [
+                or [
                     2,
                     3,
                     4,
@@ -446,10 +462,10 @@ class GruberDataset(PoiDataset):
                 103: 103,
                 102: 102,
                 104: 104,
-                105: 105,  #
-                106: 106,  #
-                107: 107,  #
-                108: 108,  #
+                105: 105,
+                106: 106,
+                107: 107,
+                108: 108,
                 125: 125,
                 127: 127,
                 # Flipped left to right
@@ -461,10 +477,10 @@ class GruberDataset(PoiDataset):
                 111: 119,
                 110: 118,
                 112: 120,
-                113: 121,  #
-                114: 122,  #
-                115: 123,  #
-                116: 124,  #
+                113: 121,
+                114: 122,
+                115: 123,
+                116: 124,
                 # Flipped right to left
                 82: 83,
                 85: 84,
@@ -506,6 +522,7 @@ class GruberDataset(PoiDataset):
 
 
 class PoiNeighborDataset(Dataset):
+    """Base dataset that serves each vertebra together with its neighbours."""
 
     def __init__(
         self,
@@ -523,7 +540,6 @@ class PoiNeighborDataset(Dataset):
         iterations=1,
         neighbor_drop_prob=0.05,
     ):
-
         # If master_df has a column use_sample, filter on it
         if "use_sample" in master_df.columns:
             master_df = master_df[master_df["use_sample"]]
@@ -548,9 +564,7 @@ class PoiNeighborDataset(Dataset):
         return len(self.master_df)
 
     def _process_single_vert(self, poi, subject, vertebra):
-        """
-        Processes a single vertebra and returns its POIs and loss mask.
-        """
+        """Processes a single vertebra and returns its POIs and loss mask."""
         pois, missing_pois = get_gt_pois(poi, vertebra, self.poi_indices)
 
         loss_mask = torch.ones(len(self.poi_indices), dtype=torch.float)
@@ -577,7 +591,18 @@ class PoiNeighborDataset(Dataset):
 
         return pois, loss_mask
 
-    def preprocess_nifti(self, nii_path, is_img=False, verbose=False):
+    def preprocess_nifti(self, nii_path, is_img=False, verbose=False):  # noqa: ANN201
+        """Load a cutout NIfTI and bring it to the dataset's orientation and spacing.
+
+        Args:
+            nii_path: Path to the cutout file.
+            is_img: True for intensity images, False for segmentation masks, which
+                selects nearest-neighbour rather than linear resampling.
+            verbose: Print the path being loaded.
+
+        Returns:
+            The loaded and resampled array.
+        """
         if verbose:
             print(f"Loading from {nii_path}")
         nii = NII.load(nii_path, seg=not is_img)
@@ -703,7 +728,7 @@ class PoiNeighborDataset(Dataset):
         all_pois = []
         all_loss_masks = []
 
-        for label, vert in all_vert:
+        for _label, vert in all_vert:
             if vert == 0:  # dummy
                 vert_pois = torch.full((len(self.poi_indices), 3), -1)
                 vert_loss_mask = torch.zeros(len(self.poi_indices), dtype=torch.float)
@@ -791,6 +816,7 @@ class PoiNeighborDataset(Dataset):
 
 
 class GruberNeighborDataset(PoiNeighborDataset):
+    """Cutout dataset serving each vertebra with its neighbours."""
 
     def __init__(
         self,
@@ -811,8 +837,7 @@ class GruberNeighborDataset(PoiNeighborDataset):
             master_df,
             poi_indices=(
                 include_poi_list
-                if include_poi_list
-                else (
+                or (
                     [
                         81,
                         82,
@@ -902,8 +927,7 @@ class GruberNeighborDataset(PoiNeighborDataset):
             ),
             include_vert_list=(
                 include_vert_list
-                if include_vert_list
-                else [
+                or [
                     2,
                     3,
                     4,
@@ -937,10 +961,10 @@ class GruberNeighborDataset(PoiNeighborDataset):
                 103: 103,
                 102: 102,
                 104: 104,
-                105: 105,  #
-                106: 106,  #
-                107: 107,  #
-                108: 108,  #
+                105: 105,
+                106: 106,
+                107: 107,
+                108: 108,
                 125: 125,
                 127: 127,
                 # Flipped left to right
@@ -952,10 +976,10 @@ class GruberNeighborDataset(PoiNeighborDataset):
                 111: 119,
                 110: 118,
                 112: 120,
-                113: 121,  #
-                114: 122,  #
-                115: 123,  #
-                116: 124,  #
+                113: 121,
+                114: 122,
+                115: 123,
+                116: 124,
                 # Flipped right to left
                 82: 83,
                 85: 84,

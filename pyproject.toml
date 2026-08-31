@@ -96,6 +96,13 @@ convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D101", "D102", "D103", "D205", "D415", "ANN201", "ARG001"]
+# Largely a vendored copy of MONAI's affine transforms, kept close to upstream so it
+# stays diffable against it. The project's own transforms are at the top of the file
+# and are documented; MONAI's docstring and typing style is left as-is.
+"src/vertpois/data/transforms.py" = [
+    "D101", "D102", "D103", "D205", "D415", "ANN201", "ARG002", "PGH003", "RUF012",
+    "N803", "N806", "UP035", "UP045", "RUF005", "B028", "C408",
+]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 20

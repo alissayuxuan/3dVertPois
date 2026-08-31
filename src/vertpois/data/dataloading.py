@@ -1,27 +1,29 @@
+"""Loading and preparing the arrays a POI dataset serves.
+
+BIDS file lookup, ground-truth POI extraction, heatmap rendering, surface computation
+and the padding helpers that bring every cutout to a fixed shape.
+"""
+
 import os
+from collections.abc import Callable, Sequence
 from os import PathLike
-from typing import Callable
 
 import numpy as np
 import torch
+from numpy import ndarray
+from scipy.ndimage import center_of_mass, shift
+from skimage.morphology import binary_erosion
 
 # from BIDS import NII, POI
 # from BIDS.bids_files import Subject_Container
 from TPTBox import NII, Subject_Container
 from TPTBox.core.poi import POI
 
-from numpy import ndarray
-from scipy.ndimage import center_of_mass, shift
-from skimage.morphology import binary_erosion
+#: Subregion labels of the vertebral body, used as the default one-hot channels.
+VERTEBRA_BODY_SUBREGIONS = (41, 42, 43, 44, 45, 46, 47, 48, 49, 50)
 
 
-def compute_zoom(original_shape, original_zoom, target_shape):
-    # Compute the zoom factor to resize the image to the target shape
-    zoom = np.array(original_shape) / np.array(target_shape) * np.array(original_zoom)
-    return (zoom[0], zoom[1], zoom[2])
-
-
-def get_gt_pois(poi, vertebra, poi_indices):
+def get_gt_pois(poi, vertebra, poi_indices):  # noqa: ANN201
     """Converts the POI coordinates to a tensor.
 
     Args:
@@ -32,7 +34,7 @@ def get_gt_pois(poi, vertebra, poi_indices):
         torch.Tensor: The POI coordinates as a tensor.
     """
     coords = [
-        (np.array((-1, -1, -1)) if not (vertebra, p_idx) in poi.keys() else np.array(poi.centroids[vertebra, p_idx]))
+        (np.array((-1, -1, -1)) if (vertebra, p_idx) not in poi.keys() else np.array(poi.centroids[vertebra, p_idx]))
         for p_idx in poi_indices
     ]
 
@@ -49,116 +51,6 @@ def get_gt_pois(poi, vertebra, poi_indices):
     missing_pois = np.array([poi_idx for i, poi_idx in enumerate(poi_indices) if missing_poi_list_idx[i]])
 
     return torch.from_numpy(coords), torch.from_numpy(missing_pois)
-
-
-def get_gt_hm(coords, target_shape, ref_heatmap, ref_hm_center):
-    # Compute target heatmap from coordinates
-    n_pois, _ = coords.shape
-    heatmaps = np.zeros(shape=(n_pois, *target_shape))
-
-    for poi_idx in range(n_pois):
-        coord = coords[poi_idx]
-        # Heatmaps are all an exponential decay from the center, just shifted to the correct location
-        heatmap = shift(ref_heatmap, coord - ref_hm_center)
-        # Normalize the heatmap
-        heatmap = heatmap / heatmap.sum()
-        heatmaps[poi_idx] = heatmap
-
-    return heatmaps
-
-
-def get_gt_hm_torch(coords, target_shape, patch=9, sigma=1):
-    dens = get_density(1, (patch, patch, patch))
-
-    heatmaps = [embed_patch(dens, target_shape, tuple(coord)) for coord in coords]
-    heatmaps = [heatmap / heatmap.sum() for heatmap in heatmaps]
-    heatmaps = torch.stack(heatmaps)
-    return heatmaps
-
-
-def get_gt_hm_torch_batch(coords_batch, target_shape, patch=9, sigma=1):
-    batch_size = coords_batch.size(0)
-    heatmaps = []
-
-    for b in range(batch_size):
-        hm = get_gt_hm_torch(coords_batch[b, :, :], target_shape, patch, sigma)
-        heatmaps.append(hm)
-
-    heatmaps = torch.stack(heatmaps)
-    return heatmaps
-
-
-def get_density(sigma, shape):
-    """Returns a tensor of the specified shape containing the discretely sampled density
-    of a Gaussian distribution, centered at the middle of the tensor, with sigma as the
-    standard deviation parameter.
-
-    Parameters:
-    - sigma: The standard deviation of the Gaussian distribution.
-    - shape: The shape of the output tensor (2D or 3D).
-
-    Returns:
-    - A tensor of shape 'shape' with the Gaussian density sampled across its volume.
-    """
-    # Create a grid of indices
-    indices = [torch.arange(s, dtype=torch.float32) for s in shape]
-    grid = torch.meshgrid(indices, indexing="ij")
-
-    # Calculate the center
-    center = torch.tensor([int((s - 1) / 2) for s in shape], dtype=torch.float32)
-
-    # Calculate squared distances from the center
-    squared_distances = sum([(g - c) ** 2 for g, c in zip(grid, center)])
-
-    # Calculate the Gaussian distribution
-    # distribution = (1 / (sigma * torch.sqrt(torch.tensor(2 * torch.pi)))) * torch.exp(-squared_distances / (2 * sigma ** 2))
-    distribution = torch.exp(-squared_distances / (2 * sigma**2))
-    return distribution
-
-
-def embed_patch(patch, target_shape, center):
-    """Embeds a 3D patch into a tensor of target shape with the patch centered at a
-    specified index.
-
-    Parameters:
-    - patch: Tensor of shape (p, p, p).
-    - target_shape: Tuple of (H, W, D) indicating the shape of the target tensor.
-    - center: Tuple of (x, y, z) indicating the center index in the target tensor.
-
-    Returns:
-    - A tensor of shape target_shape with the patch embedded and the rest filled with zeros.
-    """
-    # Convert center to integers
-    center = [int(c) for c in center]
-
-    # Create the target tensor filled with zeros
-    target_tensor = torch.zeros(target_shape)
-
-    p = patch.shape[0]  # Assuming patch is a cubic shape (p, p, p)
-    # Calculate the start and end indices for embedding the patch in the target tensor
-    start_indices = [center[i] - p // 2 for i in range(3)]
-    end_indices = [center[i] + (p + 1) // 2 for i in range(3)]
-
-    # Calculate the actual start and end indices in the patch to be used
-    patch_start = [0 if start_indices[i] >= 0 else -start_indices[i] for i in range(3)]
-    patch_end = [(p if end_indices[i] <= target_shape[i] else p - (end_indices[i] - target_shape[i])) for i in range(3)]
-
-    # Adjust start and end indices to be within target tensor bounds
-    start_indices = [max(0, start) for start in start_indices]
-    end_indices = [min(target_shape[i], end_indices[i]) for i in range(3)]
-
-    # Embed the patch into the target tensor
-    target_tensor[
-        start_indices[0] : end_indices[0],
-        start_indices[1] : end_indices[1],
-        start_indices[2] : end_indices[2],
-    ] = patch[
-        patch_start[0] : patch_end[0],
-        patch_start[1] : patch_end[1],
-        patch_start[2] : patch_end[2],
-    ]
-
-    return target_tensor
 
 
 def compute_surface(msk: torch.tensor, iterations=1) -> torch.tensor:
@@ -182,27 +74,6 @@ def compute_surface(msk: torch.tensor, iterations=1) -> torch.tensor:
     return torch.from_numpy(surface)
 
 
-def one_hot_encode_3d(array: np.ndarray, subreg_ids: list[int] = [41, 42, 43, 44, 45, 46, 47, 48, 49, 50]) -> np.ndarray:
-    """Convert a 3D integer numpy array to one-hot encoding with the channel as the
-    first dimension.
-
-    Parameters:
-    - array: A 3D numpy array with integer values.
-    - class_values: A list of unique integer values representing the classes.
-
-    Returns:
-    - A 4D numpy array with one-hot encoding along the first dimension.
-    """
-    # Create a 4D array of zeros with the first dimension being the number of classes
-    one_hot_encoded = np.zeros((len(subreg_ids),) + array.shape, dtype=np.int16)
-
-    # Iterate over each class and encode it in the corresponding channel
-    for i, value in enumerate(subreg_ids):
-        one_hot_encoded[i] = array == value
-
-    return one_hot_encoded
-
-
 def apply_dictionary_transform(
     transform: callable, im: ndarray, subreg: ndarray, vertseg: ndarray, poi_hm: ndarray
 ) -> tuple[ndarray, ndarray, ndarray, ndarray]:
@@ -214,7 +85,6 @@ def apply_dictionary_transform(
     - vertseg: The vertebral segmentation.
     - poi_hm: The heatmap of the points of interest.
     """
-
     # Add channel dimension to the input
     im = np.expand_dims(im, axis=0)
     subreg = np.expand_dims(subreg, axis=0)
@@ -238,43 +108,15 @@ def apply_dictionary_transform(
     return im, subreg, vertseg, transformed_data_dict["target"]
 
 
-def get_subreg_com(subreg: ndarray, subregs=[41, 42, 43, 44, 45, 46, 47, 48, 49, 50]) -> ndarray:
-    """Compute the center of mass of the subregional segmentation.
+def pad_array_to_shape(arr, target_shape):  # noqa: ANN201
+    """Pad an array to ``target_shape``, keeping the original centred.
 
     Args:
-    - subreg: The subregional segmentation.
+        arr: Array of shape ``(height, width, depth)``.
+        target_shape: Target shape, which must be at least as large on every axis.
 
     Returns:
-    - The center of mass for each subregion.
-    """
-    idx = []
-    coms = []
-    for subreg_id in subregs:
-        msk = subreg == subreg_id
-        if msk.any():
-            com = center_of_mass(msk)
-            coms.append(com)
-            idx.append(subreg_id)
-        else:
-            coms.append((0, 0, 0))
-            idx.append(0)
-
-    idx = np.array(idx)  # Shape: (n_subregs,)
-    coms = np.array(coms).astype(np.float32)  # Shape: (n_subregs, 3)
-
-    return idx, coms
-
-
-def pad_array_to_shape(arr, target_shape):
-    """Pads the input array arr to the target_shape. The original array is centered
-    within the new shape.
-
-    Parameters:
-    - arr: numpy array of shape (H, W, D)
-    - target_shape: tuple of the target shape (H', W', D')
-
-    Returns:
-    - Padded numpy array of shape (H', W', D')
+        The padded array and the padding offset that was applied.
     """
     # Calculate the padding needed for each dimension
     pad_h = (target_shape[0] - arr.shape[0]) // 2
@@ -294,60 +136,8 @@ def pad_array_to_shape(arr, target_shape):
     return padded_arr, offset
 
 
-def create_coordinate_tensor(shape):
-    # Generate a grid of coordinates along each dimension
-    indices = [torch.arange(s, dtype=torch.float32) for s in shape]
-    grid = torch.meshgrid(indices, indexing="ij")
-
-    # Stack the coordinate grids along a new dimension to get the final coordinate tensor
-    coords = torch.stack(grid, dim=0).float()
-
-    return coords
-
-
-def heatmaps_to_coords(pred_heatmaps):
-    """Compute 3D coordinates from a batch of heatmaps, by taking the weighted average
-    of the heatmap coordinates.
-
-    Args:
-        pred_heatmaps (torch.Tensor): Batch of heatmaps of shape (batch_size, n_pois, height, width, depth).
-
-    Returns:
-        torch.Tensor: Batch of 3D coordinates of shape (batch_size, n_pois, 3).
-    """
-    # Extract dimensions
-    device = pred_heatmaps.device
-    batch_size, n_pois, _, _, _ = pred_heatmaps.shape
-
-    # Reshape pred_heatmaps and heatmap_coords for element-wise multiplication
-    pred_heatmaps_reshaped = pred_heatmaps.view(batch_size, n_pois, -1)  # Shape: (batch_size, n_pois, H*W*D)
-    heatmap_coords = create_coordinate_tensor(pred_heatmaps.shape[2:]).to(device)
-    heatmap_coords_reshaped = heatmap_coords.view(3, -1)  # Shape: (3, H*W*D)
-
-    heatmap_coords_reshaped = heatmap_coords_reshaped.to(device)
-
-    # Element-wise multiplication and sum along the last dimension
-    weighted_coords = torch.sum(pred_heatmaps_reshaped.unsqueeze(-1) * heatmap_coords_reshaped.t(), dim=2)  # Shape: (batch_size, n_pois, 3)
-
-    # Reshape the result to (batch_size, n_pois, 3)
-    coords = weighted_coords.view(batch_size, n_pois, 3)
-
-    return coords.to(device)
-
-
-def get_implants_poi(container) -> POI:
-    poi_query = container.new_query(flatten=True)
-    poi_query.filter_format("poi")
-    poi_query.filter("desc", "local")
-    poi_candidate = poi_query.candidates[0]
-
-    # poi = poi_candidate.open_ctd()
-    poi = POI.load(poi_candidate.file["json"])
-
-    return poi
-
-
 def get_gruber_poi(container) -> POI:
+    """Find and load a subject's POI annotation file."""
     poi_query = container.new_query(flatten=True)
     poi_query.filter_format("poi")
     poi_query.filter("source", "gruber")
@@ -359,47 +149,8 @@ def get_gruber_poi(container) -> POI:
     return poi
 
 
-def get_gruber_registration_poi(container):
-    poi_query = container.new_query(flatten=True)
-    poi_query.filter_format("poi")
-    poi_query.filter("source", "registered")
-    poi_query.filter_filetype(".json")
-
-    registration_ctds = [POI.load(poi) for poi in poi_query.candidates]
-
-    # Check whether zoom, shape and direction coincide
-    for i in range(1, len(registration_ctds)):
-        if not registration_ctds[0].zoom == registration_ctds[i].zoom:
-            print("Zoom does not match")
-        if not registration_ctds[0].shape == registration_ctds[i].shape:
-            print("Shape does not match")
-        if not registration_ctds[0].orientation == registration_ctds[i].orientation:
-            print("Direction does not match")
-
-    # Get the keys that are present in all POIs
-    keys = set(registration_ctds[0].keys())
-    for ctd in registration_ctds:
-        keys = keys.intersection(set(ctd.keys()))
-    keys = list(keys)
-
-    ctd = {}
-    for key in keys:
-        #
-        ctd[key] = tuple(np.array([reg_ctd[key] for reg_ctd in registration_ctds]).mean(axis=0))
-
-    # Sort the new ctd by keys
-    ctd = dict(sorted(ctd.items()))
-    new_poi = POI(
-        centroids=ctd,
-        orientation=registration_ctds[0].orientation,
-        zoom=registration_ctds[0].zoom,
-        shape=registration_ctds[0].shape,
-    )
-
-    return new_poi
-
-
 def get_poi(container) -> POI:
+    """Find and load a subject's POI annotation file, without extra filtering."""
     poi_query = container.new_query(flatten=True)
     poi_query.filter_format("poi")
     if not poi_query.candidates:
@@ -409,6 +160,7 @@ def get_poi(container) -> POI:
 
 
 def get_ct(container, split=None) -> NII:
+    """Find and load a subject's CT image, optionally restricted to one split."""
     ct_query = container.new_query(flatten=True)
     ct_query.filter_format("ct")
     ct_query.filter_filetype("nii.gz")  # only nifti files
@@ -420,6 +172,7 @@ def get_ct(container, split=None) -> NII:
 
 
 def get_subreg(container, split=None) -> NII:
+    """Find and load a subject's vertebra subregion mask, or None if it cannot be opened."""
     subreg_query = container.new_query(flatten=True)
     subreg_query.filter_format("msk")
     subreg_query.filter_filetype("nii.gz")  # only nifti files
@@ -432,13 +185,15 @@ def get_subreg(container, split=None) -> NII:
 
     try:
         subreg = subreg_candidate.open_nii()
-        return subreg
     except Exception as e:
-        print(f"Error opening subreg: {str(e)}")
+        print(f"Error opening subreg: {e!s}")
         return None
+    else:
+        return subreg
 
 
 def get_vertseg(container) -> NII:
+    """Find and load a subject's vertebra instance mask, or None if it cannot be opened."""
     vertseg_query = container.new_query(flatten=True)
     vertseg_query.filter_format("msk")
     vertseg_query.filter_filetype("nii.gz")  # only nifti files
@@ -450,13 +205,15 @@ def get_vertseg(container) -> NII:
 
     try:
         vertseg = vertseg_candidate.open_nii()
-        return vertseg
     except Exception as e:
-        print(f"Error opening vertseg: {str(e)}")
+        print(f"Error opening vertseg: {e!s}")
         return None
+    else:
+        return vertseg
 
 
-def get_vertseg_bfile(container):
+def get_vertseg_bfile(container):  # noqa: ANN201
+    """Return the BIDS file entry for a subject's vertebra instance mask."""
     vertseg_query = container.new_query(flatten=True)
     vertseg_query.filter_format("msk")
     vertseg_query.filter_filetype("nii.gz")  # only nifti files
@@ -468,7 +225,7 @@ def get_vertseg_bfile(container):
     return vertseg_candidates
 
 
-def get_files(
+def get_files(  # noqa: D103 - thin dispatcher over the getters above
     container,
     get_poi: callable,
     get_ct: callable,
@@ -483,7 +240,7 @@ def get_files(
     )
 
 
-def get_bounding_box(mask, vert, margin=5):
+def get_bounding_box(mask, vert, margin=5):  # noqa: ANN201
     """Get the bounding box of a given vertebra in a mask.
 
     Args:
@@ -513,13 +270,14 @@ def get_bounding_box(mask, vert, margin=5):
     return x_min, x_max, y_min, y_max, z_min, z_max
 
 
-def process_container(
+def process_container(  # noqa: ANN201
     subject,
     container,
     save_path: PathLike,
     rescale_zoom: tuple | None,
     get_files: Callable[[Subject_Container], tuple[POI, NII, NII, NII]],
 ):
+    """Load one subject's image, masks and POIs, ready for cutout extraction."""
     poi, ct, subreg, vertseg = get_files(container)
     ct.reorient_(("L", "A", "S"))
     subreg.reorient_(("L", "A", "S"))
@@ -527,7 +285,7 @@ def process_container(
     # poi.reorient_centroids_to_(ct)
     poi.reorient_(axcodes_to=ct.orientation, _shape=ct.shape)  # the same as above? no reorient_centroids_to found in TPTBox
 
-    vertebrae = set([key[0] for key in poi.keys()])
+    vertebrae = {key[0] for key in poi.keys()}
     vertseg_arr = vertseg.get_array()
 
     summary = []
