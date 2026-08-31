@@ -29,6 +29,43 @@ configs specify `"PoiPredictionModule"`, so none of them change behaviour — bu
 config that asked for the neighbour module now gets it. **If you have results from a
 config naming `PoiNeighborPredictionModule`, they were produced by the wrong class.**
 
+### The ablation refinement variants were three code generations behind
+
+`RefinementModules.py` held eight near-duplicate transformer classes (1,503 lines,
+82-91% pairwise line overlap). They were not variations on one implementation: only
+`PatchTransformer` had received the recent correctness work, and the other seven had
+silently fallen behind in three ways.
+
+| | `PatchTransformer` | the 7 ablation variants |
+|---|---|---|
+| coarse coordinates | float (sub-voxel) | `.long()` - **truncated to whole voxels** |
+| coarse features | detached | not detached - refiner gradients reach the encoder |
+| loss units | millimetres (`* zoom`) | 3 of 7 optimised in **voxels**, ignoring spacing |
+
+Each of these makes an ablation incomparable with the model it is being compared
+against. The voxel-space loss is the most serious: on anisotropic data those three
+variants were optimising a different objective, and their reported errors are in
+different units.
+
+**Now:** one `PatchTransformer` with `use_poi_embedding` / `use_vert_embedding` /
+`use_coarse_features` / `use_patches` / `use_coarse_pred` flags, 1,503 lines down to
+399. Every old class name remains a valid config `type` string, bound to the flag
+combination that reproduces its architecture.
+
+Verified by transferring weights between the old and new implementations and
+comparing forward passes on synthetic input:
+
+- **Architecture is identical for all eight names** - matching `state_dict` keys and
+  shapes, so existing checkpoints still load.
+- **`PatchTransformer` and `NoCoarsePredTransformer` are bit-identical.** The main
+  model is unchanged.
+- The other six now differ by **less than 1.0 voxel** - exactly the truncation bound
+  of the `.long()` cast they used to apply, confirming the delta is the sub-voxel fix
+  and nothing else.
+
+**If you have published ablation numbers, they were produced by the three-way-divergent
+code above and need re-running.** `PatchTransformer` results are unaffected.
+
 ### Unknown callbacks were silently dropped
 
 `create_callbacks` matched `ModelCheckpoint` and `EarlyStopping` with no `else`

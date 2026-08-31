@@ -120,20 +120,57 @@ class Identity(RefinementModule):
 
 
 class PatchTransformer(nn.Module):
-    """Enrich the coarse features with patch features extracted with a simple CNN
-    regressor, then refine the predictions using a transformer."""
+    """Refine coarse landmark predictions with a transformer.
+
+    Coarse per-landmark features are optionally concatenated with features extracted
+    from an image patch around each coarse prediction, then a transformer predicts a
+    per-landmark offset. ``refined_preds = coarse_preds + offsets``.
+
+    The four ``use_*`` flags select which information the transformer sees. They
+    replace what used to be seven separately maintained ablation subclasses; the old
+    class names remain valid config ``type`` strings (see :data:`REFINEMENT_MODULES`)
+    and map onto flag combinations.
+
+    Args:
+        n_landmarks: Number of landmark types, sizing the POI embedding.
+        n_verts: Number of vertebra types, sizing the vertebra embedding.
+        patch_size: Edge length of the cubic patch extracted around each coarse
+            prediction. Ignored when ``use_patches`` is false.
+        poi_feature_l: Width of the incoming coarse feature vector.
+        patch_feature_l: Width of the feature vector the patch CNN produces.
+        coord_embedding_l: Width of the coordinate embedding.
+        poi_embedding_l: Width of the landmark-identity embedding.
+        vert_embedding_l: Width of the vertebra-identity embedding.
+        loss_fn: Name of the loss, resolved by :func:`vertpois.loss.loss_modules.get_loss_fn`.
+        project_gt: Project ground-truth landmarks onto the surface before computing loss.
+        project_pred: Project refined predictions onto the surface after refinement.
+        warmup_epochs: Blend ground truth into the coarse predictions for this many
+            epochs. ``-1`` disables warmup.
+        mlp_dim: Transformer feed-forward width.
+        num_layers: Number of transformer blocks.
+        num_heads: Number of attention heads.
+        dropout: Dropout rate.
+        lr: Learning rate recorded for the optimiser configuration.
+        patch_in_channels: Channel count of the input volume patches are taken from.
+        use_poi_embedding: Give the transformer a landmark-identity embedding.
+        use_vert_embedding: Give the transformer a vertebra-identity embedding.
+        use_coarse_features: Feed the coarse feature vector to the transformer.
+        use_patches: Extract and feed patch features.
+        use_coarse_pred: Refine an existing coarse prediction. When false the
+            transformer regresses coordinates directly and no patches are extracted.
+    """
 
     def __init__(
         self,
         n_landmarks: int,
-        n_verts: int,
-        patch_size: int,
-        poi_feature_l: int,
-        patch_feature_l: int,
-        coord_embedding_l: int,
-        poi_embedding_l: int,
-        vert_embedding_l: int,
         loss_fn: str,
+        n_verts: int = 22,
+        patch_size: int = 16,
+        poi_feature_l: int = 0,
+        patch_feature_l: int = 0,
+        coord_embedding_l: int = 0,
+        poi_embedding_l: int = 0,
+        vert_embedding_l: int = 0,
         project_gt: bool = False,
         project_pred: bool = False,
         warmup_epochs: int = -1,
@@ -143,25 +180,42 @@ class PatchTransformer(nn.Module):
         dropout: float = 0.2,
         lr: float = 1e-5,
         patch_in_channels: int = 1,
+        use_poi_embedding: bool = True,
+        use_vert_embedding: bool = True,
+        use_coarse_features: bool = True,
+        use_patches: bool = True,
+        use_coarse_pred: bool = True,
     ):
         super().__init__()
 
-        self.patch_feature_extractor = PatchExtractor(
-            patch_size=patch_size,
-            feature_extraction_model=Regressor(
-                in_shape=(patch_in_channels, patch_size, patch_size, patch_size),
-                out_shape=(patch_feature_l,),
-                channels=(8, 16, 32),
-                strides=(2, 2, 2),
-                kernel_size=3,
-            ),
-        )
+        self.use_poi_embedding = use_poi_embedding
+        self.use_vert_embedding = use_vert_embedding
+        self.use_coarse_features = use_coarse_features
+        self.use_patches = use_patches and use_coarse_pred
+        self.use_coarse_pred = use_coarse_pred
 
-        self.refinement_module = PoiTransformer(
-            poi_feature_l=poi_feature_l + patch_feature_l,
-            coord_embedding_l=coord_embedding_l,
-            poi_embedding_l=poi_embedding_l,
-            vert_embedding_l=vert_embedding_l,
+        if self.use_patches:
+            self.patch_feature_extractor = PatchExtractor(
+                patch_size=patch_size,
+                feature_extraction_model=Regressor(
+                    in_shape=(patch_in_channels, patch_size, patch_size, patch_size),
+                    out_shape=(patch_feature_l,),
+                    channels=(8, 16, 32),
+                    strides=(2, 2, 2),
+                    kernel_size=3,
+                ),
+            )
+        else:
+            self.patch_feature_extractor = None
+
+        # Width of the token the transformer receives, before its own embeddings.
+        feature_width = (poi_feature_l if self.use_coarse_features else 0) + (patch_feature_l if self.use_patches else 0)
+
+        self.refinement_module = FlexiblePoiTransformer(
+            poi_feature_l=feature_width,
+            coord_embedding_l=coord_embedding_l if self.use_coarse_pred else None,
+            poi_embedding_l=poi_embedding_l if self.use_poi_embedding else None,
+            vert_embedding_l=vert_embedding_l if self.use_vert_embedding else None,
             mlp_dim=mlp_dim,
             num_layers=num_layers,
             num_heads=num_heads,
@@ -170,71 +224,75 @@ class PatchTransformer(nn.Module):
             dropout_rate=dropout,
         )
 
+        self.loss_fn = get_loss_fn(loss_fn)
         self.project_gt = project_gt
         self.project_pred = project_pred
-
-        self.loss_fn = get_loss_fn(loss_fn)
-
         self.lr = lr
-
         self.warmup_epochs = warmup_epochs
 
     def forward(self, batch):
-        coarse_preds = batch["coarse_preds"]
-        poi_indices = batch["poi_list_idx"]
-        vertebra_indices = batch["vert_list_idx"]
-        # Detach coarse features so refiner gradients cannot propagate into the
-        # DenseNet encoder. Prevents refiner blowup from corrupting the encoder
-        # (observed as simultaneous coarse+refined divergence in earlier runs).
-        poi_features = batch["coarse_features"].detach()
+        """Refine the coarse predictions in ``batch``, adding ``offsets`` and ``refined_preds``."""
+        poi_indices = batch["poi_list_idx"] if self.use_poi_embedding else None
+        vertebra_indices = batch["vert_list_idx"] if self.use_vert_embedding else None
 
-        if (
-            self.warmup_epochs > 0
-            and self.training
-            and self.current_epoch < self.warmup_epochs
-        ):
-            # Use a weighted average of ground truth and coarse predictions in the warmup phase
-            coarse_preds = (
-                self.current_epoch / self.warmup_epochs * coarse_preds
-                + (1 - self.current_epoch / self.warmup_epochs) * batch["target"]
+        if not self.use_coarse_pred:
+            # No coarse stage to refine: the transformer regresses coordinates directly.
+            coords = self.refinement_module(
+                coarse_preds=None,
+                poi_indices=poi_indices,
+                vertebra=vertebra_indices,
+                poi_features=batch["coarse_features"],
             )
+            batch["offsets"] = coords
+            batch["refined_preds"] = coords
+            return batch
+
+        coarse_preds = batch["coarse_preds"]
+
+        if self.warmup_epochs > 0 and self.training and self.current_epoch < self.warmup_epochs:
+            # Blend ground truth into the coarse predictions during warmup.
+            weight = self.current_epoch / self.warmup_epochs
+            coarse_preds = weight * coarse_preds + (1 - weight) * batch["target"]
 
         # Keep float precision: PatchExtractor casts to long internally for indexing,
         # and the transformer accepts float coords for its coordinate embedding.
         # refined_preds = float_coarse + offsets preserves sub-voxel refinement.
         coarse_preds = coarse_preds.detach()
 
-        patches = self.patch_feature_extractor(batch["input"], coarse_preds)
-
-        # Concatenate the patch features with the coarse features
-        poi_features = torch.cat([poi_features, patches], dim=-1)
+        features = []
+        if self.use_coarse_features:
+            # Detach coarse features so refiner gradients cannot propagate into the
+            # DenseNet encoder. Prevents refiner blowup from corrupting the encoder
+            # (observed as simultaneous coarse+refined divergence in earlier runs).
+            features.append(batch["coarse_features"].detach())
+        if self.use_patches:
+            features.append(self.patch_feature_extractor(batch["input"], coarse_preds))
+        poi_features = torch.cat(features, dim=-1) if len(features) > 1 else features[0]
 
         offsets = self.refinement_module(
-            coarse_preds, poi_indices, vertebra_indices, poi_features
+            coarse_preds=coarse_preds,
+            poi_indices=poi_indices,
+            vertebra=vertebra_indices,
+            poi_features=poi_features,
         )
+
         batch["offsets"] = offsets
         batch["refined_preds"] = coarse_preds + offsets
         if self.project_pred:
-            surface = batch["surface"]
-            batch["refined_preds"], _ = surface_project_coords(batch["refined_preds"], surface)
+            batch["refined_preds"], _ = surface_project_coords(batch["refined_preds"], batch["surface"])
 
         return batch
 
     def calculate_loss(self, batch):
+        """Return the refinement loss, computed in millimetres."""
         target = batch["target"]
         surface = batch["surface"]
         if self.project_gt:
-            # Project targets to surface
             target, _ = surface_project_coords(target, surface)
 
-        zoom = batch["zoom"].to(target.device)
-        zoom = zoom.unsqueeze(1)
-
-        refined_preds_mm = batch["refined_preds"] * zoom
-        target_mm = target * zoom
-        return self.loss_fn(
-            refined_preds_mm, target_mm, batch["loss_mask"], surface
-        )  # self.loss_fn(batch["refined_preds"], target, batch["loss_mask"])
+        # Scale to millimetres so the loss is comparable across resolutions.
+        zoom = batch["zoom"].to(target.device).unsqueeze(1)
+        return self.loss_fn(batch["refined_preds"] * zoom, target * zoom, batch["loss_mask"], surface)
 
     def calculate_metrics(self, batch, mode):
         metrics = {}
@@ -304,1200 +362,39 @@ class PatchTransformer(nn.Module):
 
         return metrics
 
+    def configure_optimizers(self):
+        """Return an Adam optimiser over this module's parameters."""
+        return torch.optim.Adam(self.parameters(), lr=self.lr)
 
-class NoPoiPatchTransformer(nn.Module):
-    """Enrich the coarse features with patch features extracted with a simple CNN
-    regressor, then refine the predictions using a transformer WITHOUT Poi Id embeddings. """
 
-    def __init__(
-        self,
-        n_landmarks: int,
-        n_verts: int,
-        patch_size: int,
-        poi_feature_l: int,
-        patch_feature_l: int,
-        coord_embedding_l: int,
-        #poi_embedding_l: int,
-        vert_embedding_l: int,
-        loss_fn: str,
-        project_gt: bool = False,
-        warmup_epochs: int = -1,
-        mlp_dim: int = 1024,
-        num_layers: int = 3,
-        num_heads: int = 4,
-        dropout: float = 0.2,
-        lr: float = 1e-5,
-    ):
-        super().__init__()
+def _variant(**flags):
+    """Return a factory for a :class:`PatchTransformer` with fixed ablation flags.
 
-        self.patch_feature_extractor = PatchExtractor(
-            patch_size=patch_size,
-            feature_extraction_model=Regressor(
-                in_shape=(1, patch_size, patch_size, patch_size),
-                out_shape=(patch_feature_l,),
-                channels=(8, 16, 32),
-                strides=(2, 2, 2),
-                kernel_size=3,
-            ),
-        )
+    Each historical ablation subclass becomes one flag combination, so a config's
+    ``"type"`` string keeps selecting the same architecture it always did.
+    """
 
-        self.refinement_module = FlexiblePoiTransformer(
-            poi_feature_l=poi_feature_l + patch_feature_l,
-            coord_embedding_l=coord_embedding_l,
-            poi_embedding_l=None,#poi_embedding_l,
-            vert_embedding_l=vert_embedding_l,
-            mlp_dim=mlp_dim,
-            num_layers=num_layers,
-            num_heads=num_heads,
-            n_landmarks=n_landmarks,
-            n_verts=n_verts,
-            dropout_rate=dropout,
-        )
+    def factory(**kwargs):
+        return PatchTransformer(**{**flags, **kwargs})
 
-        self.project_gt = project_gt
-
-        self.loss_fn = get_loss_fn(loss_fn)
-
-        self.lr = lr
-
-        self.warmup_epochs = warmup_epochs
-        print(f"Refinement Module: NoPoiPatchTransformer")
-
-    def forward(self, batch):
-        coarse_preds = batch["coarse_preds"]
-        # poi_indices = batch["poi_list_idx"]
-        vertebra_indices = batch["vert_list_idx"]
-        poi_features = batch["coarse_features"]
-
-        if (
-            self.warmup_epochs > 0
-            and self.training
-            and self.current_epoch < self.warmup_epochs
-        ):
-            # Use a weighted average of ground truth and coarse predictions in the warmup phase
-            coarse_preds = (
-                self.current_epoch / self.warmup_epochs * coarse_preds
-                + (1 - self.current_epoch / self.warmup_epochs) * batch["target"]
-            )
-
-        # Cast the coarse predictions to long to use them as indices
-        coarse_preds = coarse_preds.detach().long()
-
-        patches = self.patch_feature_extractor(batch["input"], coarse_preds)
-
-        # Concatenate the patch features with the coarse features
-        poi_features = torch.cat([poi_features, patches], dim=-1)
-
-        # offsets = self.refinement_module(
-        #    coarse_preds, poi_features
-        # )
-
-        offsets = self.refinement_module(
-            coarse_preds=coarse_preds.float(),  
-            poi_features=poi_features,     
-            poi_indices=None,                   
-            vertebra=vertebra_indices                   
-        )
-
-        batch["offsets"] = offsets
-        batch["refined_preds"] = coarse_preds.detach() + offsets
-        # batch["refined_preds"] = coarse_preds + offsets
-
-        return batch
-
-    def calculate_loss(self, batch):
-        target = batch["target"]
-        if self.project_gt:
-            # Project targets to surface
-            surface = batch["surface"]
-            target, _ = surface_project_coords(target, surface)
-
-        return self.loss_fn(batch["refined_preds"], target, batch["loss_mask"])
-
-    def calculate_metrics(self, batch, mode):
-        metrics = {}
-
-        loss_mask = batch["loss_mask"]  # (batch_size, n_landmarks)
-        fine_preds = batch["refined_preds"]  # (batch_size, n_landmarks, 3)
-        target = batch["target"]  # (batch_size, n_landmarks, 3)
-        target_indices = batch["target_indices"]  # (batch_size, n_landmarks)
-
-        if self.project_gt:
-            target = batch["target"]
-            # Project targets to surface
-            surface = batch["surface"]
-            target, projection_dist = surface_project_coords(target, surface)
-
-            metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
-
-        # Calculate the mean Euclidean distance between the predicted and target landmarks
-        distances = torch.norm(fine_preds - target, dim=-1)  # (batch_size, n_landmarks)
-        distances_mean, distances_std = distances.mean(), distances.std()
-
-        # Mask the distances with the loss mask
-        distances_masked = distances[loss_mask]
-        distances_masked_mean, distances_masked_std = (
-            distances_masked.mean(),
-            distances_masked.std(),
-        )
-
-        metrics[f"fine_mean_distance_{mode}"] = distances_mean
-        metrics[f"fine_std_distance_{mode}"] = distances_std
-        metrics[f"fine_mean_distance_masked_{mode}"] = distances_masked_mean
-        metrics[f"fine_std_distance_masked_{mode}"] = distances_masked_std
-
-        # Calculate the magnitude of the offsets
-        offsets = batch["offsets"]
-        offsets_magnitude = torch.norm(offsets, dim=-1)
-        offsets_magnitude_mean, offsets_magnitude_std = (
-            offsets_magnitude.mean(),
-            offsets_magnitude.std(),
-        )
-
-        # Mask the offsets with the loss mask
-        offsets_masked = offsets_magnitude * loss_mask
-        offsets_masked_mean, offsets_masked_std = (
-            offsets_masked.mean(),
-            offsets_masked.std(),
-        )
-
-        metrics[f"offsets_magnitude_mean_{mode}"] = offsets_magnitude_mean
-        metrics[f"offsets_magnitude_std_{mode}"] = offsets_magnitude_std
-        metrics[f"offsets_magnitude_masked_mean_{mode}"] = offsets_masked_mean
-        metrics[f"offsets_magnitude_masked_std_{mode}"] = offsets_masked_std
-
-        # Calculate mean Euclidian distance grouped by landmark type
-        for i, landmark_type in enumerate(target_indices.unique()):
-            landmark_mask = target_indices == landmark_type
-            landmark_mask = landmark_mask * loss_mask
-            distances_landmark = distances[landmark_mask]
-            distances_landmark_mean = distances_landmark.mean()
-            metrics[f"fine_mean_distance_{landmark_type.item()}_{mode}"] = (
-                distances_landmark_mean
-            )
-
-        return metrics
-
-class NoVertPatchTransformer(nn.Module):
-    """Enrich the coarse features with patch features extracted with a simple CNN
-    regressor, then refine the predictions using a transformer WITHOUT vertebra embeddings. """
-
-    def __init__(
-        self,
-        n_landmarks: int,
-        #n_verts: int,
-        patch_size: int,
-        poi_feature_l: int,
-        patch_feature_l: int,
-        coord_embedding_l: int,
-        poi_embedding_l: int,
-        #vert_embedding_l: int,
-        loss_fn: str,
-        project_gt: bool = False,
-        warmup_epochs: int = -1,
-        mlp_dim: int = 1024,
-        num_layers: int = 3,
-        num_heads: int = 4,
-        dropout: float = 0.2,
-        lr: float = 1e-5,
-    ):
-        super().__init__()
-
-        self.patch_feature_extractor = PatchExtractor(
-            patch_size=patch_size,
-            feature_extraction_model=Regressor(
-                in_shape=(1, patch_size, patch_size, patch_size),
-                out_shape=(patch_feature_l,),
-                channels=(8, 16, 32),
-                strides=(2, 2, 2),
-                kernel_size=3,
-            ),
-        )
-
-        self.refinement_module = FlexiblePoiTransformer(
-            poi_feature_l=poi_feature_l + patch_feature_l,
-            coord_embedding_l=coord_embedding_l,
-            poi_embedding_l=poi_embedding_l,
-            vert_embedding_l=None,#vert_embedding_l,
-            mlp_dim=mlp_dim,
-            num_layers=num_layers,
-            num_heads=num_heads,
-            n_landmarks=n_landmarks,
-            #n_verts=n_verts,
-            dropout_rate=dropout,
-        )
-
-        self.project_gt = project_gt
-
-        self.loss_fn = get_loss_fn(loss_fn)
-
-        self.lr = lr
-
-        self.warmup_epochs = warmup_epochs
-        print(f"Refinement Module: NoVertPatchTransformer")
-
-    def forward(self, batch):
-        coarse_preds = batch["coarse_preds"]
-        poi_indices = batch["poi_list_idx"]
-        #vertebra_indices = batch["vert_list_idx"]
-        poi_features = batch["coarse_features"]
-
-        if (
-            self.warmup_epochs > 0
-            and self.training
-            and self.current_epoch < self.warmup_epochs
-        ):
-            # Use a weighted average of ground truth and coarse predictions in the warmup phase
-            coarse_preds = (
-                self.current_epoch / self.warmup_epochs * coarse_preds
-                + (1 - self.current_epoch / self.warmup_epochs) * batch["target"]
-            )
-
-        # Cast the coarse predictions to long to use them as indices
-        coarse_preds = coarse_preds.detach().long()
-
-        patches = self.patch_feature_extractor(batch["input"], coarse_preds)
-
-        # Concatenate the patch features with the coarse features
-        poi_features = torch.cat([poi_features, patches], dim=-1)
-
-        #offsets = self.refinement_module(
-        #    coarse_preds, poi_features
-        #)
-
-        offsets = self.refinement_module(
-            coarse_preds=coarse_preds.float(),  
-            poi_features=poi_features,     
-            poi_indices=poi_indices,                   
-            vertebra=None                       
-        )
-
-        batch["offsets"] = offsets
-        batch["refined_preds"] = coarse_preds.detach() + offsets
-        #batch["refined_preds"] = coarse_preds + offsets
-
-        return batch
-
-    def calculate_loss(self, batch):
-        target = batch["target"]
-        if self.project_gt:
-            # Project targets to surface
-            surface = batch["surface"]
-            target, _ = surface_project_coords(target, surface)
-
-        return self.loss_fn(batch["refined_preds"], target, batch["loss_mask"])
-
-    def calculate_metrics(self, batch, mode):
-        metrics = {}
-
-        loss_mask = batch["loss_mask"]  # (batch_size, n_landmarks)
-        fine_preds = batch["refined_preds"]  # (batch_size, n_landmarks, 3)
-        target = batch["target"]  # (batch_size, n_landmarks, 3)
-        target_indices = batch["target_indices"]  # (batch_size, n_landmarks)
-
-        if self.project_gt:
-            target = batch["target"]
-            # Project targets to surface
-            surface = batch["surface"]
-            target, projection_dist = surface_project_coords(target, surface)
-
-            metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
-
-        # Calculate the mean Euclidean distance between the predicted and target landmarks
-        distances = torch.norm(fine_preds - target, dim=-1)  # (batch_size, n_landmarks)
-        distances_mean, distances_std = distances.mean(), distances.std()
-
-        # Mask the distances with the loss mask
-        distances_masked = distances[loss_mask]
-        distances_masked_mean, distances_masked_std = (
-            distances_masked.mean(),
-            distances_masked.std(),
-        )
-
-        metrics[f"fine_mean_distance_{mode}"] = distances_mean
-        metrics[f"fine_std_distance_{mode}"] = distances_std
-        metrics[f"fine_mean_distance_masked_{mode}"] = distances_masked_mean
-        metrics[f"fine_std_distance_masked_{mode}"] = distances_masked_std
-
-        # Calculate the magnitude of the offsets
-        offsets = batch["offsets"]
-        offsets_magnitude = torch.norm(offsets, dim=-1)
-        offsets_magnitude_mean, offsets_magnitude_std = (
-            offsets_magnitude.mean(),
-            offsets_magnitude.std(),
-        )
-
-        # Mask the offsets with the loss mask
-        offsets_masked = offsets_magnitude * loss_mask
-        offsets_masked_mean, offsets_masked_std = (
-            offsets_masked.mean(),
-            offsets_masked.std(),
-        )
-
-        metrics[f"offsets_magnitude_mean_{mode}"] = offsets_magnitude_mean
-        metrics[f"offsets_magnitude_std_{mode}"] = offsets_magnitude_std
-        metrics[f"offsets_magnitude_masked_mean_{mode}"] = offsets_masked_mean
-        metrics[f"offsets_magnitude_masked_std_{mode}"] = offsets_masked_std
-
-        # Calculate mean Euclidian distance grouped by landmark type
-        for i, landmark_type in enumerate(target_indices.unique()):
-            landmark_mask = target_indices == landmark_type
-            landmark_mask = landmark_mask * loss_mask
-            distances_landmark = distances[landmark_mask]
-            distances_landmark_mean = distances_landmark.mean()
-            metrics[f"fine_mean_distance_{landmark_type.item()}_{mode}"] = (
-                distances_landmark_mean
-            )
-
-        return metrics
-
-
-class NoPoiVertPatchTransformer(nn.Module):
-    """Enrich the coarse features with patch features extracted with a simple CNN
-    regressor, then refine the predictions using a transformer WITHOUT Poi and vertebra embeddings. """
-
-    def __init__(
-        self,
-        n_landmarks: int,
-        #n_verts: int,
-        patch_size: int,
-        poi_feature_l: int,
-        patch_feature_l: int,
-        coord_embedding_l: int,
-        #poi_embedding_l: int,
-        #vert_embedding_l: int,
-        loss_fn: str,
-        project_gt: bool = False,
-        warmup_epochs: int = -1,
-        mlp_dim: int = 1024,
-        num_layers: int = 3,
-        num_heads: int = 4,
-        dropout: float = 0.2,
-        lr: float = 1e-5,
-    ):
-        super().__init__()
-
-        self.patch_feature_extractor = PatchExtractor(
-            patch_size=patch_size,
-            feature_extraction_model=Regressor(
-                in_shape=(1, patch_size, patch_size, patch_size),
-                out_shape=(patch_feature_l,),
-                channels=(8, 16, 32),
-                strides=(2, 2, 2),
-                kernel_size=3,
-            ),
-        )
-
-        self.refinement_module = FlexiblePoiTransformer(
-            poi_feature_l=poi_feature_l + patch_feature_l,
-            coord_embedding_l=coord_embedding_l,
-            poi_embedding_l=None,#poi_embedding_l,
-            vert_embedding_l=None,#vert_embedding_l,
-            mlp_dim=mlp_dim,
-            num_layers=num_layers,
-            num_heads=num_heads,
-            n_landmarks=n_landmarks,
-            #n_verts=n_verts,
-            dropout_rate=dropout,
-        )
-
-        self.project_gt = project_gt
-
-        self.loss_fn = get_loss_fn(loss_fn)
-
-        self.lr = lr
-
-        self.warmup_epochs = warmup_epochs
-        print(f"Refinement Module: NoPoiVertPatchTransformer")
-
-    def forward(self, batch):
-        coarse_preds = batch["coarse_preds"]
-        # poi_indices = batch["poi_list_idx"]
-        # vertebra_indices = batch["vert_list_idx"]
-        poi_features = batch["coarse_features"]
-
-        if (
-            self.warmup_epochs > 0
-            and self.training
-            and self.current_epoch < self.warmup_epochs
-        ):
-            # Use a weighted average of ground truth and coarse predictions in the warmup phase
-            coarse_preds = (
-                self.current_epoch / self.warmup_epochs * coarse_preds
-                + (1 - self.current_epoch / self.warmup_epochs) * batch["target"]
-            )
-
-        # Cast the coarse predictions to long to use them as indices
-        coarse_preds = coarse_preds.detach().long()
-
-        patches = self.patch_feature_extractor(batch["input"], coarse_preds)
-
-        # Concatenate the patch features with the coarse features
-        poi_features = torch.cat([poi_features, patches], dim=-1)
-
-        # offsets = self.refinement_module(
-        #    coarse_preds, poi_features
-        # )
-
-        offsets = self.refinement_module(
-            coarse_preds=coarse_preds.float(),  
-            poi_features=poi_features,     
-            poi_indices=None,                   
-            vertebra=None                       
-        )
-
-        batch["offsets"] = offsets
-        batch["refined_preds"] = coarse_preds.detach() + offsets
-        # batch["refined_preds"] = coarse_preds + offsets
-
-        return batch
-
-    def calculate_loss(self, batch):
-        target = batch["target"]
-        if self.project_gt:
-            # Project targets to surface
-            surface = batch["surface"]
-            target, _ = surface_project_coords(target, surface)
-
-        zoom = batch["zoom"].to(target.device)
-        zoom = zoom.unsqueeze(1)
-
-        refined_preds_mm = batch["refined_preds"] * zoom
-        target_mm = target * zoom
-
-        return self.loss_fn(refined_preds_mm, target_mm, batch["loss_mask"])
-
-    def calculate_metrics(self, batch, mode):
-        metrics = {}
-
-        loss_mask = batch["loss_mask"]  # (batch_size, n_landmarks)
-        fine_preds = batch["refined_preds"]  # (batch_size, n_landmarks, 3)
-        target = batch["target"]  # (batch_size, n_landmarks, 3)
-        target_indices = batch["target_indices"]  # (batch_size, n_landmarks)
-
-        if self.project_gt:
-            target = batch["target"]
-            # Project targets to surface
-            surface = batch["surface"]
-            target, projection_dist = surface_project_coords(target, surface)
-
-            metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
-
-        # Consider zoom (mm per voxel)
-        zoom = batch["zoom"].to(target.device)
-        zoom = zoom.unsqueeze(1)
-
-        # Calculate the mean Euclidean distance between the predicted and target landmarks
-        distances = torch.norm((fine_preds - target) * zoom, dim=-1)  # (batch_size, n_landmarks)
-        distances_mean, distances_std = distances.mean(), distances.std()
-
-        # Mask the distances with the loss mask
-        distances_masked = distances[loss_mask]
-        distances_masked_mean, distances_masked_std = (
-            distances_masked.mean(),
-            distances_masked.std(),
-        )
-
-        metrics[f"fine_mean_distance_{mode}"] = distances_mean
-        metrics[f"fine_std_distance_{mode}"] = distances_std
-        metrics[f"fine_mean_distance_masked_{mode}"] = distances_masked_mean
-        metrics[f"fine_std_distance_masked_{mode}"] = distances_masked_std
-
-        # Calculate the magnitude of the offsets
-        offsets = batch["offsets"]
-        offsets_magnitude = torch.norm(offsets, dim=-1)
-        offsets_magnitude_mean, offsets_magnitude_std = (
-            offsets_magnitude.mean(),
-            offsets_magnitude.std(),
-        )
-
-        # Mask the offsets with the loss mask
-        offsets_masked = offsets_magnitude * loss_mask
-        offsets_masked_mean, offsets_masked_std = (
-            offsets_masked.mean(),
-            offsets_masked.std(),
-        )
-
-        metrics[f"offsets_magnitude_mean_{mode}"] = offsets_magnitude_mean
-        metrics[f"offsets_magnitude_std_{mode}"] = offsets_magnitude_std
-        metrics[f"offsets_magnitude_masked_mean_{mode}"] = offsets_masked_mean
-        metrics[f"offsets_magnitude_masked_std_{mode}"] = offsets_masked_std
-
-        # Calculate mean Euclidian distance grouped by landmark type
-        for i, landmark_type in enumerate(target_indices.unique()):
-            landmark_mask = target_indices == landmark_type
-            landmark_mask = landmark_mask * loss_mask
-            distances_landmark = distances[landmark_mask]
-            distances_landmark_mean = distances_landmark.mean()
-            metrics[f"fine_mean_distance_{landmark_type.item()}_{mode}"] = (
-                distances_landmark_mean
-            )
-
-        return metrics
-
-
-class NoPoiFeaturePatchTransformer(nn.Module):
-    """Extract patch features around coarse predictions and refine using transformer,
-    but WITHOUT using the coarse features from the previous model."""
-
-    def __init__(
-        self,
-        n_landmarks: int,
-        n_verts: int,
-        patch_size: int,
-        #poi_feature_l: int,
-        patch_feature_l: int,
-        coord_embedding_l: int,
-        poi_embedding_l: int,
-        vert_embedding_l: int,
-        loss_fn: str,
-        project_gt: bool = False,
-        warmup_epochs: int = -1,
-        mlp_dim: int = 1024,
-        num_layers: int = 3,
-        num_heads: int = 4,
-        dropout: float = 0.2,
-        lr: float = 1e-5,
-    ):
-        super().__init__()
-
-        self.patch_feature_extractor = PatchExtractor(
-            patch_size=patch_size,
-            feature_extraction_model=Regressor(
-                in_shape=(1, patch_size, patch_size, patch_size),
-                out_shape=(patch_feature_l,),
-                channels=(8, 16, 32),
-                strides=(2, 2, 2),
-                kernel_size=3,
-            ),
-        )
-
-        self.refinement_module = FlexiblePoiTransformer(
-            poi_feature_l=patch_feature_l, #poi_feature_l + patch_feature_l,
-            coord_embedding_l=coord_embedding_l,
-            poi_embedding_l=poi_embedding_l,
-            vert_embedding_l=vert_embedding_l,
-            mlp_dim=mlp_dim,
-            num_layers=num_layers,
-            num_heads=num_heads,
-            n_landmarks=n_landmarks,
-            n_verts=n_verts,
-            dropout_rate=dropout,
-        )
-
-        self.project_gt = project_gt
-
-        self.loss_fn = get_loss_fn(loss_fn)
-
-        self.lr = lr
-
-        self.warmup_epochs = warmup_epochs
-        print("Refinement Module: NoPoiFeaturePatchTransformer")
-
-    def forward(self, batch):
-        coarse_preds = batch["coarse_preds"]
-        poi_indices = batch["poi_list_idx"]
-        vertebra_indices = batch["vert_list_idx"]
-        # poi_features = batch["coarse_features"]
-
-        if (
-            self.warmup_epochs > 0
-            and self.training
-            and self.current_epoch < self.warmup_epochs
-        ):
-            # Use a weighted average of ground truth and coarse predictions in the warmup phase
-            coarse_preds = (
-                self.current_epoch / self.warmup_epochs * coarse_preds
-                + (1 - self.current_epoch / self.warmup_epochs) * batch["target"]
-            )
-
-        # Cast the coarse predictions to long to use them as indices
-        coarse_preds = coarse_preds.detach().long()
-
-        patches = self.patch_feature_extractor(batch["input"], coarse_preds)
-
-        offsets = self.refinement_module(
-            coarse_preds=coarse_preds,
-            poi_indices=poi_indices, 
-            vertebra=vertebra_indices, 
-            poi_features=patches#, poi_features
-        )
-        batch["offsets"] = offsets
-        batch["refined_preds"] = coarse_preds + offsets
-
-        return batch
-
-    def calculate_loss(self, batch):
-        target = batch["target"]
-        if self.project_gt:
-            # Project targets to surface
-            surface = batch["surface"]
-            target, _ = surface_project_coords(target, surface)
-
-        zoom = batch["zoom"].to(target.device)
-        zoom = zoom.unsqueeze(1)
-
-        refined_preds_mm = batch["refined_preds"] * zoom
-        target_mm = target * zoom
-
-        return self.loss_fn(refined_preds_mm, target_mm, batch["loss_mask"])
-
-    def calculate_metrics(self, batch, mode):
-        metrics = {}
-
-        loss_mask = batch["loss_mask"]  # (batch_size, n_landmarks)
-        fine_preds = batch["refined_preds"]  # (batch_size, n_landmarks, 3)
-        target = batch["target"]  # (batch_size, n_landmarks, 3)
-        target_indices = batch["target_indices"]  # (batch_size, n_landmarks)
-
-        if self.project_gt:
-            target = batch["target"]
-            # Project targets to surface
-            surface = batch["surface"]
-            target, projection_dist = surface_project_coords(target, surface)
-
-            metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
-
-        # Consider zoom (mm per voxel)
-        zoom = batch["zoom"].to(target.device)
-        zoom = zoom.unsqueeze(1)
-
-        # Calculate the mean Euclidean distance between the predicted and target landmarks
-        distances = torch.norm((fine_preds - target) * zoom, dim=-1)  # (batch_size, n_landmarks)
-        distances_mean, distances_std = distances.mean(), distances.std()
-
-        # Mask the distances with the loss mask
-        distances_masked = distances[loss_mask]
-        distances_masked_mean, distances_masked_std = (
-            distances_masked.mean(),
-            distances_masked.std(),
-        )
-
-        metrics[f"fine_mean_distance_{mode}"] = distances_mean
-        metrics[f"fine_std_distance_{mode}"] = distances_std
-        metrics[f"fine_mean_distance_masked_{mode}"] = distances_masked_mean
-        metrics[f"fine_std_distance_masked_{mode}"] = distances_masked_std
-
-        # Calculate the magnitude of the offsets
-        offsets = batch["offsets"]
-        offsets_magnitude = torch.norm(offsets, dim=-1)
-        offsets_magnitude_mean, offsets_magnitude_std = (
-            offsets_magnitude.mean(),
-            offsets_magnitude.std(),
-        )
-
-        # Mask the offsets with the loss mask
-        offsets_masked = offsets_magnitude * loss_mask
-        offsets_masked_mean, offsets_masked_std = (
-            offsets_masked.mean(),
-            offsets_masked.std(),
-        )
-
-        metrics[f"offsets_magnitude_mean_{mode}"] = offsets_magnitude_mean
-        metrics[f"offsets_magnitude_std_{mode}"] = offsets_magnitude_std
-        metrics[f"offsets_magnitude_masked_mean_{mode}"] = offsets_masked_mean
-        metrics[f"offsets_magnitude_masked_std_{mode}"] = offsets_masked_std
-
-        # Calculate mean Euclidian distance grouped by landmark type
-        for i, landmark_type in enumerate(target_indices.unique()):
-            landmark_mask = target_indices == landmark_type
-            landmark_mask = landmark_mask * loss_mask
-            distances_landmark = distances[landmark_mask]
-            distances_landmark_mean = distances_landmark.mean()
-            metrics[f"fine_mean_distance_{landmark_type.item()}_{mode}"] = (
-                distances_landmark_mean
-            )
-
-        return metrics
-
-
-class NoPoiVertFeaturePatchTransformer(nn.Module):
-    """Extract patch features around coarse predictions and refine using transformer,
-    but WITHOUT using the coarse features from the previous model, poi and vertebra embeddings."""
-    
-    def __init__(
-        self,
-        n_landmarks: int,
-        #n_verts: int,
-        patch_size: int,
-        #poi_feature_l: int,
-        patch_feature_l: int,
-        coord_embedding_l: int,
-        #poi_embedding_l: int,
-        #vert_embedding_l: int,
-        loss_fn: str,
-        project_gt: bool = False,
-        warmup_epochs: int = -1,
-        mlp_dim: int = 1024,
-        num_layers: int = 3,
-        num_heads: int = 4,
-        dropout: float = 0.2,
-        lr: float = 1e-5,
-    ):
-        super().__init__()
-
-        self.patch_feature_extractor = PatchExtractor(
-            patch_size=patch_size,
-            feature_extraction_model=Regressor(
-                in_shape=(1, patch_size, patch_size, patch_size),
-                out_shape=(patch_feature_l,),
-                channels=(8, 16, 32),
-                strides=(2, 2, 2),
-                kernel_size=3,
-            ),
-        )
-
-        self.refinement_module = FlexiblePoiTransformer(
-            poi_feature_l=patch_feature_l, #poi_feature_l + patch_feature_l,
-            coord_embedding_l=coord_embedding_l,
-            poi_embedding_l=None,#poi_embedding_l,
-            vert_embedding_l=None,#vert_embedding_l,
-            mlp_dim=mlp_dim,
-            num_layers=num_layers,
-            num_heads=num_heads,
-            n_landmarks=n_landmarks,
-            #n_verts=n_verts,
-            dropout_rate=dropout,
-        )
-
-        self.project_gt = project_gt
-
-        self.loss_fn = get_loss_fn(loss_fn)
-
-        self.lr = lr
-
-        self.warmup_epochs = warmup_epochs
-
-        print("Refinement Module: NoPoiVertFeaturePatchTransformer")
-
-    def forward(self, batch):
-        coarse_preds = batch["coarse_preds"]
-        #poi_indices = batch["poi_list_idx"]
-        #vertebra_indices = batch["vert_list_idx"]
-        #poi_features = batch["coarse_features"]
-
-        if (
-            self.warmup_epochs > 0
-            and self.training
-            and self.current_epoch < self.warmup_epochs
-        ):
-            # Use a weighted average of ground truth and coarse predictions in the warmup phase
-            coarse_preds = (
-                self.current_epoch / self.warmup_epochs * coarse_preds
-                + (1 - self.current_epoch / self.warmup_epochs) * batch["target"]
-            )
-
-        # Cast the coarse predictions to long to use them as indices
-        coarse_preds = coarse_preds.detach().long()
-
-        patches = self.patch_feature_extractor(batch["input"], coarse_preds)
-
-        offsets = self.refinement_module(
-            coarse_preds=coarse_preds,
-            poi_indices=None, 
-            vertebra=None, 
-            poi_features=patches#, poi_features
-        )
-        batch["offsets"] = offsets
-        batch["refined_preds"] = coarse_preds + offsets
-
-        return batch
-
-    def calculate_loss(self, batch):
-        target = batch["target"]
-        if self.project_gt:
-            # Project targets to surface
-            surface = batch["surface"]
-            target, _ = surface_project_coords(target, surface)
-
-        return self.loss_fn(batch["refined_preds"], target, batch["loss_mask"])
-
-    def calculate_metrics(self, batch, mode):
-        metrics = {}
-
-        loss_mask = batch["loss_mask"]  # (batch_size, n_landmarks)
-        fine_preds = batch["refined_preds"]  # (batch_size, n_landmarks, 3)
-        target = batch["target"]  # (batch_size, n_landmarks, 3)
-        target_indices = batch["target_indices"]  # (batch_size, n_landmarks)
-
-        if self.project_gt:
-            target = batch["target"]
-            # Project targets to surface
-            surface = batch["surface"]
-            target, projection_dist = surface_project_coords(target, surface)
-
-            metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
-
-        # Calculate the mean Euclidean distance between the predicted and target landmarks
-        distances = torch.norm(fine_preds - target, dim=-1)  # (batch_size, n_landmarks)
-        distances_mean, distances_std = distances.mean(), distances.std()
-
-        # Mask the distances with the loss mask
-        distances_masked = distances[loss_mask]
-        distances_masked_mean, distances_masked_std = (
-            distances_masked.mean(),
-            distances_masked.std(),
-        )
-
-        metrics[f"fine_mean_distance_{mode}"] = distances_mean
-        metrics[f"fine_std_distance_{mode}"] = distances_std
-        metrics[f"fine_mean_distance_masked_{mode}"] = distances_masked_mean
-        metrics[f"fine_std_distance_masked_{mode}"] = distances_masked_std
-
-        # Calculate the magnitude of the offsets
-        offsets = batch["offsets"]
-        offsets_magnitude = torch.norm(offsets, dim=-1)
-        offsets_magnitude_mean, offsets_magnitude_std = (
-            offsets_magnitude.mean(),
-            offsets_magnitude.std(),
-        )
-
-        # Mask the offsets with the loss mask
-        offsets_masked = offsets_magnitude * loss_mask
-        offsets_masked_mean, offsets_masked_std = (
-            offsets_masked.mean(),
-            offsets_masked.std(),
-        )
-
-        metrics[f"offsets_magnitude_mean_{mode}"] = offsets_magnitude_mean
-        metrics[f"offsets_magnitude_std_{mode}"] = offsets_magnitude_std
-        metrics[f"offsets_magnitude_masked_mean_{mode}"] = offsets_masked_mean
-        metrics[f"offsets_magnitude_masked_std_{mode}"] = offsets_masked_std
-
-        # Calculate mean Euclidian distance grouped by landmark type
-        for i, landmark_type in enumerate(target_indices.unique()):
-            landmark_mask = target_indices == landmark_type
-            landmark_mask = landmark_mask * loss_mask
-            distances_landmark = distances[landmark_mask]
-            distances_landmark_mean = distances_landmark.mean()
-            metrics[f"fine_mean_distance_{landmark_type.item()}_{mode}"] = (
-                distances_landmark_mean
-            )
-
-        return metrics
-
-
-class NoCoarsePredTransformer(nn.Module):
-    """Refinement module that uses embeddings, 
-    but does NOT use coordinate information in the transformer."""
-    
-    def __init__(
-        self,
-        n_landmarks: int,
-        n_verts: int,
-        #patch_size: int,
-        poi_feature_l: int,
-        #patch_feature_l: int,
-        #coord_embedding_l: int,
-        poi_embedding_l: int,
-        vert_embedding_l: int,
-        loss_fn: str,
-        project_gt: bool = False,
-        warmup_epochs: int = -1,
-        mlp_dim: int = 1024,
-        num_layers: int = 3,
-        num_heads: int = 4,
-        dropout: float = 0.2,
-        lr: float = 1e-5,
-    ):
-        super().__init__()
-
-        self.refinement_module = FlexiblePoiTransformer(
-            poi_feature_l=poi_feature_l, #+ patch_feature_l,
-            coord_embedding_l=None,
-            poi_embedding_l=poi_embedding_l,
-            vert_embedding_l=vert_embedding_l,
-            mlp_dim=mlp_dim,
-            num_layers=num_layers,
-            num_heads=num_heads,
-            n_landmarks=n_landmarks,
-            n_verts=n_verts,
-            dropout_rate=dropout,
-        )
-
-        self.project_gt = project_gt
-
-        self.loss_fn = get_loss_fn(loss_fn)
-
-        self.lr = lr
-
-        self.warmup_epochs = warmup_epochs
-
-        print("Refinement Module: NoCoarsePredTransformer")
-
-    def forward(self, batch):
-        #coarse_preds = batch["coarse_preds"]
-        poi_indices = batch["poi_list_idx"]
-        vertebra_indices = batch["vert_list_idx"]
-        poi_features = batch["coarse_features"]
-
-        coords_preds = self.refinement_module(
-            coarse_preds=None,
-            poi_indices=poi_indices,
-            vertebra=vertebra_indices,
-            poi_features=poi_features
-        )
-        batch["offsets"] = coords_preds
-        batch["refined_preds"] = coords_preds
-
-        return batch
-
-    def calculate_loss(self, batch):
-        target = batch["target"]
-        if self.project_gt:
-            # Project targets to surface
-            surface = batch["surface"]
-            target, _ = surface_project_coords(target, surface)
-
-        zoom = batch["zoom"].to(target.device)
-        zoom = zoom.unsqueeze(1)
-
-        refined_preds_mm = batch["refined_preds"] * zoom
-        target_mm = target * zoom
-
-        return self.loss_fn(refined_preds_mm, target_mm, batch["loss_mask"])
-
-    def calculate_metrics(self, batch, mode):
-        metrics = {}
-
-        loss_mask = batch["loss_mask"]  # (batch_size, n_landmarks)
-        fine_preds = batch["refined_preds"]  # (batch_size, n_landmarks, 3)
-        target = batch["target"]  # (batch_size, n_landmarks, 3)
-        target_indices = batch["target_indices"]  # (batch_size, n_landmarks)
-
-        if self.project_gt:
-            target = batch["target"]
-            # Project targets to surface
-            surface = batch["surface"]
-            target, projection_dist = surface_project_coords(target, surface)
-
-            metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
-
-        # Consider zoom (mm per voxel)
-        zoom = batch["zoom"].to(target.device)
-        zoom = zoom.unsqueeze(1)
-
-        # Calculate the mean Euclidean distance between the predicted and target landmarks
-        distances = torch.norm((fine_preds - target) * zoom, dim=-1)  # (batch_size, n_landmarks)
-        distances_mean, distances_std = distances.mean(), distances.std()
-
-        # Mask the distances with the loss mask
-        distances_masked = distances[loss_mask]
-        distances_masked_mean, distances_masked_std = (
-            distances_masked.mean(),
-            distances_masked.std(),
-        )
-
-        metrics[f"fine_mean_distance_{mode}"] = distances_mean
-        metrics[f"fine_std_distance_{mode}"] = distances_std
-        metrics[f"fine_mean_distance_masked_{mode}"] = distances_masked_mean
-        metrics[f"fine_std_distance_masked_{mode}"] = distances_masked_std
-
-        # Calculate the magnitude of the offsets
-        offsets = batch["offsets"]
-        offsets_magnitude = torch.norm(offsets, dim=-1)
-        offsets_magnitude_mean, offsets_magnitude_std = (
-            offsets_magnitude.mean(),
-            offsets_magnitude.std(),
-        )
-
-        # Mask the offsets with the loss mask
-        offsets_masked = offsets_magnitude * loss_mask
-        offsets_masked_mean, offsets_masked_std = (
-            offsets_masked.mean(),
-            offsets_masked.std(),
-        )
-
-        metrics[f"offsets_magnitude_mean_{mode}"] = offsets_magnitude_mean
-        metrics[f"offsets_magnitude_std_{mode}"] = offsets_magnitude_std
-        metrics[f"offsets_magnitude_masked_mean_{mode}"] = offsets_masked_mean
-        metrics[f"offsets_magnitude_masked_std_{mode}"] = offsets_masked_std
-
-        # Calculate mean Euclidian distance grouped by landmark type
-        for i, landmark_type in enumerate(target_indices.unique()):
-            landmark_mask = target_indices == landmark_type
-            landmark_mask = landmark_mask * loss_mask
-            distances_landmark = distances[landmark_mask]
-            distances_landmark_mean = distances_landmark.mean()
-            metrics[f"fine_mean_distance_{landmark_type.item()}_{mode}"] = (
-                distances_landmark_mean
-            )
-
-        return metrics
-
-
-class FeatureTransformer(nn.Module):
-    """Refinement module that skips the patch feature extractor"""
-    
-    def __init__(
-        self,
-        n_landmarks: int,
-        n_verts: int,
-        #patch_size: int,
-        poi_feature_l: int,
-        #patch_feature_l: int,
-        coord_embedding_l: int,
-        poi_embedding_l: int,
-        vert_embedding_l: int,
-        loss_fn: str,
-        project_gt: bool = False,
-        warmup_epochs: int = -1,
-        mlp_dim: int = 1024,
-        num_layers: int = 3,
-        num_heads: int = 4,
-        dropout: float = 0.2,
-        lr: float = 1e-5,
-    ):
-        super().__init__()
-
-        self.refinement_module = FlexiblePoiTransformer(
-            poi_feature_l=poi_feature_l, #+ patch_feature_l,
-            coord_embedding_l=coord_embedding_l,
-            poi_embedding_l=poi_embedding_l,
-            vert_embedding_l=vert_embedding_l,
-            mlp_dim=mlp_dim,
-            num_layers=num_layers,
-            num_heads=num_heads,
-            n_landmarks=n_landmarks,
-            n_verts=n_verts,
-            dropout_rate=dropout,
-        )
-
-        self.project_gt = project_gt
-
-        self.loss_fn = get_loss_fn(loss_fn)
-
-        self.lr = lr
-
-        self.warmup_epochs = warmup_epochs
-
-        print("Refinement Module: FeatureTransformer")
-
-    def forward(self, batch):
-        coarse_preds = batch["coarse_preds"]
-        poi_indices = batch["poi_list_idx"]
-        vertebra_indices = batch["vert_list_idx"]
-        poi_features = batch["coarse_features"]
-
-        if (
-            self.warmup_epochs > 0
-            and self.training
-            and self.current_epoch < self.warmup_epochs
-        ):
-            # Use a weighted average of ground truth and coarse predictions in the warmup phase
-            coarse_preds = (
-                self.current_epoch / self.warmup_epochs * coarse_preds
-                + (1 - self.current_epoch / self.warmup_epochs) * batch["target"]
-            )
-
-        # Cast the coarse predictions to long to use them as indices
-        coarse_preds = coarse_preds.detach().long()
-
-        offsets = self.refinement_module(
-            coarse_preds=coarse_preds,
-            poi_indices=poi_indices,
-            vertebra=vertebra_indices,
-            poi_features=poi_features
-        )
-        batch["offsets"] = offsets
-        batch["refined_preds"] = coarse_preds + offsets
-
-        return batch
-
-    def calculate_loss(self, batch):
-        target = batch["target"]
-        if self.project_gt:
-            # Project targets to surface
-            surface = batch["surface"]
-            target, _ = surface_project_coords(target, surface)
-        
-        zoom = batch["zoom"].to(target.device)
-        zoom = zoom.unsqueeze(1)
-
-        refined_preds_mm = batch["refined_preds"] * zoom
-        target_mm = target * zoom
-
-        return self.loss_fn(refined_preds_mm, target_mm, batch["loss_mask"])
-
-    def calculate_metrics(self, batch, mode):
-        metrics = {}
-
-        loss_mask = batch["loss_mask"]  # (batch_size, n_landmarks)
-        fine_preds = batch["refined_preds"]  # (batch_size, n_landmarks, 3)
-        target = batch["target"]  # (batch_size, n_landmarks, 3)
-        target_indices = batch["target_indices"]  # (batch_size, n_landmarks)
-
-        if self.project_gt:
-            target = batch["target"]
-            # Project targets to surface
-            surface = batch["surface"]
-            target, projection_dist = surface_project_coords(target, surface)
-
-            metrics[f"fine_projection_dist_{mode}"] = projection_dist.mean()
-
-        # Consider zoom (mm per voxel)
-        zoom = batch["zoom"].to(target.device)
-        zoom = zoom.unsqueeze(1)
-
-        # Calculate the mean Euclidean distance between the predicted and target landmarks
-        distances = torch.norm((fine_preds - target) * zoom, dim=-1)  # (batch_size, n_landmarks)
-        distances_mean, distances_std = distances.mean(), distances.std()
-
-        # Mask the distances with the loss mask
-        distances_masked = distances[loss_mask]
-        distances_masked_mean, distances_masked_std = (
-            distances_masked.mean(),
-            distances_masked.std(),
-        )
-
-        metrics[f"fine_mean_distance_{mode}"] = distances_mean
-        metrics[f"fine_std_distance_{mode}"] = distances_std
-        metrics[f"fine_mean_distance_masked_{mode}"] = distances_masked_mean
-        metrics[f"fine_std_distance_masked_{mode}"] = distances_masked_std
-
-        # Calculate the magnitude of the offsets
-        offsets = batch["offsets"]
-        offsets_magnitude = torch.norm(offsets, dim=-1)
-        offsets_magnitude_mean, offsets_magnitude_std = (
-            offsets_magnitude.mean(),
-            offsets_magnitude.std(),
-        )
-
-        # Mask the offsets with the loss mask
-        offsets_masked = offsets_magnitude * loss_mask
-        offsets_masked_mean, offsets_masked_std = (
-            offsets_masked.mean(),
-            offsets_masked.std(),
-        )
-
-        metrics[f"offsets_magnitude_mean_{mode}"] = offsets_magnitude_mean
-        metrics[f"offsets_magnitude_std_{mode}"] = offsets_magnitude_std
-        metrics[f"offsets_magnitude_masked_mean_{mode}"] = offsets_masked_mean
-        metrics[f"offsets_magnitude_masked_std_{mode}"] = offsets_masked_std
-
-        # Calculate mean Euclidian distance grouped by landmark type
-        for i, landmark_type in enumerate(target_indices.unique()):
-            landmark_mask = target_indices == landmark_type
-            landmark_mask = landmark_mask * loss_mask
-            distances_landmark = distances[landmark_mask]
-            distances_landmark_mean = distances_landmark.mean()
-            metrics[f"fine_mean_distance_{landmark_type.item()}_{mode}"] = (
-                distances_landmark_mean
-            )
-
-        return metrics
+    return factory
 
 
 #: Config ``"type"`` string -> refinement module.
 #: Consumed by :func:`vertpois.modules.poi_module.create_refinement_module`.
+#:
+#: The ``No*`` entries were separate classes until they were merged into
+#: :class:`PatchTransformer`; they remain valid config values.
 REFINEMENT_MODULES = {
     "Identity": Identity,
     "PatchTransformer": PatchTransformer,
-    "NoPoiPatchTransformer": NoPoiPatchTransformer,
-    "NoVertPatchTransformer": NoVertPatchTransformer,
-    "NoPoiVertPatchTransformer": NoPoiVertPatchTransformer,
-    "NoPoiFeaturePatchTransformer": NoPoiFeaturePatchTransformer,
-    "NoPoiVertFeaturePatchTransformer": NoPoiVertFeaturePatchTransformer,
-    "NoCoarsePredTransformer": NoCoarsePredTransformer,
-    "FeatureTransformer": FeatureTransformer,
+    "NoPoiPatchTransformer": _variant(use_poi_embedding=False),
+    "NoVertPatchTransformer": _variant(use_vert_embedding=False),
+    "NoPoiVertPatchTransformer": _variant(use_poi_embedding=False, use_vert_embedding=False),
+    "NoPoiFeaturePatchTransformer": _variant(use_coarse_features=False),
+    "NoPoiVertFeaturePatchTransformer": _variant(
+        use_poi_embedding=False, use_vert_embedding=False, use_coarse_features=False
+    ),
+    "NoCoarsePredTransformer": _variant(use_coarse_pred=False, use_patches=False),
+    "FeatureTransformer": _variant(use_patches=False),
 }
