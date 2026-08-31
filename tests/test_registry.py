@@ -60,3 +60,14 @@ def test_build_rejects_config_without_type():
 def test_build_passes_params_through():
     module = build(REFINEMENT_MODULES, "refinement module", {"type": "Identity", "params": {}})
     assert module is not None
+
+
+@pytest.mark.parametrize("config", [{"type": "Identity"}, {"type": "Identity", "params": None}, {"type": "Identity", "params": {}}])
+def test_params_may_be_omitted_or_null(config):
+    """`"params": null` is easy to write by hand and must not fail obscurely."""
+    assert build(REFINEMENT_MODULES, "refinement module", config) is not None
+
+
+def test_non_mapping_params_are_rejected_clearly():
+    with pytest.raises(TypeError, match="must be a mapping"):
+        build(REFINEMENT_MODULES, "refinement module", {"type": "Identity", "params": [1, 2]})

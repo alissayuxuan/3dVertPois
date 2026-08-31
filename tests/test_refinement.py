@@ -83,3 +83,29 @@ def test_no_coarse_pred_variant_ignores_coarse_predictions(model_dims, refinemen
         baseline = module(dict(refinement_batch))["refined_preds"]
         shifted = module(dict(refinement_batch, coarse_preds=refinement_batch["coarse_preds"] + 5))["refined_preds"]
     assert torch.allclose(baseline, shifted)
+
+
+def test_a_variant_without_any_feature_source_is_rejected(model_dims):
+    """Catch the empty-token config at construction, not mid-training.
+
+    With both feature sources off the transformer receives an empty feature list,
+    which used to surface as an IndexError on the first forward pass.
+    """
+    with pytest.raises(ValueError, match="no per-landmark features"):
+        REFINEMENT_MODULES["PatchTransformer"](**model_dims, use_coarse_features=False, use_patches=False)
+
+
+def test_a_config_cannot_contradict_the_variant_it_named(model_dims):
+    """`NoPoiPatchTransformer` means "no POI embedding"; re-enabling it is a mistake.
+
+    Silently honouring the kwarg would build a model that does not match the type
+    string recorded alongside its checkpoint.
+    """
+    with pytest.raises(ValueError, match="already fixes use_poi_embedding"):
+        REFINEMENT_MODULES["NoPoiPatchTransformer"](**model_dims, use_poi_embedding=True)
+
+
+def test_variants_still_accept_ordinary_parameters(model_dims):
+    """The conflict check must not block parameters the variant does not fix."""
+    module = REFINEMENT_MODULES["NoPoiPatchTransformer"](**{**model_dims, "dropout": 0.5})
+    assert module is not None

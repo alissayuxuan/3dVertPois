@@ -202,6 +202,14 @@ class PatchTransformer(nn.Module):
         self.use_patches = use_patches and use_coarse_pred
         self.use_coarse_pred = use_coarse_pred
 
+        # Caught here rather than at the first forward pass, where it would surface as
+        # an IndexError on an empty feature list part-way into a training run.
+        if self.use_coarse_pred and not (self.use_coarse_features or self.use_patches):
+            raise ValueError(
+                "The transformer would receive no per-landmark features: "
+                "set use_coarse_features or use_patches (or use_coarse_pred=False)."
+            )
+
         if self.use_patches:
             self.patch_feature_extractor = PatchExtractor(
                 patch_size=patch_size,
@@ -390,10 +398,20 @@ def _variant(**flags):
 
     Each historical ablation subclass becomes one flag combination, so a config's
     ``"type"`` string keeps selecting the same architecture it always did.
+
+    The flags a variant fixes are what its name *means*, so a config that also sets
+    one of them is contradicting itself; that raises rather than silently building a
+    model that does not match the type string recorded in its checkpoint.
     """
 
     def factory(**kwargs):
-        return PatchTransformer(**{**flags, **kwargs})
+        conflicting = sorted(set(flags) & set(kwargs))
+        if conflicting:
+            raise ValueError(
+                f"This refinement type already fixes {', '.join(conflicting)}; "
+                f"remove it from the config, or use type 'PatchTransformer' to set the flags yourself."
+            )
+        return PatchTransformer(**flags, **kwargs)
 
     return factory
 

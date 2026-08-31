@@ -59,7 +59,8 @@ def build(registry: dict[str, Any], kind: str, config: dict[str, Any]) -> Any:
     Args:
         registry: Mapping of config type string to a class or factory.
         kind: Human-readable category, used in the error message.
-        config: A ``{"type": ..., "params": {...}}`` mapping. ``params`` may be omitted.
+        config: A ``{"type": ..., "params": {...}}`` mapping. ``params`` may be
+            omitted or null.
 
     Returns:
         The constructed component.
@@ -67,8 +68,14 @@ def build(registry: dict[str, Any], kind: str, config: dict[str, Any]) -> Any:
     Raises:
         UnknownTypeError: If the config names an unregistered type.
         KeyError: If the config has no ``"type"`` key.
+        TypeError: If ``params`` is present but is not a mapping.
     """
     if "type" not in config:
         raise KeyError(f"{kind} config is missing the required 'type' key; got keys: {', '.join(sorted(config))}.")
     factory = resolve(registry, kind, config["type"])
-    return factory(**config.get("params", {}))
+    # `"params": null` is easy to write by hand and would otherwise fail as an opaque
+    # "argument after ** must be a mapping" TypeError.
+    params = config.get("params") or {}
+    if not isinstance(params, dict):
+        raise TypeError(f"{kind} config's 'params' must be a mapping, got {type(params).__name__}.")
+    return factory(**params)
