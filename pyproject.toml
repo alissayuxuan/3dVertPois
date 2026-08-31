@@ -1,0 +1,100 @@
+[tool.poetry]
+name = "vertpois"
+version = "0.1.0"
+description = "Deep-learning prediction of anatomical points-of-interest (POIs) on vertebrae from CT/MRI spine segmentations."
+authors = ["See AUTHORS.md"]
+license = "Apache-2.0"
+readme = "README.md"
+packages = [{ include = "vertpois", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.10 || ^3.11 || ^3.12"
+TPTBox = ">=0.8"
+TypeSaveArgParse = "*"
+torch = ">=2.1"
+pytorch-lightning = ">=2.1"
+monai = ">=1.3"
+numpy = ">=1.26"
+pandas = ">=2.0"
+scipy = ">=1.11"
+scikit-image = ">=0.21"
+scikit-learn = ">=1.4"
+nibabel = ">=5.1"
+PyYAML = ">=6.0"
+tqdm = "*"
+pqdm = "*"
+openpyxl = "*"
+einops = "*"
+tensorboard = "*"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0"
+ruff = ">=0.11"
+pre-commit = "*"
+coverage = ">=7.0"
+
+[tool.poetry.group.extras.dependencies]
+# Sparse-convolution backbones (SubmDenseNet). CUDA-specific; not required for
+# the dense pipeline, so kept out of the default install.
+spconv-cu120 = "*"
+
+[tool.poetry.scripts]
+vertpois-prepare-data = "vertpois.cli.prepare_data:main"
+vertpois-train = "vertpois.cli.train:main"
+vertpois-train-cv = "vertpois.cli.train_cv:main"
+vertpois-eval = "vertpois.cli.evaluate:main"
+vertpois-infer = "vertpois.cli.infer:main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+exclude = [".git", ".ruff_cache", ".venv", "venv", "build", "dist", "__pypackages__", "*.ipynb"]
+line-length = 140
+indent-width = 4
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W", "I", "N", "UP", "B", "A", "C4", "ICN", "G", "PIE", "PYI",
+    "SIM", "TID", "ARG", "D", "ANN201", "PD", "PGH", "PL", "TRY", "FLY", "NPY",
+    "PERF", "FURB", "RUF",
+]
+ignore = [
+    "E501",    # line length handled by the formatter
+    "F401",
+    "BLE001",
+    "N801", "N802", "N803", "N806", "N999",
+    "NPY002",
+    "PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR2004",
+    "TRY003", "TRY301",
+    "SIM105", "SIM118",
+    "UP007", "UP038",
+    "PLC0415",
+    "PLW0108",
+    "B905",
+    "D100",    # module docstring - covered per-package
+    "D104",    # package docstring
+    "D105",    # magic method
+    "D107",    # __init__ (covered by class docstring)
+    "D417",
+    "ANN202",
+    "RUF002",
+    "PD901",
+]
+fixable = ["ALL"]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D101", "D102", "D103", "D205", "D415", "ANN201", "ARG001"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 20
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

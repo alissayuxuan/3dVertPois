@@ -1,0 +1,22 @@
+# Machine-specific paths. Copy to `config/paths.yaml` (git-ignored) and edit.
+#
+# Every entry can also be set through an environment variable, which takes
+# precedence: `data_root` -> VERTPOIS_DATA_ROOT, and so on.
+#
+# Only `tmp_root` has a default (/tmp/vertpois). Any other key that a code path
+# actually needs must be set here, or that code path raises PathConfigError.
+
+# Root holding the BIDS dataset(s) to read images and annotations from.
+data_root: /path/to/datasets
+
+# Where prepare_data writes per-vertebra cutouts and master_df.csv.
+cutout_root: /path/to/cutouts
+
+# Root holding trained model directories and their checkpoints.
+model_root: /path/to/trainings
+
+# Where evaluation and inference results are written.
+output_root: /path/to/results
+
+# Scratch space for intermediate files.
+tmp_root: /tmp/vertpois

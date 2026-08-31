@@ -1,24 +1,31 @@
+# See https://pre-commit.com for more information
 repos:
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
     hooks:
-      - id: isort
-        args: ["--profile", "black"]  # Use the black profile for compatibility
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: check-case-conflict
 
-  - repo: https://github.com/psf/black-pre-commit-mirror
-    rev: 24.8.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.0
     hooks:
-      - id: black
-        args: ["--line-length", "88"]  # Line length of 88 is standard for black, we set it explicitly for clarity
+      - id: ruff
+        types_or: [python, pyi]
+        args: [--fix]
+      - id: ruff-format
+        types_or: [python, pyi]
 
-  - repo: https://github.com/PyCQA/docformatter
-    rev: v1.7.5
+  - repo: local
     hooks:
-      - id: docformatter
-        args: ["--in-place", "--wrap-summaries", "88", "--wrap-descriptions", "88"]  # Summaries and descriptions should be wrapped at 88 characters where possible
-
-  - repo: https://github.com/PyCQA/flake8
-    rev: 7.1.1 
-    hooks:
-      - id: flake8
-        args: ["--ignore", "E203,E501,E701,E704,W503"]  # Ignore line length and other warnings because black will handle them
+      - id: no-absolute-paths
+        name: block machine-specific absolute paths
+        entry: python scripts/check_no_private_data.py
+        language: system
+        pass_filenames: true
+        types_or: [python, yaml, json, markdown, toml]
