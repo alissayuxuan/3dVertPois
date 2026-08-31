@@ -65,11 +65,17 @@ class PoiTransformer(nn.Module):
 
         self.fine_pred = nn.Linear(hidden_size, 3)
 
-    def forward(self, coarse_preds, poi_indices, vertebra, poi_features):
-        """coarse_preds: (B, N_landmarks, 3)
-        poi_indices: (B, N_landmarks)
-        vertebra: (B)
-        poi_features: (B, N_landmarks, poi_feature_l)
+    def forward(self, coarse_preds, poi_indices, vertebra, poi_features) -> torch.Tensor:
+        """Predict a coordinate offset for every landmark.
+
+        Args:
+            coarse_preds: Coarse coordinates, ``(batch, n_landmarks, 3)``.
+            poi_indices: Landmark identities, ``(batch, n_landmarks)``.
+            vertebra: Vertebra identities, ``(batch, n_landmarks)``.
+            poi_features: Per-landmark features, ``(batch, n_landmarks, poi_feature_l)``.
+
+        Returns:
+            Offsets to add to ``coarse_preds``, ``(batch, n_landmarks, 3)``.
         """
         # Create the embeddings
         coords_embedded = self.coordinate_embedding(coarse_preds.float())  # size (B, N_landmarks, coord_embedding_l)
@@ -172,8 +178,8 @@ class FlexiblePoiTransformer(nn.Module):
         self.norm = nn.LayerNorm(hidden_size)
         self.fine_pred = nn.Linear(hidden_size, 3)
 
-    def forward(self, coarse_preds=None, poi_indices=None, vertebra=None, poi_features=None):
-        """Flexible forward pass - only processes provided inputs"""
+    def forward(self, coarse_preds=None, poi_indices=None, vertebra=None, poi_features=None) -> torch.Tensor:
+        """Flexible forward pass - only processes provided inputs."""
         # Collect feature components
         features_list = []
 

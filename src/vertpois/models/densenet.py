@@ -1,5 +1,10 @@
-"""Adapted from MonAI https://docs.monai.io/en/stable/_modules/monai/networks/nets/densenet.html
-Key changes: The final flattening and out layers are removed, as the model is used to generate a (downsized) feature map.
+"""3D DenseNet backbones producing per-landmark heatmaps.
+
+Adapted from MONAI's DenseNet implementation. The final flattening and output
+layers are removed, because this model produces a downsized feature map rather
+than a classification.
+
+See https://docs.monai.io/en/stable/_modules/monai/networks/nets/densenet.html
 """
 
 from __future__ import annotations
@@ -24,7 +29,9 @@ class _DenseLayer(nn.Module):
         act: str | tuple = ("relu", {"inplace": True}),
         norm: str | tuple = "batch",
     ) -> None:
-        """Args:
+        """Initialise the module.
+
+        Args:
         spatial_dims: number of spatial dimensions of the input image.
         in_channels: number of the input channel.
         growth_rate: how many filters to add each layer (k in paper).
@@ -79,7 +86,9 @@ class _DenseBlock(nn.Sequential):
         act: str | tuple = ("relu", {"inplace": True}),
         norm: str | tuple = "batch",
     ) -> None:
-        """Args:
+        """Initialise the module.
+
+        Args:
         spatial_dims: number of spatial dimensions of the input image.
         layers: number of layers in the block.
         in_channels: number of the input channel.
@@ -102,7 +111,7 @@ class _DenseBlock(nn.Sequential):
                 norm=norm,
             )
             in_channels += growth_rate
-            self.add_module("denselayer%d" % (i + 1), layer)
+            self.add_module(f"denselayer{i + 1}", layer)
 
 
 class _Transition(nn.Sequential):
@@ -114,7 +123,9 @@ class _Transition(nn.Sequential):
         act: str | tuple = ("relu", {"inplace": True}),
         norm: str | tuple = "batch",
     ) -> None:
-        """Args:
+        """Initialise the module.
+
+        Args:
         spatial_dims: number of spatial dimensions of the input image.
         in_channels: number of the input channel.
         out_channels: number of the output classes.
@@ -136,9 +147,10 @@ class _Transition(nn.Sequential):
 
 
 class _TransitionNoPool(nn.Sequential):
-    """Same as `_Transition` but omits the 2× spatial pool — used when we want
-    to halve channels between dense blocks without further downsampling, so the
-    final heatmap comes out at higher resolution.
+    """A `_Transition` without the 2x spatial pool.
+
+    Halves the channel count between dense blocks without downsampling further, so
+    the final heatmap comes out at higher resolution.
     """
 
     def __init__(
@@ -163,6 +175,7 @@ class _TransitionNoPool(nn.Sequential):
 
 class HeatmapDenseNet(nn.Module):
     """Densenet based on: `Densely Connected Convolutional Networks <https://arxiv.org/pdf/1608.06993.pdf>`_.
+
     Adapted from PyTorch Hub 2D version: https://pytorch.org/vision/stable/models.html#id16.
     This network is non-deterministic When `spatial_dims` is 3 and CUDA is enabled. Please check the link below
     for more details:
@@ -253,7 +266,7 @@ class HeatmapDenseNet(nn.Module):
             else:
                 _out_channels = in_channels // 2
                 # For the transition right before the final dense block, optionally
-                # skip the 2× spatial pool so the heatmap ends up at 2× resolution.
+                # skip the 2x spatial pool so the heatmap ends up at 2x resolution.
                 is_last_transition = i == len(block_config) - 2
                 trans_cls = _TransitionNoPool if (is_last_transition and self.skip_last_transition_pool) else _Transition
                 trans = trans_cls(
@@ -324,11 +337,13 @@ class HeatmapDenseNet(nn.Module):
 
 
 class UNetHeatmapDenseNet(nn.Module):
-    """DenseNet encoder + one-stage UNet-style decoder that lifts the heatmap
-    to 2x the encoder's output resolution (32x32x36 with the default 128x128x144
-    input and block_config=[6,12,12]). Skips the encoder's last transition
-    pool (like ``skip_last_transition_pool=True`` on HeatmapDenseNet), then
-    adds one tconv upsample fused with the skip from denseblock1 output.
+    """DenseNet encoder with a one-stage U-Net decoder for higher-resolution heatmaps.
+
+    Lifts the heatmap to twice the encoder's output resolution - 32x32x36 with the
+    default 128x128x144 input and ``block_config=[6, 12, 12]``. Skips the encoder's
+    last transition pool (as ``skip_last_transition_pool=True`` does on
+    :class:`HeatmapDenseNet`), then adds one transposed-convolution upsample fused
+    with the skip connection from the first dense block.
     """
 
     def __init__(
@@ -407,7 +422,7 @@ class UNetHeatmapDenseNet(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Return per-landmark heatmaps and features via a U-Net decoder.
 
         Args:

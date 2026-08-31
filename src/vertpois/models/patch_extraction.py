@@ -3,8 +3,10 @@ from torch import nn
 
 
 class PatchExtractor(nn.Module):
-    """Extracts patch features from a batch of feature maps given the patch
-    centroids.
+    """Extract per-landmark patch features from a feature volume.
+
+    A patch is cut around each landmark's coarse prediction and encoded by a small
+    CNN, giving the refinement transformer local image evidence to work from.
     """
 
     def __init__(self, patch_size, feature_extraction_model):
@@ -14,9 +16,15 @@ class PatchExtractor(nn.Module):
 
         self.feature_extraction_model = feature_extraction_model
 
-    def forward(self, x, centroids):
-        """x: (B, C, H, W, D)
-        centroids: (B, N, 3)
+    def forward(self, x, centroids) -> torch.Tensor:
+        """Extract a patch around each centroid and encode it.
+
+        Args:
+            x: Feature volume, ``(batch, channels, height, width, depth)``.
+            centroids: Patch centres, ``(batch, n_landmarks, 3)``.
+
+        Returns:
+            Per-landmark patch features, ``(batch, n_landmarks, feature_l)``.
         """
         # Extract the patches
         patches = self.extract_patches(x, centroids)  # (B, N, C, patch_size, patch_size, patch_size)
@@ -29,20 +37,19 @@ class PatchExtractor(nn.Module):
 
         return out
 
-    def extract_patches(self, vol, centroids):
-        """Vectorised 3D patch extraction with zero-padding for out-of-volume
-        positions.
+    def extract_patches(self, vol, centroids) -> torch.Tensor:
+        """Extract 3D patches, zero-padding where a patch runs off the volume.
 
-        Parameters:
-        - vol: Input volume tensor of shape (B, C, H, W, D).
-        - centroids: Tensor of centroids of shape (B, N, 3). Float or int; will be
-          rounded to long for indexing.
+        Args:
+            vol: Input volume, ``(batch, channels, height, width, depth)``.
+            centroids: Patch centres, ``(batch, n_landmarks, 3)``. Float or int;
+                rounded to long for indexing.
 
         Returns:
-        - Tensor of extracted patches of shape (B, N, C, P, P, P), P = patch_size.
+            Patches, ``(batch, n_landmarks, channels, P, P, P)`` with ``P = patch_size``.
         """
         patch_size = self.patch_size
-        B, C, H, W, D = vol.shape
+        B, _C, H, W, D = vol.shape
         N = centroids.shape[1]
         device = vol.device
 

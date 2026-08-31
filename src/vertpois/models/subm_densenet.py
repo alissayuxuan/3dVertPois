@@ -1,12 +1,12 @@
-"""Adapted from MonAI's implementation of DenseNet3D: `Densely Connected Convolutional Networks <https://arxiv.org/pdf/1608.06993.pdf>`_.
+"""Sparse-convolution DenseNet backbones, for mostly-empty input volumes.
+
+Adapted from MONAI's DenseNet3D. Relative to the dense version: convolutions
+become submanifold convolutions, batch norms and pooling become their sparse
+equivalents, the final flattening and output layers are removed, and a final
+convolution produces the landmark heatmaps and feature maps together.
+
+See https://arxiv.org/pdf/1608.06993.pdf and
 https://docs.monai.io/en/stable/_modules/monai/networks/nets/densenet.html
-Key changes:
-    - Convolutions are replaced with SubMConvs
-    - BatchNorms are replaced with SparseBatchNorms
-    - MaxPool is replaced with SparseMaxPool
-    - AvgPool is replaced with SparseAvgPool
-    - The final flattening and out layers are removed, as the model is used to generate a (downsized) feature map.
-    - Final convolution is added to produce n_landmarks heatmaps + feature_l feature maps simultaneously
 """
 
 from collections import OrderedDict
@@ -41,7 +41,7 @@ class SubmDenseLayer(spconv.SparseModule):
             nn.Dropout(dropout),
         )
 
-    def forward(self, x):
+    def forward(self, x) -> torch.Tensor:
         """Run the module on a sparse tensor and return its output."""
         new_features = self.layers(x)
         return x.replace_feature(torch.cat([x.features, new_features.features], 1))
@@ -64,7 +64,7 @@ class SubmDenseBlock(spconv.SparseSequential):
         for i in range(layers):
             layer = SubmDenseLayer(in_channels, growth_rate, bn_size, dropout)
             in_channels += growth_rate
-            self.add_module("SubmDenseLayer%d" % (i + 1), layer)
+            self.add_module(f"SubmDenseLayer{i + 1}", layer)
 
 
 class SubmTransition(SparseModule):
@@ -84,7 +84,7 @@ class SubmTransition(SparseModule):
             spconv.SparseAvgPool3d(2, 2),
         )
 
-    def forward(self, x):
+    def forward(self, x) -> torch.Tensor:
         """Run the module on a sparse tensor and return its output."""
         return self.layers(x)
 
@@ -144,7 +144,7 @@ class HeatmapSubmDenseNet(SparseModule):
             ),
         )
 
-    def forward(self, x):
+    def forward(self, x) -> torch.Tensor:
         """Run the module on a sparse tensor and return its output."""
         x = x.float()
         # The sparse library does not like monai Metatensors, so we convert to torch tensor
@@ -182,6 +182,7 @@ class HeatmapSubmDenseNet(SparseModule):
 
 class SubmDenseNet(SparseModule):
     """Adapted from MonAI's implementation of DenseNet3D: `Densely Connected Convolutional Networks <https://arxiv.org/pdf/1608.06993.pdf>`_.
+
     Does not predict heatmaps, but direct coordinate estimates and landmark features.
     """
 
@@ -233,7 +234,7 @@ class SubmDenseNet(SparseModule):
             )
         )
 
-    def forward(self, x):
+    def forward(self, x) -> torch.Tensor:
         """Run the module on a sparse tensor and return its output."""
         x = x.float()
         # The sparse library does not like monai Metatensors, so we convert to torch tensor

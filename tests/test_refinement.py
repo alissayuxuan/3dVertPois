@@ -68,7 +68,9 @@ def test_disabling_embeddings_shrinks_the_model(model_dims):
     full = REFINEMENT_MODULES["PatchTransformer"](**model_dims)
     no_poi = REFINEMENT_MODULES["NoPoiPatchTransformer"](**model_dims)
     no_both = REFINEMENT_MODULES["NoPoiVertPatchTransformer"](**model_dims)
-    n = lambda m: sum(p.numel() for p in m.parameters())
+
+    def n(module):
+        return sum(p.numel() for p in module.parameters())
     assert n(no_poi) < n(full)
     assert n(no_both) < n(no_poi)
 
