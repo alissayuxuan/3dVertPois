@@ -24,8 +24,16 @@ from vertpois.paths import get_path
 logger = No_Logger(prefix="prepare_data")
 
 
-def load_exclusion_dict(excel_path):
-    """Load Excel file and create lookup dictionary for exclusions"""
+def load_exclusion_dict(excel_path) -> dict[str, list[tuple[int, int]]]:
+    """Load the POI exclusion list from an Excel file.
+
+    Args:
+        excel_path: Path to the exclusion spreadsheet. A missing file yields an
+            empty dict, so the exclusion list stays optional.
+
+    Returns:
+        A mapping of subject id to the ``(vertebra, poi)`` pairs to exclude.
+    """
     if not os.path.exists(excel_path):
         return {}
 
@@ -53,13 +61,16 @@ def load_exclusion_dict(excel_path):
 
 
 def get_bad_poi_list(subject_id: str, vert: int, exclude_dict: dict[str, list[tuple[int, int]]]) -> list[int]:
-    """Args:
-        subject_id: Subject ID, e.g., 'WS-13'
-        vert_id: Vertebra ID, e.g.,
-        exclude_dict: Dict mapping subject_id -> list of (vert_id, poi_id)
+    """List the POIs to exclude for one vertebra of one subject.
+
+    Args:
+        subject_id: Subject id, as it appears in the exclusion spreadsheet.
+        vert: Vertebra label.
+        exclude_dict: Mapping of subject id to ``(vertebra, poi)`` pairs, as
+            returned by :func:`load_exclusion_dict`.
 
     Returns:
-        A list of global POI IDs
+        The POI ids to exclude for this vertebra.
     """
     if exclude_dict is None:
         return []
@@ -69,6 +80,15 @@ def get_bad_poi_list(subject_id: str, vert: int, exclude_dict: dict[str, list[tu
 
 
 def get_gruber_poi(container, extra_filter: dict[str, str] | None = None) -> tuple[POI, BIDS_FILE]:
+    """Find a subject's POI annotation file.
+
+    Args:
+        container: The subject's BIDS container.
+        extra_filter: Extra BIDS key/value filters to narrow the query.
+
+    Returns:
+        The loaded POI and the BIDS file it came from.
+    """
     poi_query = container.new_query(flatten=True)
     poi_query.filter_format("poi")
     poi_query.filter_filetype("json")  # only json files
@@ -86,13 +106,23 @@ def get_gruber_poi(container, extra_filter: dict[str, str] | None = None) -> tup
 
     try:
         poi = POI.load(poi_p)
-        return poi, poi_candidate
     except Exception as e:
         logger.print(f"Error loading POI: {e!s}", Log_Type.FAIL)
         return None, poi_candidate
+    else:
+        return poi, poi_candidate
 
 
 def get_ct(container, extra_filter: dict[str, str] | None = None) -> tuple[NII, str]:
+    """Find a subject's CT image.
+
+    Args:
+        container: The subject's BIDS container.
+        extra_filter: Extra BIDS key/value filters to narrow the query.
+
+    Returns:
+        The loaded image and its path.
+    """
     ct_query = container.new_query(flatten=True)
     ct_query.filter_format("ct")
     ct_query.filter_filetype("nii.gz")  # only nifti files
@@ -112,6 +142,15 @@ def get_ct(container, extra_filter: dict[str, str] | None = None) -> tuple[NII, 
 
 
 def get_subreg(container, extra_filter: dict[str, str] | None = None) -> NII:
+    """Find a subject's vertebra subregion segmentation mask.
+
+    Args:
+        container: The subject's BIDS container.
+        extra_filter: Extra BIDS key/value filters to narrow the query.
+
+    Returns:
+        The loaded mask, or None if it could not be opened.
+    """
     subreg_query = container.new_query(flatten=True)
     subreg_query.filter_format("msk")
     subreg_query.filter_filetype("nii.gz")  # only nifti files
@@ -125,13 +164,23 @@ def get_subreg(container, extra_filter: dict[str, str] | None = None) -> NII:
 
     try:
         subreg = subreg_candidate.open_nii()
-        return subreg
     except Exception as e:
         logger.print(f"Error opening subreg: {e!s}", Log_Type.FAIL)
         return None
+    else:
+        return subreg
 
 
 def get_vertseg(container, extra_filter: dict[str, str] | None = None) -> NII:
+    """Find a subject's vertebra instance segmentation mask.
+
+    Args:
+        container: The subject's BIDS container.
+        extra_filter: Extra BIDS key/value filters to narrow the query.
+
+    Returns:
+        The loaded mask, or None if it could not be opened.
+    """
     vertseg_query = container.new_query(flatten=True)
     vertseg_query.filter_format("msk")
     vertseg_query.filter_filetype("nii.gz")  # only nifti files
@@ -145,13 +194,14 @@ def get_vertseg(container, extra_filter: dict[str, str] | None = None) -> NII:
 
     try:
         vertseg = vertseg_candidate.open_nii()
-        return vertseg
     except Exception as e:
         logger.print(f"Error opening vertseg: {e!s}", Log_Type.FAIL)
         return None
+    else:
+        return vertseg
 
 
-def get_files_withfilter(
+def get_files_withfilter(  # noqa: D103 - thin wrapper over the four getters above
     container,
     get_poi: Callable,
     get_ct_fn: Callable,
@@ -160,10 +210,7 @@ def get_files_withfilter(
 ) -> tuple[POI, NII, NII, NII]:
     poi, poi_bf = get_poi(container)
     extra_keys = ["split"]
-    if poi is not None:
-        extra_filter = {key: value for key, value in poi_bf.info.items() if key in extra_keys}
-    else:
-        extra_filter = None
+    extra_filter = {key: value for key, value in poi_bf.info.items() if key in extra_keys} if poi is not None else None
     return (
         poi,
         get_ct_fn(container, extra_filter=extra_filter),
@@ -172,7 +219,7 @@ def get_files_withfilter(
     )
 
 
-def process_container(
+def process_container(  # noqa: ANN201
     subject,
     container,
     save_path: PathLike,
@@ -180,13 +227,30 @@ def process_container(
     get_files_fn: Callable[[Subject_Container], tuple[POI, NII, NII, NII]],
     exclusion_dict: dict | None = None,
     compute_surface_mask: bool = False,
-    include_neighbouring_vertebrae: bool = False,
+    include_neighbouring_vertebrae: bool = False,  # noqa: ARG001 - kept for config compatibility
     report_der2dict: dict | None = None,
     ignore_outer: bool = False,
 ):
-    # if "WS-25" not in subject and "WS-05" not in subject and "WS-22" not in subject and "WS-46" not in subject:
-    #    return []
+    """Build the per-vertebra cutouts for one subject.
 
+    Crops each vertebra out of the full scan, reorients and rescales it, shifts the
+    POI annotations to match, and writes one directory per vertebra.
+
+    Args:
+        subject: Subject id.
+        container: The subject's BIDS container.
+        save_path: Root to write cutouts under.
+        rescale_zoom: Target voxel spacing, or ``None`` to keep the native spacing.
+        get_files_fn: Callable returning this subject's POI, CT and masks.
+        exclusion_dict: POIs to mark as excluded, from :func:`load_exclusion_dict`.
+        compute_surface_mask: Also compute and store a surface mask per cutout.
+        include_neighbouring_vertebrae: Unused; kept for config compatibility.
+        report_der2dict: QA report index; flagged vertebrae are skipped.
+        ignore_outer: Skip the outermost vertebrae of the scan.
+
+    Returns:
+        One ``master_df`` row per written cutout.
+    """
     logger.print(f"Processing Subject: {subject}")
     poi, (ct, ct_p), subreg, vertseg = get_files_fn(container)
 
@@ -375,7 +439,7 @@ def process_container(
     return summary
 
 
-def prepare_data(
+def prepare_data(  # noqa: ANN201
     bids_surgery_info: BIDS_Global_info,
     save_path: str,
     get_files_fn: callable,
@@ -387,6 +451,24 @@ def prepare_data(
     include_neighbouring_vertebrae: bool = False,
     report_der2dict=None,
 ):
+    """Build cutouts for every subject in a BIDS dataset, in parallel.
+
+    Args:
+        bids_surgery_info: The dataset to read.
+        save_path: Root to write cutouts under.
+        get_files_fn: Callable returning a subject's POI, CT and masks.
+        exclusion_path: Optional Excel file listing POIs to mark as excluded.
+        rescale_zoom: Target voxel spacing, or ``None`` to keep the native spacing.
+        n_workers: Number of parallel worker processes.
+        compute_surface_mask: Also compute and store a surface mask per cutout.
+        ignore_outer: Skip the outermost vertebrae of each scan.
+        include_neighbouring_vertebrae: Unused; kept for config compatibility.
+        report_der2dict: QA report index; flagged vertebrae are skipped.
+
+    Writes:
+        One directory per vertebra under ``save_path``, plus ``master_df.csv``
+        listing them with paths relative to ``save_path``.
+    """
     master = []
     exclusion_dict = load_exclusion_dict(exclusion_path) if exclusion_path is not None else None
 
@@ -498,7 +580,7 @@ def main() -> None:
     args = parser.parse_args()
     print(args)
 
-    parents = ["rawdata", args.derivatives_name] if not isinstance(args.derivatives_name, list) else ["rawdata"] + args.derivatives_name
+    parents = ["rawdata", args.derivatives_name] if not isinstance(args.derivatives_name, list) else ["rawdata", *args.derivatives_name]
 
     # Fall back to the configured paths when a location was not given on the command
     # line. get_path raises a PathConfigError naming the setting to fix, rather than
