@@ -1,3 +1,5 @@
+"""Lightning data modules: reading master_df.csv and serving vertebra cutouts."""
+
 import json
 import os
 import random
@@ -16,23 +18,6 @@ from torch.utils.data import DataLoader
 # from BIDS import BIDS_Global_info
 from TPTBox import BIDS_Global_info
 
-from vertpois.registry import build
-
-
-def _seed_worker(worker_id):
-    """Deterministic per-worker seeding. Seeds:
-    - numpy / random globals from torch's per-worker seed
-    - every MONAI Randomizable object attached to the worker's dataset
-      (e.g. RandAffine holds its own PRNG state — without this call,
-      augmentation streams diverge between runs even with pl.seed_everything).
-    """
-    seed = torch.initial_seed() % (2**32)
-    np.random.seed(seed)
-    random.seed(seed)
-    if torch.utils.data.get_worker_info() is not None:
-        _monai_worker_init_fn(worker_id)
-
-
 from vertpois.data.dataloading import (
     get_ct,
     get_files,
@@ -43,11 +28,34 @@ from vertpois.data.dataloading import (
 )
 from vertpois.data.dataset import GruberDataset, GruberNeighborDataset, PoiDataset
 from vertpois.data.transforms import create_transform
+from vertpois.registry import build
+
+
+def _seed_worker(worker_id):
+    """Seed one dataloader worker deterministically.
+
+    Seeds the numpy and random globals from torch's per-worker seed, and every
+    MONAI ``Randomizable`` attached to the worker's dataset. RandAffine holds its
+    own PRNG state, so without this the augmentation stream diverges between runs
+    even when ``pl.seed_everything`` was called.
+    """
+    seed = torch.initial_seed() % (2**32)
+    np.random.seed(seed)
+    random.seed(seed)
+    if torch.utils.data.get_worker_info() is not None:
+        _monai_worker_init_fn(worker_id)
+
 
 PoiType = TypeVar("PoiType", bound=PoiDataset)
 
 
 class POIDataModule(pl.LightningDataModule):
+    """Base data module: reads a master_df.csv and serves per-vertebra cutouts.
+
+    Subclasses supply the dataset class and the BIDS file-lookup functions for a
+    particular dataset layout.
+    """
+
     def __init__(
         self,
         dataset: str,
@@ -98,7 +106,8 @@ class POIDataModule(pl.LightningDataModule):
         save_path: str,
         get_files: callable,
         rescale_zoom: tuple | None = None,
-    ):
+    ) -> None:
+        """Build the per-vertebra cutouts this data module reads."""
         master = []
         partial_process_container = partial(
             process_container,
@@ -117,7 +126,8 @@ class POIDataModule(pl.LightningDataModule):
         master_df = pd.DataFrame(master)
         master_df.to_csv(os.path.join(save_path, "master_df.csv"), index=False)
 
-    def setup(self, stage=None):
+    def setup(self, stage=None) -> None:  # noqa: ARG002 - Lightning passes it; unused here
+        """Load master_df.csv and construct the train, val and test datasets."""
         self.master_df = pd.read_csv(self.master_df_path)
         # empty column bad_poi_list
         # n_rows = len(self.master_df)
@@ -237,7 +247,8 @@ class POIDataModule(pl.LightningDataModule):
     def _dataloader_generator(self):
         return torch.Generator().manual_seed(42)
 
-    def train_dataloader(self):
+    def train_dataloader(self) -> DataLoader:
+        """Return the training dataloader, with augmentation enabled."""
         return DataLoader(
             dataset=self.train_dataset,
             batch_size=self.batch_size,
@@ -248,7 +259,8 @@ class POIDataModule(pl.LightningDataModule):
             # collate_fn=custom_collate_fn
         )
 
-    def train_noaug_dataloader(self):
+    def train_noaug_dataloader(self) -> DataLoader:
+        """Return the training dataloader with augmentation disabled."""
         train_2_dataset = self.train_dataset
         train_2_dataset.flip_prob = 0.0
         train_2_dataset.transforms = None
@@ -261,7 +273,8 @@ class POIDataModule(pl.LightningDataModule):
             generator=self._dataloader_generator(),
         )
 
-    def val_dataloader(self):
+    def val_dataloader(self) -> DataLoader:
+        """Return the validation dataloader."""
         return DataLoader(
             dataset=self.val_dataset,
             batch_size=self.batch_size,
@@ -272,7 +285,8 @@ class POIDataModule(pl.LightningDataModule):
             # collate_fn=custom_collate_fn
         )
 
-    def test_dataloader(self):
+    def test_dataloader(self) -> DataLoader:
+        """Return the test dataloader."""
         return DataLoader(
             dataset=self.test_dataset,
             batch_size=self.batch_size,
@@ -284,6 +298,8 @@ class POIDataModule(pl.LightningDataModule):
 
 
 class GruberDataModule(POIDataModule):
+    """Data module for the single-vertebra cutout dataset."""
+
     def __init__(
         self,
         master_df: PathLike,
@@ -332,7 +348,8 @@ class GruberDataModule(POIDataModule):
         bids_surgery_info: BIDS_Global_info,
         save_path: str,
         rescale_zoom: tuple | None = None,
-    ):
+    ) -> None:
+        """Build the per-vertebra cutouts this data module reads."""
         gruber_get_files = partial(
             get_files,
             get_poi=get_gruber_poi,
@@ -344,6 +361,8 @@ class GruberDataModule(POIDataModule):
 
 
 class GruberNeighborDataModule(POIDataModule):
+    """Data module that also serves each vertebra's neighbours."""
+
     def __init__(self, **kwargs):
         # deactivate horizontal flip
         if kwargs.get("flip_prob", 0) > 0:
@@ -353,7 +372,8 @@ class GruberNeighborDataModule(POIDataModule):
         # kwargs['input_shape'] = (120, 121, 149)
         super().__init__(dataset="GruberNeighbor", **kwargs)
 
-    def prepare_data(self, bids_surgery_info, save_path, rescale_zoom=None):
+    def prepare_data(self, bids_surgery_info, save_path, rescale_zoom=None) -> None:
+        """Build the cutouts this module needs, if they are not on disk yet."""
         gruber_get_files = partial(
             get_files,
             get_poi=get_gruber_poi,
@@ -371,7 +391,7 @@ DATA_MODULES = {
 }
 
 
-def create_data_module(config):
+def create_data_module(config) -> POIDataModule:
     """Create the data module a config describes.
 
     Args:
