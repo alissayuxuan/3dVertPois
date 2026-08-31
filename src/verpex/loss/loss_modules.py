@@ -1,9 +1,13 @@
 """Loss functions for landmark regression.
 
-All losses share the signature ``(pred, target, mask=None, surface=None)`` so they
-are interchangeable in a config, and so :class:`CompoundLoss` can combine any of
-them. ``pred`` and ``target`` are ``(batch, n_landmarks, 3)`` coordinate tensors;
-``mask`` is a ``(batch, n_landmarks)`` boolean selecting the landmarks that count.
+All losses share the signature ``(pred, target, mask=None, surface=None,
+weights=None)`` so they are interchangeable in a config, and so
+:class:`CompoundLoss` can combine any of them. ``pred`` and ``target`` are
+``(batch, n_landmarks, 3)`` coordinate tensors; ``mask`` is a
+``(batch, n_landmarks)`` boolean selecting the landmarks that count; ``weights`` is
+an optional ``(batch, n_landmarks)`` tensor giving each landmark a relative weight
+in the mean, used by the neighbour-aware module to emphasise the current vertebra
+over its neighbours.
 
 Callers pass coordinates already scaled to millimetres, so a loss value means the
 same thing regardless of the voxel spacing the sample was acquired at.
@@ -13,6 +17,46 @@ import torch
 from torch import nn
 
 from verpex.geometry.surface import surface_project_coords
+
+
+def masked_weighted_mean(values: torch.Tensor, mask=None, weights=None) -> torch.Tensor:
+    """Reduce per-landmark values to a scalar, honouring a mask and optional weights.
+
+    Args:
+        values: Per-landmark values, ``(batch, n_landmarks)`` or
+            ``(batch, n_landmarks, 3)``. A trailing coordinate axis is averaged first,
+            so each landmark contributes once regardless of dimensionality.
+        mask: Boolean ``(batch, n_landmarks)`` selecting landmarks that count.
+        weights: Optional ``(batch, n_landmarks)`` relative weights.
+
+    Returns:
+        A scalar tensor. Zero when nothing is selected - a plain ``.mean()`` over an
+        empty selection returns NaN, which would poison the whole batch's loss. That
+        happens routinely here: a vertebra at the end of the spine has no neighbour,
+        so its entire block is masked out.
+    """
+    if weights is None:
+        # Reduce in one step over the original shape, so an unweighted call is
+        # bit-identical to a plain `values[mask].mean()`. Pre-averaging the
+        # coordinate axis first is mathematically equal but reassociates the
+        # float sum, which would perturb every existing run in the last digits.
+        selected = values if mask is None else values[mask]
+        return selected.mean() if selected.numel() else values.sum() * 0.0
+
+    if values.dim() == 3:
+        values = values.mean(dim=-1)
+
+    if mask is None:
+        mask = torch.ones_like(values, dtype=torch.bool)
+    selected = values[mask]
+    if selected.numel() == 0:
+        return values.sum() * 0.0  # keeps the graph connected, unlike torch.tensor(0.)
+
+    selected_weights = weights.expand_as(values)[mask].to(values.dtype)
+    total = selected_weights.sum()
+    if total == 0:
+        return values.sum() * 0.0
+    return (selected * selected_weights).sum() / total
 
 
 class SurfaceDistanceLoss(nn.Module):
@@ -26,13 +70,14 @@ class SurfaceDistanceLoss(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, pred, target, mask=None, surface=None) -> torch.Tensor:  # noqa: ARG002
+    def forward(self, pred, target, mask=None, surface=None, weights=None) -> torch.Tensor:  # noqa: ARG002
         """Return the mean distance from the predictions to the surface.
 
         Args:
             pred: Predicted coordinates, ``(batch, n_landmarks, 3)``.
             target: Unused; present so every loss shares one signature.
             mask: Boolean ``(batch, n_landmarks)`` selecting the landmarks to score.
+            weights: Optional ``(batch, n_landmarks)`` relative weights.
             surface: Surface point cloud to project onto. When ``None`` the loss is
                 zero, so a config can enable this term only where surfaces exist.
 
@@ -43,11 +88,9 @@ class SurfaceDistanceLoss(nn.Module):
             return torch.tensor(0.0, device=pred.device)
 
         dist_to_surface = surface_project_coords(pred, surface)[1]  # (batch, n_landmarks)
-        if mask is not None:
-            dist_to_surface = dist_to_surface[mask]
         # Scaled down by 10 to keep this term commensurate with the coordinate
         # losses it is usually compounded with.
-        return dist_to_surface.mean() / 10
+        return masked_weighted_mean(dist_to_surface, mask, weights) / 10
 
 
 class WingLoss3D(nn.Module):
@@ -66,14 +109,16 @@ class WingLoss3D(nn.Module):
         self.omega = torch.tensor(omega, dtype=torch.float32)
         self.epsilon = torch.tensor(epsilon, dtype=torch.float32)
 
-    def forward(self, pred, target, mask=None, surface=None) -> torch.Tensor:  # noqa: ARG002
+    def forward(self, pred, target, mask=None, surface=None, weights=None) -> torch.Tensor:  # noqa: ARG002
         """Return the mean wing loss over the selected landmarks.
 
         Args:
             pred: Predicted coordinates, ``(batch, n_landmarks, 3)``.
             target: Ground-truth coordinates, same shape.
             mask: Boolean ``(batch, n_landmarks)`` selecting landmarks to score.
+            weights: Optional ``(batch, n_landmarks)`` relative weights.
             surface: Unused; present so every loss shares one signature.
+            weights: Optional ``(batch, n_landmarks)`` relative weights.
 
         Returns:
             A scalar loss tensor.
@@ -89,9 +134,7 @@ class WingLoss3D(nn.Module):
         loss_large = (delta_y - c) * large_mask
 
         loss = loss_small + loss_large
-        if mask is not None:
-            loss = loss[mask]
-        return loss.mean()
+        return masked_weighted_mean(loss, mask, weights)
 
 
 class L1LossMasked(nn.Module):
@@ -101,22 +144,21 @@ class L1LossMasked(nn.Module):
         super().__init__()
         self.l1_loss = nn.L1Loss(reduction="none")
 
-    def forward(self, pred, target, mask=None, surface=None) -> torch.Tensor:  # noqa: ARG002
+    def forward(self, pred, target, mask=None, surface=None, weights=None) -> torch.Tensor:  # noqa: ARG002
         """Return the mean L1 error.
 
         Args:
             pred: Predicted coordinates, ``(batch, n_landmarks, 3)``.
             target: Ground-truth coordinates, same shape.
             mask: Boolean ``(batch, n_landmarks)``. When ``None`` every landmark counts.
+            weights: Optional ``(batch, n_landmarks)`` relative weights.
             surface: Unused; present so every loss shares one signature.
 
         Returns:
             A scalar loss tensor.
         """
         loss = self.l1_loss(pred, target)
-        if mask is not None:
-            loss = loss[mask]
-        return loss.mean()
+        return masked_weighted_mean(loss, mask, weights)
 
 
 class L2LossMasked(nn.Module):
@@ -126,22 +168,21 @@ class L2LossMasked(nn.Module):
         super().__init__()
         self.mse_loss = nn.MSELoss(reduction="none")
 
-    def forward(self, pred, target, mask=None, surface=None) -> torch.Tensor:  # noqa: ARG002
+    def forward(self, pred, target, mask=None, surface=None, weights=None) -> torch.Tensor:  # noqa: ARG002
         """Return the mean squared error.
 
         Args:
             pred: Predicted coordinates, ``(batch, n_landmarks, 3)``.
             target: Ground-truth coordinates, same shape.
             mask: Boolean ``(batch, n_landmarks)``. When ``None`` every landmark counts.
+            weights: Optional ``(batch, n_landmarks)`` relative weights.
             surface: Unused; present so every loss shares one signature.
 
         Returns:
             A scalar loss tensor.
         """
         loss = self.mse_loss(pred, target)
-        if mask is not None:
-            loss = loss[mask]
-        return loss.mean()
+        return masked_weighted_mean(loss, mask, weights)
 
 
 class CompoundLoss(nn.Module):
@@ -167,13 +208,14 @@ class CompoundLoss(nn.Module):
             raise ValueError(f"CompoundLoss weights must sum to 1.0, got {sum(weights)}.")
         self.weights = weights
 
-    def forward(self, pred, target, mask=None, surface=None) -> torch.Tensor:
+    def forward(self, pred, target, mask=None, surface=None, weights=None) -> torch.Tensor:
         """Return the weighted sum of the component losses.
 
         Args:
             pred: Predicted coordinates, ``(batch, n_landmarks, 3)``.
             target: Ground-truth coordinates, same shape.
             mask: Boolean ``(batch, n_landmarks)`` passed to each component.
+            weights: Optional ``(batch, n_landmarks)`` relative weights.
             surface: Surface point cloud passed to each component.
 
         Returns:
@@ -181,7 +223,7 @@ class CompoundLoss(nn.Module):
         """
         total_loss = 0.0
         for loss_fn, weight in zip(self.loss_fns, self.weights):
-            total_loss += weight * loss_fn(pred, target, mask, surface)
+            total_loss += weight * loss_fn(pred, target, mask, surface, weights)
         return total_loss
 
 

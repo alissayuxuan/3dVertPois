@@ -316,7 +316,15 @@ class PatchTransformer(nn.Module):
 
         # Scale to millimetres so the loss is comparable across resolutions.
         zoom = batch["zoom"].to(target.device).unsqueeze(1)
-        return self.loss_fn(batch["refined_preds"] * zoom, target * zoom, batch["loss_mask"], surface)
+        return self.loss_fn(
+            batch["refined_preds"] * zoom,
+            target * zoom,
+            batch["loss_mask"],
+            surface,
+            # Set by PoiNeighborPredictionModule to weight the current vertebra
+            # against its neighbours; absent for single-vertebra batches.
+            batch.get("poi_loss_weights"),
+        )
 
     def calculate_metrics(self, batch, mode) -> dict:
         """Return refinement metrics for ``batch``.

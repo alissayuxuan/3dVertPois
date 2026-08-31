@@ -811,6 +811,11 @@ class PoiNeighborDataset(Dataset):
 
         data_dict["current_vertebra"] = vertebra
         data_dict["n_pois_per_vertebra"] = len(self.poi_indices)
+        # Number of concatenated per-vertebra landmark blocks, in the order set by
+        # `all_vert` above: block 0 is the current vertebra, the rest are neighbours.
+        # PoiNeighborPredictionModule needs this to weight the blocks differently;
+        # without it the weighting silently fell back to a flat loss.
+        data_dict["n_vertebrae"] = len(all_vert)
 
         return data_dict
 

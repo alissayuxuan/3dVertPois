@@ -164,6 +164,45 @@ get right.
 
 ## Fixed (previously broken, no result changes)
 
+### Per-vertebra loss weighting now works
+
+`PoiNeighborPredictionModule`'s `current_weight` / `neighbor_weight` had never had any
+effect. Every weighted path was gated on a `"n_vertebrae"` batch key that no dataset
+produced, so all of them fell through to a flat loss over the concatenated landmarks,
+and the per-vertebra metrics always returned `{}`.
+
+`PoiNeighborDataset` now emits `n_vertebrae` alongside the `n_pois_per_vertebra` it
+already provided.
+
+The implementation changed shape rather than just being switched on. The original
+sliced the batch into per-vertebra blocks and called each loss once per block per
+sample, which had two problems:
+
+- **NaN.** A missing neighbour — a vertebra at either end of the spine, or one dropped
+  by `neighbor_drop_prob` — has its whole block masked out, and a mean over an empty
+  selection is NaN. That is routine, not an edge case, so the first such sample would
+  have poisoned the batch loss.
+- **Cost.** With `project_gt` enabled (78 of the historical configs) it would have run
+  one surface projection per block per sample instead of one per batch.
+
+The weights are now applied as per-landmark weights in a single loss call. Every loss
+reduces through one shared `masked_weighted_mean`, which returns 0 rather than NaN for
+an empty selection and keeps the autograd graph connected.
+
+Verified: equal weights reproduce the flat loss **exactly**; `neighbor_weight=0`
+reproduces the loss over the current block alone; unweighted calls are **bit-identical**
+to the previous implementation, so no existing run shifts. No historical config uses
+this module, so nothing you have run is affected.
+
+`_extract_vertebra_batch` is gone with the block loops — it also never copied `"zoom"`
+into its sub-batch, so it would have raised `KeyError: 'zoom'` the moment it became
+reachable.
+
+The per-vertebra metrics it enables (`current_vertebra_mean_distance_*`,
+`neighbor_vertebrae_mean_distance_*`, `neighbor_to_current_distance_ratio_*`) now
+report **millimetres**; they computed raw voxel distances, which would not have been
+comparable with the `fine_mean_distance_*` metrics logged beside them.
+
 ### `warmup_epochs` crashed on the first training step
 
 `PatchTransformer` is a plain `nn.Module`, so Lightning never gave it a
@@ -192,24 +231,13 @@ not include `spconv`) could not import the package at all.
 
 ## Known-broken, left as-is (flagged, not fixed)
 
-### `PoiNeighborPredictionModule`'s per-vertebra loss weighting does nothing
+### Four sweep configs reference features that were never implemented
 
-Every weighted path in that class — `_calculate_multi_vertebrae_loss`,
-`_calculate_feature_loss_component`, `_calculate_refinement_loss_component` and
-`_calculate_multi_vertebrae_metrics` — is gated on `"n_vertebrae" in batch`. That key
-is read ten times in `poi_module.py` and **written by nothing in the package**: no
-dataset, transform or collate function produces it. So every call takes the
-`_calculate_standard_loss` fallback, `_calculate_multi_vertebrae_metrics` always
-returns `{}`, and `current_weight` / `neighbor_weight` have no effect whatsoever.
-
-A second bug is stacked in the same unreachable code: `_extract_vertebra_batch` does
-not copy `"zoom"` into the per-vertebra sub-batch, and both `calculate_loss`
-implementations read it unconditionally, so that path would raise `KeyError: 'zoom'`
-the moment it became reachable.
-
-Making this work means deciding what a per-vertebra batch should contain — a design
-decision, not a mechanical fix, so it is left alone. Constructing the module with
-non-default weights now emits a `RuntimeWarning` rather than silently ignoring them.
+`sweep2/A1CF.json` and `no-gt-project-reproduce/surface-no_freeze-excel-A1F.json` pass
+`use_ema`, and `sweep2/A1CH.json` and `...-A1H.json` ask for an `AdaptiveWingLoss`.
+Neither exists anywhere in the codebase, in any commit — these configs have never been
+runnable. They are not shipped with this repository; noted in case you expected results
+from them. The other 94 build cleanly.
 
 ### The data modules' cutout builder uses a different cropping strategy
 

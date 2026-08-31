@@ -13,8 +13,6 @@ Functions:
     - create_refinement_module: Creates a refinement module based on the given configuration.
 """
 
-import warnings
-
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -309,8 +307,15 @@ def create_refinement_module(config) -> nn.Module:
 class PoiNeighborPredictionModule(PoiPredictionModule):
     """Multi-vertebrae POI prediction module that extends PoiPredictionModule.
 
-    Implements multi-task learning where the model predicts POIs for current
-    vertebra and its neighbors, with different loss weights for each.
+    Predicts landmarks for a vertebra and its two neighbours at once, weighting the
+    current vertebra's landmarks against its neighbours' in the loss. The neighbour
+    datasets concatenate one equally sized landmark block per vertebra, block 0 being
+    the current one.
+
+    The weights are applied as per-landmark weights in a single loss call rather than
+    by slicing the batch per vertebra, so an absent neighbour (a vertebra at either
+    end of the spine, or one dropped by ``neighbor_drop_prob``) contributes nothing
+    instead of producing NaN from a mean over an empty selection.
     """
 
     def __init__(
@@ -344,20 +349,10 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
             weight_decay=weight_decay,
         )
 
+        if current_weight < 0 or neighbor_weight < 0:
+            raise ValueError(f"Loss weights must be non-negative, got current={current_weight}, neighbor={neighbor_weight}.")
         self.current_weight = current_weight
         self.neighbor_weight = neighbor_weight
-        # Every weighted path in this class is gated on a "n_vertebrae" key that no
-        # dataset in this package ever puts into a batch, so the weighting silently
-        # falls back to a flat loss. Warn rather than let a config believe it is
-        # training with the weights it asked for. See CHANGES.md.
-        if (current_weight, neighbor_weight) != (1.0, 0.2):
-            warnings.warn(
-                "current_weight/neighbor_weight have no effect: the per-vertebra loss "
-                "weighting is gated on a 'n_vertebrae' batch key that no dataset in this "
-                "package produces. Training will use a flat loss over all landmarks.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
 
         # Update hyperparameters to include new parameters
         self.save_hyperparameters()
@@ -408,136 +403,74 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
 
         return loss
 
-    def _calculate_multi_vertebrae_loss(self, batch):
-        """Calculate weighted loss for multi-vertebrae training.
+    def _landmark_weights(self, batch):
+        """Return per-landmark loss weights, or None for a single-vertebra batch.
+
+        The neighbour datasets concatenate one equally sized block of landmarks per
+        vertebra, block 0 being the current vertebra. This turns that layout into a
+        ``(batch, n_landmarks)`` weight tensor so the whole loss can be computed in
+        one call, rather than slicing the batch into blocks and calling each loss
+        once per block per sample. That matters: with ``project_gt`` enabled the
+        per-block form would run one surface projection per block per sample instead
+        of one per batch.
 
         Args:
-            batch (dict): Batch containing predictions, targets, and metadata
+            batch: A batch, after the forward pass.
 
         Returns:
-            torch.Tensor: Weighted total loss
+            A ``(batch, n_landmarks)`` weight tensor, or ``None`` when the batch is
+            not a multi-vertebra batch or the weights are uniform anyway.
         """
-        # Check if this is actually a multi-vertebrae batch
         if "n_vertebrae" not in batch or "n_pois_per_vertebra" not in batch:
-            # Fallback to standard loss calculation
+            return None
+        if self.current_weight == self.neighbor_weight:
+            return None  # uniform weights change nothing; keep the cheaper path
+
+        target = batch["target"]
+        batch_size, n_landmarks = target.shape[0], target.shape[1]
+
+        def _scalar(key):
+            value = batch[key]
+            return int(value) if isinstance(value, int) else int(value[0])
+
+        n_vertebrae, n_per_vertebra = _scalar("n_vertebrae"), _scalar("n_pois_per_vertebra")
+        if n_vertebrae * n_per_vertebra != n_landmarks:
+            raise ValueError(
+                f"Batch declares {n_vertebrae} vertebrae x {n_per_vertebra} landmarks "
+                f"= {n_vertebrae * n_per_vertebra}, but carries {n_landmarks} landmarks."
+            )
+
+        weights = torch.full((n_landmarks,), float(self.neighbor_weight), device=target.device)
+        weights[:n_per_vertebra] = float(self.current_weight)  # block 0 is the current vertebra
+        return weights.unsqueeze(0).expand(batch_size, n_landmarks)
+
+    def _calculate_multi_vertebrae_loss(self, batch):
+        """Return the loss, weighting the current vertebra against its neighbours.
+
+        Falls back to the flat loss when the batch carries no per-vertebra layout.
+        """
+        weights = self._landmark_weights(batch)
+        if weights is None:
             return self._calculate_standard_loss(batch)
 
-        batch_size = batch["input"].shape[0]
-        total_loss = 0.0
-
-        for b in range(batch_size):
-            n_vertebrae = batch["n_vertebrae"] if isinstance(batch["n_vertebrae"], int) else batch["n_vertebrae"][b]
-            n_pois_per_vertebra = (
-                batch["n_pois_per_vertebra"] if isinstance(batch["n_pois_per_vertebra"], int) else batch["n_pois_per_vertebra"][b]
-            )
-
-            # Calculate loss for each vertebra in this batch sample
-            for vert_idx in range(n_vertebrae):
-                start_idx = vert_idx * n_pois_per_vertebra
-                end_idx = start_idx + n_pois_per_vertebra
-
-                # Extract vertebra-specific data
-                vert_batch = self._extract_vertebra_batch(batch, b, start_idx, end_idx)
-
-                # Calculate vertebra-specific loss
-                vert_feature_loss = self.feature_extraction_module.calculate_loss(vert_batch)
-                vert_refinement_loss = self.refinement_module.calculate_loss(vert_batch)
-                vert_total_loss = vert_feature_loss * self.loss_weights[0] + vert_refinement_loss * self.loss_weights[1]
-
-                # Apply different weights: current vs neighbors
-                weight = self.current_weight if vert_idx == 0 else self.neighbor_weight
-                total_loss += weight * vert_total_loss
-
-        # Average over batch
-        return total_loss / batch_size
-
-    def _extract_vertebra_batch(self, batch, batch_idx, start_idx, end_idx):
-        """Extract data for a specific vertebra from the batch.
-
-        Args:
-            batch (dict): Full batch data
-            batch_idx (int): Index in the batch dimension
-            start_idx (int): Start index for POIs of this vertebra
-            end_idx (int): End index for POIs of this vertebra
-
-        Returns:
-            dict: Batch data for specific vertebra
-        """
-        vert_batch = {}
-
-        # Extract relevant data for this vertebra
-        if "target" in batch:
-            vert_batch["target"] = batch["target"][batch_idx, start_idx:end_idx].unsqueeze(0)
-
-        if "loss_mask" in batch:
-            vert_batch["loss_mask"] = batch["loss_mask"][batch_idx, start_idx:end_idx].unsqueeze(0)
-
-        if "coarse_preds" in batch:
-            vert_batch["coarse_preds"] = batch["coarse_preds"][batch_idx, start_idx:end_idx].unsqueeze(0)
-
-        if "refined_preds" in batch:
-            vert_batch["refined_preds"] = batch["refined_preds"][batch_idx, start_idx:end_idx].unsqueeze(0)
-
-        # Include other necessary data (input, surface, etc.)
-        for key in ["input", "surface"]:
-            if key in batch:
-                vert_batch[key] = batch[key][batch_idx].unsqueeze(0)
-
-        return vert_batch
+        batch = {**batch, "poi_loss_weights": weights}
+        feature_loss = self.feature_extraction_module.calculate_loss(batch)
+        refinement_loss = self.refinement_module.calculate_loss(batch)
+        return feature_loss * self.loss_weights[0] + refinement_loss * self.loss_weights[1]
 
     def _calculate_feature_loss_component(self, batch):
-        """Calculate feature loss component for logging purposes."""
-        if "n_vertebrae" not in batch:
+        """Return the coarse-stage loss alone, with the same weighting, for logging."""
+        weights = self._landmark_weights(batch)
+        if weights is None:
             return self.feature_extraction_module.calculate_loss(batch)
-
-        # For multi-vertebrae, calculate weighted average of feature losses
-        batch_size = batch["input"].shape[0]
-        total_loss = 0.0
-
-        for b in range(batch_size):
-            n_vertebrae = batch["n_vertebrae"] if isinstance(batch["n_vertebrae"], int) else batch["n_vertebrae"][b]
-            n_pois_per_vertebra = (
-                batch["n_pois_per_vertebra"] if isinstance(batch["n_pois_per_vertebra"], int) else batch["n_pois_per_vertebra"][b]
-            )
-
-            for vert_idx in range(n_vertebrae):
-                start_idx = vert_idx * n_pois_per_vertebra
-                end_idx = start_idx + n_pois_per_vertebra
-
-                vert_batch = self._extract_vertebra_batch(batch, b, start_idx, end_idx)
-                vert_loss = self.feature_extraction_module.calculate_loss(vert_batch)
-
-                weight = self.current_weight if vert_idx == 0 else self.neighbor_weight
-                total_loss += weight * vert_loss
-
-        return total_loss / batch_size
+        return self.feature_extraction_module.calculate_loss({**batch, "poi_loss_weights": weights})
 
     def _calculate_refinement_loss_component(self, batch):
-        """Calculate refinement loss component for logging purposes."""
-        if "n_vertebrae" not in batch:
+        """Return the refinement loss alone, with the same weighting, for logging."""
+        weights = self._landmark_weights(batch)
+        if weights is None:
             return self.refinement_module.calculate_loss(batch)
-
-        # For multi-vertebrae, calculate weighted average of refinement losses
-        batch_size = batch["input"].shape[0]
-        total_loss = 0.0
-
-        for b in range(batch_size):
-            n_vertebrae = batch["n_vertebrae"] if isinstance(batch["n_vertebrae"], int) else batch["n_vertebrae"][b]
-            n_pois_per_vertebra = (
-                batch["n_pois_per_vertebra"] if isinstance(batch["n_pois_per_vertebra"], int) else batch["n_pois_per_vertebra"][b]
-            )
-
-            for vert_idx in range(n_vertebrae):
-                start_idx = vert_idx * n_pois_per_vertebra
-                end_idx = start_idx + n_pois_per_vertebra
-
-                vert_batch = self._extract_vertebra_batch(batch, b, start_idx, end_idx)
-                vert_loss = self.refinement_module.calculate_loss(vert_batch)
-
-                weight = self.current_weight if vert_idx == 0 else self.neighbor_weight
-                total_loss += weight * vert_loss
-
-        return total_loss / batch_size
+        return self.refinement_module.calculate_loss({**batch, "poi_loss_weights": weights})
 
     def _calculate_standard_loss(self, batch):
         """Fallback to standard loss calculation for single-vertebra batches."""
@@ -570,6 +503,10 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
         predictions = batch["coarse_preds"]
         targets = batch["target"]
         loss_mask = batch["loss_mask"]
+        # Report millimetres, like every other metric in this package. These metrics
+        # were unreachable until now and computed raw voxel distances, which would
+        # not have been comparable with fine_mean_distance_* alongside them.
+        zoom = batch["zoom"].to(targets.device).unsqueeze(1)
 
         # Metrics for current vertebra (first n_pois_per_vertebra POIs)
         current_preds = predictions[:, :n_pois_per_vertebra]
@@ -577,7 +514,7 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
         current_mask = loss_mask[:, :n_pois_per_vertebra]
 
         if current_mask.any():
-            current_distances = torch.norm(current_preds - current_targets, dim=-1)
+            current_distances = torch.norm((current_preds - current_targets) * zoom, dim=-1)
             current_masked_distances = current_distances[current_mask]
 
             metrics[f"current_vertebra_mean_distance_{mode}"] = current_masked_distances.mean()
@@ -591,7 +528,7 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
             neighbor_mask = loss_mask[:, n_pois_per_vertebra:]
 
             if neighbor_mask.any():
-                neighbor_distances = torch.norm(neighbor_preds - neighbor_targets, dim=-1)
+                neighbor_distances = torch.norm((neighbor_preds - neighbor_targets) * zoom, dim=-1)
                 neighbor_masked_distances = neighbor_distances[neighbor_mask]
 
                 metrics[f"neighbor_vertebrae_mean_distance_{mode}"] = neighbor_masked_distances.mean()

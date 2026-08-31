@@ -147,7 +147,14 @@ class SADenseNet(nn.Module):
         coarse_preds_mm = batch["coarse_preds"] * zoom
         target_mm = target * zoom
 
-        return self.loss_fn(coarse_preds_mm, target_mm, batch["loss_mask"], surface)
+        return self.loss_fn(
+            coarse_preds_mm,
+            target_mm,
+            batch["loss_mask"],
+            surface,
+            # Set by PoiNeighborPredictionModule; absent for single-vertebra batches.
+            batch.get("poi_loss_weights"),
+        )
 
     def calculate_metrics(self, batch, mode) -> dict:
         """Return coarse-stage metrics for ``batch``, each name suffixed with ``mode``."""
@@ -287,7 +294,14 @@ class HeatmapFeatureDenseNet(nn.Module):
         coarse_preds_mm = batch["coarse_preds"] * zoom
         target_mm = target * zoom
 
-        return self.loss_fn(coarse_preds_mm, target_mm, batch["loss_mask"])
+        return self.loss_fn(
+            coarse_preds_mm,
+            target_mm,
+            batch["loss_mask"],
+            None,
+            # Set by PoiNeighborPredictionModule; absent for single-vertebra batches.
+            batch.get("poi_loss_weights"),
+        )
 
     def calculate_metrics(self, batch, mode) -> dict:
         """Return coarse-stage metrics for ``batch``, each name suffixed with ``mode``."""
@@ -405,7 +419,14 @@ class SMDenseNet(nn.Module):
             surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
 
-        return self.loss_fn(batch["coarse_preds"], target, batch["loss_mask"])
+        return self.loss_fn(
+            batch["coarse_preds"],
+            target,
+            batch["loss_mask"],
+            None,
+            # Set by PoiNeighborPredictionModule; absent for single-vertebra batches.
+            batch.get("poi_loss_weights"),
+        )
 
     def calculate_metrics(self, batch, mode) -> dict:
         """Return coarse-stage metrics for ``batch``, each name suffixed with ``mode``."""
@@ -534,7 +555,14 @@ class SMSADenseNet(nn.Module):
             surface = batch["surface"]
             target, _ = surface_project_coords(target, surface)
 
-        return self.loss_fn(batch["coarse_preds"], target, batch["loss_mask"])
+        return self.loss_fn(
+            batch["coarse_preds"],
+            target,
+            batch["loss_mask"],
+            None,
+            # Set by PoiNeighborPredictionModule; absent for single-vertebra batches.
+            batch.get("poi_loss_weights"),
+        )
 
     def calculate_metrics(self, batch, mode) -> dict:
         """Return coarse-stage metrics for ``batch``, each name suffixed with ``mode``."""
