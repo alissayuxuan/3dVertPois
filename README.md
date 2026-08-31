@@ -1,83 +1,132 @@
-# Deep Learning-Based Prediction of Anatomical Ponits-of-Interest from Sparse Annotations on Segmentation Masks
+# vertpois
 
-Welcome to the code repository of my bachelor's thesis at TUM. This code is focussing on the POI-prediction on the vertebra. Most of the code was taken from the master's thesis 'Automated Point-of-Interest Prediction on CT Scans of Human Vertebrae Using Spine Segmentations' by Daniel-Jordi Regenbrecht. You can find the code here: https://github.com/doppelplusungut/3dVertPois.
+Deep-learning prediction of anatomical points-of-interest (POIs) on vertebrae, from CT
+and MRI spine segmentations.
 
-For a quick overview of the project, you can view my [poster](doc/PosterPOIPred.pdf).
-## Project Description
+The model works one vertebra at a time. A DenseNet backbone predicts a heatmap per
+landmark on a fixed-size cutout, and a transformer then refines those coarse coordinates
+using image patches taken around them, so the final prediction is sub-voxel accurate.
 
-The project comprises of three major components:
+Built on [TPTBox](https://github.com/Hendrik-code/TPTBox) for BIDS dataset handling,
+NIfTI I/O and POI containers.
 
-- Data analysis and preparation
-- Training a POI prediction model
-- An inference pipeline for a given sample/dataset
+## Installation
 
-## Installation (Ubuntu)
-
-Create and activate a virtual environment, e.g. by running
-
-```bash
-conda create -n poi-prediction python=3.10
-cona activate poi-prediction
-```
-
-Set the python interpreter path in your IDE to the version in the environment, i.e. the output of
+Requires Python 3.10 or newer.
 
 ```bash
-which python
+conda create -n vertpois python=3.10
+conda activate vertpois
+
+pip install -e .
 ```
 
-Install the TPTBox
+For the sparse-convolution backbones (`SMDenseNet`, `SMSADenseNet`) also install
+`spconv` matching your CUDA version — the dense pipeline does not need it.
+
+## Configuration
+
+Machine-specific paths live in `config/paths.yaml`, which is git-ignored. Copy the
+template and fill it in:
 
 ```bash
-pip install TPTBox
+cp config/paths.example.yaml config/paths.yaml
 ```
 
-Back in the project directory, install the required packages 
+| Key | Used for |
+| --- | --- |
+| `data_root` | BIDS dataset(s) to read images and annotations from |
+| `cutout_root` | where `prepare-data` writes cutouts and `master_df.csv` |
+| `model_root` | trained model directories and their checkpoints |
+| `output_root` | evaluation and inference results |
+| `tmp_root` | scratch space (defaults to `/tmp/vertpois`) |
 
-```bash
-pip install -r requirements.txt
-```
+Every key can be overridden by an environment variable — `data_root` becomes
+`VERTPOIS_DATA_ROOT`, and so on — which takes precedence over the file. A key that is
+needed but unset raises a `PathConfigError` naming exactly what to set.
 
-## Training your Own Model
+## Preparing data
 
-To train your own model, a dataset in BIDS-like format is required, i.e. the following structure is expected:
+A BIDS-like dataset is expected:
 
 ```text
-dataset-folder
-├── <rawdata>
-    ├── subfolders
-        ├── CT image file
-├── <derivatives>
-    ├── subfolders
-        ├── Instance Segmentation Mask
-        ├── Subregion Segmentaiton Mask
-        ├── POI file
+dataset/
+├── rawdata/…              CT or MR image
+└── derivatives/…          vertebra instance mask, subregion mask, POI json
 ```
 
-For each CT file, corresponding segmentation files and a POI file are required.
-
-Since the size of the CT scans and segmentations is generally too large to fit into GPU memory, the model predicts the POIs on a vertebra-level instead of processing an entire spine segmentation at once. Therefore, it is necessary to cut out individual vertebrae from the large image and masks and shift the POI file accordingly, which the instance mask is used for. Further, the images are brought into standard orientation and scale. To avoid repetitive computations during training, these preprocessing steps are carried out in bulk and the cutouts are saved to the disk. In order to run the bulk preprocessing, enter the src folder and run prepare_data.py.
-
-WARNING: By default, this step uses 8 CPU cores in parallel to speed up the pre-processing. You can specify a different number with the --n_workers argument. This step will run for several minutes to hours and may require several GB of disk space depending on the size of the dataset.
-```bash
-cd src
-python3 prepare_data.py --data_path $PATH_TO_YOUR_DS --derivatives_name $NAME_OF_DERIVATIVES_FOLDER --save_path $PATH_TO_SAVE_CUTOUS
-```
-
-Along with the cutouts, the script saves a csv file containing the paths of all cutouts and a json file specifying the parameters used for the creation of cutouts to reliably create appropriate cutouts during inference.
-
-Once cutouts are created, you can start training. Create a training config (samples can be found in the experiment_config subdirectory) to specify the location of data, logging, as well as data and model configurations. Then, inside the src folder, run
+Whole scans do not fit in GPU memory, so each vertebra is cut out, brought to a standard
+orientation and spacing, and written to disk once up front:
 
 ```bash
-train.py --config $PATH_TO_YOUR_CONFIG_FILE
+vertpois-prepare-data --data_path $DATASET --derivatives_name derivatives --save_path $CUTOUTS
 ```
 
-You can also run several trainings consecutively by placing the respective config files in one directory and using the --config-dir argument instead of --config in the above call. Further, training can be run using cross-validation by using train_cv.py instead of train.py. In this mode, training and validtation split in the config will be treated the same and random splits will be created for each fold (adjustable using the --n_folds argument)
+This writes one directory per vertebra plus a `master_df.csv` listing them. Paths in that
+CSV are **relative to the cutout root**, so the file stays valid if the data moves.
+It uses 8 worker processes by default (`--n_workers`), takes minutes to hours, and needs
+several GB of disk.
 
-## Inferring with a Trained Model
+## Training
 
-tbc
+Experiments are described by a JSON config. `configs/example_train.json` is a working
+starting point; fill in `master_df` and the subject splits.
 
-## Example Usage (Inference on VerSe19)
+```bash
+vertpois-train --config configs/example_train.json
+```
 
-tbc
+Components are addressed by a `"type"` string resolved through an explicit registry, so a
+config names a model rather than importing one:
+
+```json
+{"type": "PatchTransformer", "params": {"n_landmarks": 35, "patch_size": 16}}
+```
+
+Registered names live in `vertpois.registry` and the `*_MODULES` dicts beside each family
+of components. An unknown name raises an error listing the valid ones.
+
+Pass `--config-dir` instead to run every config in a directory in sequence, or use
+`vertpois-train-cv --n_folds 5` for cross-validation.
+
+## Evaluating and predicting
+
+```bash
+vertpois-eval  --checkpoint_path $CKPT --split test --project
+vertpois-infer --datasets $DATASET_NAME --der_msk derivatives
+```
+
+`vertpois-eval` writes per-POI, per-vertebra and per-subject metric CSVs plus an outlier
+list. All errors are in millimetres. `vertpois-infer` runs the full pipeline from raw
+masks to a BIDS POI file.
+
+## Development
+
+```bash
+pip install -e . && pip install pytest ruff pre-commit
+pre-commit install
+
+pytest
+ruff check . && ruff format --check .
+python scripts/check_imports.py
+```
+
+The test suite runs on synthetic tensors and needs no dataset. `scripts/check_imports.py`
+imports every module and is the quickest check that a refactor did not break the package.
+
+A pre-commit hook rejects absolute machine paths and clinical subject identifiers; see
+`scripts/check_no_private_data.py`. Please keep it passing rather than bypassing it —
+this repository is derived from work on clinical data.
+
+## Notes on this release
+
+`CHANGES.md` records every behavioural difference from the internal research codebase this
+was extracted from, including several fixes that change numerical results. Read it before
+comparing against older runs.
+
+## Citation and provenance
+
+This code descends from the master's thesis *Automated Point-of-Interest Prediction on CT
+Scans of Human Vertebrae Using Spine Segmentations* by Daniel-Jordi Regenbrecht
+([original repository](https://github.com/doppelplusungut/3dVertPois)), and a subsequent
+bachelor's thesis at TUM. See `AUTHORS.md`.
