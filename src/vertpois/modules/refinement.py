@@ -22,10 +22,12 @@ class RefinementModule(pl.LightningModule):
         # Save hyperparameters
         self.save_hyperparameters()
 
-    def forward(self, batch):
+    def forward(self, batch) -> dict:
+        """Refine ``batch`` in place and return it. Implemented by subclasses."""
         raise NotImplementedError
 
-    def training_step(self, batch):
+    def training_step(self, batch) -> torch.Tensor:
+        """Run one training step and log the training metrics."""
         batch = self(batch)
         loss = self.calculate_loss(batch)
         metrics = self.calculate_metrics(batch, "train")
@@ -33,7 +35,8 @@ class RefinementModule(pl.LightningModule):
 
         return loss
 
-    def validation_step(self, batch):
+    def validation_step(self, batch) -> torch.Tensor:
+        """Run one validation step and log the validation metrics."""
         batch = self(batch)
         loss = self.calculate_loss(batch)
         metrics = self.calculate_metrics(batch, "val")
@@ -41,15 +44,17 @@ class RefinementModule(pl.LightningModule):
 
         return loss
 
-    def calculate_loss(self, batch):
+    def calculate_loss(self, batch) -> torch.Tensor:
+        """Return the scalar loss for ``batch``. Implemented by subclasses."""
         raise NotImplementedError
 
-    def calculate_metrics(self, batch, mode):
+    def calculate_metrics(self, batch, mode) -> dict:
+        """Return a metric dict for ``batch``, suffixed with ``mode``."""
         raise NotImplementedError
 
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
-        return optimizer
+    def configure_optimizers(self) -> torch.optim.Optimizer:
+        """Return an Adam optimiser over this module's parameters."""
+        return torch.optim.Adam(self.parameters(), lr=1e-4)
 
 
 class Identity(RefinementModule):
@@ -65,14 +70,16 @@ class Identity(RefinementModule):
         super().__init__()
         self.project_gt = project_gt
 
-    def forward(self, batch):
+    def forward(self, batch) -> dict:
+        """Return ``batch`` unchanged."""
         return batch
 
-    def calculate_loss(self, batch):
+    def calculate_loss(self, batch) -> int:  # noqa: ARG002
+        """Return zero: there is nothing to train in this module."""
         return 0
 
-    def calculate_metrics(self, batch, mode):
-
+    def calculate_metrics(self, batch, mode) -> dict:
+        """Return coarse-stage metrics, so a no-refinement run is still measurable."""
         metrics = {}
 
         loss_mask = batch["loss_mask"]  # (batch_size, n_landmarks)
@@ -110,7 +117,7 @@ class Identity(RefinementModule):
         metrics[f"offsets_magnitude_masked_std_{mode}"] = 0.0
 
         # Calculate mean Euclidian distance grouped by landmark type
-        for i, landmark_type in enumerate(target_indices.unique()):
+        for landmark_type in target_indices.unique():
             landmark_mask = target_indices == landmark_type
             landmark_mask = landmark_mask * loss_mask
             distances_landmark = distances[landmark_mask]
@@ -231,7 +238,7 @@ class PatchTransformer(nn.Module):
         self.lr = lr
         self.warmup_epochs = warmup_epochs
 
-    def forward(self, batch):
+    def forward(self, batch) -> dict:
         """Refine the coarse predictions in ``batch``, adding ``offsets`` and ``refined_preds``."""
         poi_indices = batch["poi_list_idx"] if self.use_poi_embedding else None
         vertebra_indices = batch["vert_list_idx"] if self.use_vert_embedding else None
@@ -284,7 +291,7 @@ class PatchTransformer(nn.Module):
 
         return batch
 
-    def calculate_loss(self, batch):
+    def calculate_loss(self, batch) -> torch.Tensor:
         """Return the refinement loss, computed in millimetres."""
         target = batch["target"]
         surface = batch["surface"]
@@ -295,7 +302,19 @@ class PatchTransformer(nn.Module):
         zoom = batch["zoom"].to(target.device).unsqueeze(1)
         return self.loss_fn(batch["refined_preds"] * zoom, target * zoom, batch["loss_mask"], surface)
 
-    def calculate_metrics(self, batch, mode):
+    def calculate_metrics(self, batch, mode) -> dict:
+        """Return refinement metrics for ``batch``.
+
+        Distances are reported in millimetres, and separately over all landmarks and
+        over only those the loss mask selects.
+
+        Args:
+            batch: A batch already passed through :meth:`forward`.
+            mode: ``"train"`` or ``"val"``, used to suffix every metric name.
+
+        Returns:
+            A mapping of metric name to scalar tensor.
+        """
         metrics = {}
 
         loss_mask = batch["loss_mask"]  # (batch_size, n_landmarks)
@@ -352,7 +371,7 @@ class PatchTransformer(nn.Module):
         metrics[f"offsets_magnitude_masked_std_{mode}"] = offsets_masked_std
 
         # Calculate mean Euclidian distance grouped by landmark type
-        for i, landmark_type in enumerate(target_indices.unique()):
+        for landmark_type in target_indices.unique():
             landmark_mask = target_indices == landmark_type
             landmark_mask = landmark_mask * loss_mask
             distances_landmark = distances[landmark_mask]
@@ -361,7 +380,7 @@ class PatchTransformer(nn.Module):
 
         return metrics
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> torch.optim.Optimizer:
         """Return an Adam optimiser over this module's parameters."""
         return torch.optim.Adam(self.parameters(), lr=self.lr)
 

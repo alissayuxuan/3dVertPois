@@ -6,6 +6,16 @@ from torch import nn
 
 
 class PoiTransformer(nn.Module):
+    """Transformer over per-landmark tokens, predicting a coordinate offset each.
+
+    Each token concatenates the landmark's feature vector with embeddings of its
+    coordinate, its landmark identity and its vertebra, so attention can reason
+    about the whole configuration of landmarks at once.
+
+    :class:`FlexiblePoiTransformer` generalises this class by letting any of the
+    embeddings be omitted, and is numerically identical when all are present.
+    """
+
     def __init__(
         self,
         poi_feature_l: int,
@@ -84,6 +94,16 @@ class PoiTransformer(nn.Module):
 
 # POI Transformer that can take optional arguments for ablation study
 class FlexiblePoiTransformer(nn.Module):
+    """A :class:`PoiTransformer` whose input components can each be switched off.
+
+    Passing ``None`` (or 0) for a width omits that component and shrinks the token
+    accordingly. This is what makes the refinement ablations expressible as flags
+    on one class rather than as separate subclasses.
+
+    Raises:
+        ValueError: If every component is disabled, leaving a zero-width token.
+    """
+
     def __init__(
         self,
         poi_feature_l: int | None,

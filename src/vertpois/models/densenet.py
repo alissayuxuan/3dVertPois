@@ -284,6 +284,14 @@ class HeatmapDenseNet(nn.Module):
         self.weight_features = weight_features
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Return per-landmark heatmaps and the shared feature map.
+
+        Args:
+            x: Input volume, ``(batch, channels, depth, height, width)``.
+
+        Returns:
+            A tuple of the landmark heatmaps and the feature map they were split from.
+        """
         x = x.float()  # Ensure input is float
         x = self.features(x)  # (batch_size, n_landmarks + feature_l, *spatial_shape // (len(block_config)**2))
         # Split the output into landmark heatmaps and feature maps
@@ -400,6 +408,14 @@ class UNetHeatmapDenseNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x: torch.Tensor):
+        """Return per-landmark heatmaps and features via a U-Net decoder.
+
+        Args:
+            x: Input volume, ``(batch, channels, depth, height, width)``.
+
+        Returns:
+            A tuple of the landmark heatmaps and the feature map they were split from.
+        """
         x = x.float()
         s0 = self.stem(x)  # (B, 64, 32, 32, 36)
         b1 = self.denseblock1(s0)  # (B, c1, 32, 32, 36)   ← skip

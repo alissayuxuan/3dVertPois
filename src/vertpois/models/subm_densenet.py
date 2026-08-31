@@ -19,6 +19,15 @@ from torch import nn
 
 
 class SubmDenseLayer(spconv.SparseModule):
+    """One sparse dense-block layer: bottleneck 1x1x1 then a 3x3x3 submanifold conv.
+
+    Args:
+        in_channels: Channels entering the layer.
+        growth_rate: Channels this layer contributes to the block output.
+        bn_size: Bottleneck width multiplier for the 1x1x1 convolution.
+        dropout: Dropout probability applied to the layer output.
+    """
+
     def __init__(self, in_channels, growth_rate, bn_size, dropout):
         super().__init__()
         out_channels = bn_size * growth_rate
@@ -33,11 +42,22 @@ class SubmDenseLayer(spconv.SparseModule):
         )
 
     def forward(self, x):
+        """Run the module on a sparse tensor and return its output."""
         new_features = self.layers(x)
         return x.replace_feature(torch.cat([x.features, new_features.features], 1))
 
 
 class SubmDenseBlock(spconv.SparseSequential):
+    """A stack of :class:`SubmDenseLayer`, each seeing all preceding outputs.
+
+    Args:
+        layers: Number of layers in the block.
+        in_channels: Channels entering the block.
+        bn_size: Bottleneck width multiplier.
+        growth_rate: Channels each layer contributes.
+        dropout: Dropout probability.
+    """
+
     def __init__(self, layers, in_channels, bn_size, growth_rate, dropout):
         super().__init__()
 
@@ -48,6 +68,13 @@ class SubmDenseBlock(spconv.SparseSequential):
 
 
 class SubmTransition(SparseModule):
+    """Transition between dense blocks: 1x1x1 conv then a stride-2 pool.
+
+    Args:
+        in_channels: Channels entering the transition.
+        out_channels: Channels leaving it.
+    """
+
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.layers = spconv.SparseSequential(
@@ -58,10 +85,17 @@ class SubmTransition(SparseModule):
         )
 
     def forward(self, x):
+        """Run the module on a sparse tensor and return its output."""
         return self.layers(x)
 
 
 class HeatmapSubmDenseNet(SparseModule):
+    """Sparse-convolution DenseNet producing one heatmap per landmark.
+
+    The sparse counterpart of :class:`~vertpois.models.densenet.HeatmapDenseNet`,
+    for inputs where most voxels are background.
+    """
+
     def __init__(
         self,
         in_channels: int,
@@ -111,6 +145,7 @@ class HeatmapSubmDenseNet(SparseModule):
         )
 
     def forward(self, x):
+        """Run the module on a sparse tensor and return its output."""
         x = x.float()
         # The sparse library does not like monai Metatensors, so we convert to torch tensor
         if isinstance(x, MetaTensor):
@@ -199,6 +234,7 @@ class SubmDenseNet(SparseModule):
         )
 
     def forward(self, x):
+        """Run the module on a sparse tensor and return its output."""
         x = x.float()
         # The sparse library does not like monai Metatensors, so we convert to torch tensor
         if isinstance(x, MetaTensor):

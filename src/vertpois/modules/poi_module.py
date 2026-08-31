@@ -1,7 +1,8 @@
-"""Module: PoiModule
+"""The top-level POI prediction module.
 
-This module contains the implementation of the PoiPredictionModule class,
-which is a PyTorch Lightning module for predicting points of interest (POI).
+Composes a coarse feature-extraction stage with a refinement stage and trains
+them jointly, optionally freezing the coarse stage once its validation loss has
+plateaued.
 It also includes helper functions for creating feature extraction and refinement modules.
 
 Classes:
@@ -15,6 +16,7 @@ Functions:
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from torch import nn
 
 from vertpois.modules.feature_extraction import FEATURE_EXTRACTION_MODULES
 from vertpois.modules.refinement import REFINEMENT_MODULES
@@ -91,7 +93,7 @@ class PoiPredictionModule(pl.LightningModule):
         # Save hyperparameters
         self.save_hyperparameters()
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args, **kwargs) -> dict:
         """Performs the forward pass of the module.
 
         Args:
@@ -112,7 +114,19 @@ class PoiPredictionModule(pl.LightningModule):
         batch = self.refinement_module(batch)
         return batch
 
-    def training_step(self, *args, **kwargs):
+    def training_step(self, *args, **kwargs) -> torch.Tensor:
+        """Run one training step over the coarse and refinement stages.
+
+        Args:
+            *args: The batch, positionally.
+            **kwargs: The batch, as ``batch=``.
+
+        Returns:
+            The combined weighted loss.
+
+        Raises:
+            ValueError: If no batch was passed.
+        """
         batch = args[0] if args else kwargs.get("batch")
         if batch is None:
             raise ValueError("Batch input is required for the forward pass.")
@@ -132,7 +146,19 @@ class PoiPredictionModule(pl.LightningModule):
 
         return loss
 
-    def validation_step(self, *args, **kwargs):
+    def validation_step(self, *args, **kwargs) -> torch.Tensor:
+        """Run one validation step over the coarse and refinement stages.
+
+        Args:
+            *args: The batch, positionally.
+            **kwargs: The batch, as ``batch=``.
+
+        Returns:
+            The combined weighted loss.
+
+        Raises:
+            ValueError: If no batch was passed.
+        """
         batch = args[0] if args else kwargs.get("batch")
         if batch is None:
             raise ValueError("Batch input is required for the forward pass.")
@@ -156,7 +182,8 @@ class PoiPredictionModule(pl.LightningModule):
 
         return loss
 
-    def on_validation_epoch_end(self):
+    def on_validation_epoch_end(self) -> None:
+        """Freeze the coarse stage once its validation loss stops improving."""
         # Check if the feature extraction module should be frozen
         if self.feature_extactor_frozen:
             return
@@ -175,7 +202,12 @@ class PoiPredictionModule(pl.LightningModule):
                     self.feature_extactor_frozen = True
                     print("Feature extraction module frozen")
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> dict:
+        """Build the optimiser and scheduler named in the config.
+
+        The coarse and refinement stages get separate parameter groups, so each can
+        run at its own learning rate.
+        """
         optimizer_class = getattr(torch.optim, self.optimizer)
         param_groups = [
             {
@@ -203,7 +235,7 @@ class PoiPredictionModule(pl.LightningModule):
 
         return optimizer
 
-    def calculate_metrics(self, batch, mode):
+    def calculate_metrics(self, batch, mode) -> dict:
         """Calculates metrics for the given batch and mode.
 
         Parameters:
@@ -218,24 +250,17 @@ class PoiPredictionModule(pl.LightningModule):
 
         return {**feature_metrics, **refinement_metrics}
 
-    def freeze_feature_extractor(self):
-        """Freezes the feature extraction module by setting the `requires_grad`
-        attribute of all its parameters to False.
+    def freeze_feature_extractor(self) -> None:
+        """Freeze the coarse stage so training only updates the refiner.
 
-        This prevents the feature extraction module from being updated during training.
-
-        Args:
-            None
-
-        Returns:
-            None
+        Sets ``requires_grad = False`` on every feature-extractor parameter.
         """
         self.log("feature_frozen", True, on_epoch=True, sync_dist=True)
         for param in self.feature_extraction_module.parameters():
             param.requires_grad = False
 
 
-def create_feature_extraction_module(config):
+def create_feature_extraction_module(config) -> nn.Module:
     """Create a feature extraction module based on the provided configuration.
 
     Args:
@@ -250,7 +275,7 @@ def create_feature_extraction_module(config):
     return build(FEATURE_EXTRACTION_MODULES, "feature extraction module", config)
 
 
-def create_refinement_module(config):
+def create_refinement_module(config) -> nn.Module:
     """Create a refinement module based on the given configuration.
 
     Args:
@@ -295,10 +320,12 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
         neighbor_weight=0.2,
         weight_decay=1e-4,
     ):
-        """Args:
-        current_weight (float): Loss weight for current vertebra predictions
-        neighbor_weight (float): Loss weight for neighbor vertebrae predictions
-        **kwargs: Arguments passed to parent PoiPredictionModule
+        """Initialise a neighbour-aware POI prediction module.
+
+        Args:
+            current_weight: Loss weight for the current vertebra's landmarks.
+            neighbor_weight: Loss weight for the neighbouring vertebrae's landmarks.
+            **kwargs: Forwarded to :class:`PoiPredictionModule`.
         """
         super().__init__(
             coarse_config=coarse_config,
@@ -317,8 +344,8 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
         # Update hyperparameters to include new parameters
         self.save_hyperparameters()
 
-    def training_step(self, *args, **kwargs):
-        """Override training step to use multi-vertebrae loss calculation"""
+    def training_step(self, *args, **kwargs) -> torch.Tensor:
+        """Override training step to use multi-vertebrae loss calculation."""
         batch = args[0] if args else kwargs.get("batch")
         if batch is None:
             raise ValueError("Batch input is required for the forward pass.")
@@ -336,8 +363,8 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
 
         return loss
 
-    def validation_step(self, *args, **kwargs):
-        """Override validation step to use multi-vertebrae loss calculation"""
+    def validation_step(self, *args, **kwargs) -> torch.Tensor:
+        """Override validation step to use multi-vertebrae loss calculation."""
         batch = args[0] if args else kwargs.get("batch")
         if batch is None:
             raise ValueError("Batch input is required for the forward pass.")
@@ -441,7 +468,7 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
         return vert_batch
 
     def _calculate_feature_loss_component(self, batch):
-        """Calculate feature loss component for logging purposes"""
+        """Calculate feature loss component for logging purposes."""
         if "n_vertebrae" not in batch:
             return self.feature_extraction_module.calculate_loss(batch)
 
@@ -468,7 +495,7 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
         return total_loss / batch_size
 
     def _calculate_refinement_loss_component(self, batch):
-        """Calculate refinement loss component for logging purposes"""
+        """Calculate refinement loss component for logging purposes."""
         if "n_vertebrae" not in batch:
             return self.refinement_module.calculate_loss(batch)
 
@@ -495,13 +522,13 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
         return total_loss / batch_size
 
     def _calculate_standard_loss(self, batch):
-        """Fallback to standard loss calculation for single-vertebra batches"""
+        """Fallback to standard loss calculation for single-vertebra batches."""
         feature_loss = self.feature_extraction_module.calculate_loss(batch)
         refinement_loss = self.refinement_module.calculate_loss(batch)
         return feature_loss * self.loss_weights[0] + refinement_loss * self.loss_weights[1]
 
-    def calculate_metrics(self, batch, mode):
-        """Override metrics calculation to include multi-vertebrae specific metrics"""
+    def calculate_metrics(self, batch, mode) -> dict:
+        """Override metrics calculation to include multi-vertebrae specific metrics."""
         # Get base metrics
         feature_metrics = self.feature_extraction_module.calculate_metrics(batch, mode)
         refinement_metrics = self.refinement_module.calculate_metrics(batch, mode)
@@ -512,7 +539,7 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
         return {**feature_metrics, **refinement_metrics, **multi_metrics}
 
     def _calculate_multi_vertebrae_metrics(self, batch, mode):
-        """Calculate vertebra-specific metrics"""
+        """Calculate vertebra-specific metrics."""
         metrics = {}
 
         if "n_vertebrae" not in batch or "coarse_preds" not in batch:
@@ -560,8 +587,9 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
 
         return metrics
 
-    def predict_current_vertebra_only(self, batch):
+    def predict_current_vertebra_only(self, batch) -> dict:
         """Make predictions and return only current vertebra POIs.
+
         Useful for inference when you only want the primary predictions.
         """
         batch = self(batch)
