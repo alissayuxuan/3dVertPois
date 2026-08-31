@@ -206,8 +206,7 @@ class PatchTransformer(nn.Module):
         # an IndexError on an empty feature list part-way into a training run.
         if self.use_coarse_pred and not (self.use_coarse_features or self.use_patches):
             raise ValueError(
-                "The transformer would receive no per-landmark features: "
-                "set use_coarse_features or use_patches (or use_coarse_pred=False)."
+                "The transformer would receive no per-landmark features: set use_coarse_features or use_patches (or use_coarse_pred=False)."
             )
 
         if self.use_patches:

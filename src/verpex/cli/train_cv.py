@@ -4,38 +4,55 @@ import argparse
 import json
 import os
 
+# Must be set before torch is imported; see the note in verpex.cli.train.
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
 import pytorch_lightning as pl
 import torch
 from sklearn.model_selection import KFold
 
+from verpex.cli.train import DEFAULT_SEED
 from verpex.modules.data_modules import create_data_module
 from verpex.modules.poi_module import PREDICTION_MODULES
 from verpex.registry import build
 from verpex.training_utils import create_callbacks, save_data_module_config
 
 
-def run_cv(n_folds, experiment_config, save_predictions=False, poi_file_ending=None) -> None:
+def run_cv(n_folds, experiment_config, save_predictions=False, poi_file_ending=None, seed: int | None = None) -> None:
     """Train one model per cross-validation fold.
 
     The configured train and validation subject lists are merged and re-split into
     ``n_folds`` random folds; each fold trains into its own ``fold_{i}`` directory.
+
+    Args:
+        n_folds: Number of cross-validation folds.
+        experiment_config: A parsed experiment config. Not modified.
+        save_predictions: Export each fold's predictions as pseudo-labels.
+        poi_file_ending: File ending for those predictions. Required with
+            ``save_predictions``.
+        seed: Seeds the RNGs and the fold split. Overrides the config's ``seed``.
+
+    Raises:
+        ValueError: If ``save_predictions`` is set without ``poi_file_ending``.
     """
     # If the predictions are saved the file ending must be set
     if save_predictions and not poi_file_ending:
         raise ValueError("If predictions are saved the poi file ending must be set")
 
-    pl.seed_everything(42, workers=True)
+    if seed is None:
+        seed = experiment_config.get("seed", DEFAULT_SEED)
+    pl.seed_everything(seed, workers=True)
     torch.set_float32_matmul_precision("high")
-    torch.use_deterministic_algorithms(mode=True, warn_only=True)
+    # Matches verpex.cli.train: raise rather than silently run non-deterministically.
+    torch.use_deterministic_algorithms(mode=True, warn_only=False)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    train_subjects = experiment_config["data_module_config"]["params"]["train_subjects"]
-    val_subjects = experiment_config["data_module_config"]["params"]["val_subjects"]
-
-    # Add val subjects to train subjects and create random folds
-    train_subjects += val_subjects
-    kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
+    # Concatenate into a new list: `+=` would append the validation subjects to the
+    # list held inside experiment_config, corrupting it for any later use.
+    train_subjects = list(experiment_config["data_module_config"]["params"]["train_subjects"])
+    train_subjects += experiment_config["data_module_config"]["params"]["val_subjects"]
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
 
     for fold, (train_idx, val_idx) in enumerate(kf.split(train_subjects)):
         train_subjects_fold = [train_subjects[i] for i in train_idx]
@@ -99,6 +116,7 @@ def main() -> None:
     )
     parser.add_argument("--config", type=str, help="Experiment config file")
     parser.add_argument("--config-dir", type=str, help="Directory containing experiment config files")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed; overrides the config's 'seed'")
     args = parser.parse_args()
 
     if args.config:
@@ -109,10 +127,11 @@ def main() -> None:
                 experiment_config,
                 save_predictions=args.save_predictions,
                 poi_file_ending=args.poi_file_ending,
+                seed=args.seed,
             )
 
     if args.config_dir:
-        for config_file in os.listdir(args.config_dir):
+        for config_file in sorted(os.listdir(args.config_dir)):
             with open(os.path.join(args.config_dir, config_file)) as f:
                 experiment_config = json.load(f)
                 run_cv(
@@ -120,6 +139,7 @@ def main() -> None:
                     experiment_config,
                     save_predictions=args.save_predictions,
                     poi_file_ending=args.poi_file_ending,
+                    seed=args.seed,
                 )
 
 

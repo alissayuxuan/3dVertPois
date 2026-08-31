@@ -6,6 +6,12 @@ import os
 import sys
 from pathlib import Path
 
+# cuBLAS reads this when it initialises its CUDA context, which happens on the first
+# CUDA op. Setting it after that point has no effect and
+# torch.use_deterministic_algorithms(True) then raises on the first matmul, so it has
+# to be set before torch is imported.
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
 import pytorch_lightning as pl
 import torch
 
@@ -14,25 +20,28 @@ from verpex.modules.poi_module import PREDICTION_MODULES
 from verpex.registry import build
 from verpex.training_utils import create_callbacks, save_data_module_config
 
+#: Seed used when neither the config nor the command line sets one.
+DEFAULT_SEED = 42
 
-def run_experiment(experiment_config) -> None:
+
+def run_experiment(experiment_config, seed: int | None = None) -> None:
     """Train one model from a JSON experiment config.
 
     Seeds every RNG and enables deterministic algorithms, so two runs of the same
-    config produce the same weights.
+    config and seed produce the same weights.
 
     Args:
         experiment_config: A parsed experiment config, with ``data_module_config``,
             ``module_config``, ``callbacks_config`` and ``trainer_config`` keys.
+            An optional ``seed`` key sets the seed.
+        seed: Overrides the config's ``seed``. Defaults to 42 when neither is given.
     """
-    pl.seed_everything(42, workers=True)
+    if seed is None:
+        seed = experiment_config.get("seed", DEFAULT_SEED)
+    pl.seed_everything(seed, workers=True)
     torch.set_float32_matmul_precision("high")
-    # warn_only=True would let 3D CUDA convs run non-deterministically.
-    # Setting False raises on the first non-deterministic op — used to identify
-    # the exact source of run-to-run variance.
-    import os
-
-    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    # warn_only=False raises on the first non-deterministic op rather than letting 3D
+    # CUDA convolutions silently introduce run-to-run variance.
     torch.use_deterministic_algorithms(mode=True, warn_only=False)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
@@ -70,18 +79,17 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, help="Experiment config file")
     parser.add_argument("--config-dir", type=str, help="Directory containing experiment config files")
+    parser.add_argument("--seed", type=int, default=None, help=f"Random seed; overrides the config's 'seed' (default {DEFAULT_SEED})")
     args = parser.parse_args()
-
-    pl.seed_everything(42)
 
     if args.config:
         with open(args.config) as f:
-            run_experiment(json.load(f))
+            run_experiment(json.load(f), seed=args.seed)
 
     if args.config_dir:
-        for config_file in os.listdir(args.config_dir):
+        for config_file in sorted(os.listdir(args.config_dir)):
             with open(os.path.join(args.config_dir, config_file)) as f:
-                run_experiment(json.load(f))
+                run_experiment(json.load(f), seed=args.seed)
 
 
 if __name__ == "__main__":

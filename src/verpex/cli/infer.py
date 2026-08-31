@@ -415,7 +415,7 @@ def preprocess_segmentation_masks(  # noqa: ANN201
     return master_df, temp_dir
 
 
-def create_prediction_poi_files(  # noqa: ANN201
+def predict_subject_pois(  # noqa: ANN201
     subject,
     vert_msk_ref: BIDS_FILE,
     dm_path,
@@ -430,6 +430,10 @@ def create_prediction_poi_files(  # noqa: ANN201
     input_data_override: NII | None = None,
 ):
     """Run the model over one subject and write its predicted POI file.
+
+    Distinct from :func:`verpex.evaluation.metrics.create_prediction_poi_files`,
+    which runs a trained model over a whole dataset split described by a saved data
+    module. This one starts from a single subject's segmentation masks.
 
     The ``*_override`` arguments let a caller supply masks that are not on disk, for
     datasets whose masks have to be built at read time. When they are None,
@@ -717,7 +721,7 @@ def main() -> None:
 
                     vert_msk.assert_affine(other=subreg_msk)
 
-                    create_prediction_poi_files(
+                    predict_subject_pois(
                         sub,
                         vert_msk_ref,
                         dm_path,
