@@ -536,7 +536,7 @@ def main() -> None:
 
     parser.add_argument(
         "--set_zoom",
-        type=lambda x: tuple(map(int, x.split(","))),
+        type=lambda x: tuple(map(float, x.split(","))),
         help="Zoom for rescaling (format: x,y,z)",
         default=(1, 1, 1),
     )

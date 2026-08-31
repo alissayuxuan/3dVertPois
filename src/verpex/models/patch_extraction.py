@@ -54,7 +54,9 @@ class PatchExtractor(nn.Module):
         device = vol.device
 
         # Round centroids to integer indices; accept float or int input.
-        centroids = centroids.long()
+        # round(), not a bare .long(): truncation biases every patch up to a voxel
+        # toward the origin relative to the sub-voxel coarse prediction.
+        centroids = centroids.round().long()
 
         # 1D offset grid of length P centred on 0 → positions [-P//2, ..., P//2 - 1]
         offs = torch.arange(patch_size, device=device) - patch_size // 2

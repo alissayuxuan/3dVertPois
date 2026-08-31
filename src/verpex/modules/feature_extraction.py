@@ -7,7 +7,6 @@ from verpex.geometry.heatmaps import SoftArgmax3D
 from verpex.geometry.surface import surface_project_coords
 from verpex.loss.loss_modules import get_loss_fn
 from verpex.models.densenet import HeatmapDenseNet
-from verpex.models.subm_densenet import HeatmapSubmDenseNet, SubmDenseNet
 
 
 class SADenseNet(nn.Module):
@@ -62,7 +61,7 @@ class SADenseNet(nn.Module):
             )
         elif backbone == "unet":
             # Imported lazily to keep the DenseNet path free of the extra symbol.
-            from models.DenseNet import UNetHeatmapDenseNet
+            from verpex.models.densenet import UNetHeatmapDenseNet
 
             self.feature_extractor = UNetHeatmapDenseNet(
                 spatial_dims=3,
@@ -363,6 +362,11 @@ class SMDenseNet(nn.Module):
 
         self.loss_fn = get_loss_fn(loss_fn)
 
+        # Imported here, not at module scope: subm_densenet subclasses spconv types at
+        # class-definition time, so importing it would make spconv a hard dependency
+        # of the whole package rather than of these two sparse backbones.
+        from verpex.models.subm_densenet import SubmDenseNet
+
         self.feature_extractor = SubmDenseNet(
             in_channels=in_channels,
             n_landmarks=n_landmarks,
@@ -477,6 +481,9 @@ class SMSADenseNet(nn.Module):
         self.loss_fn = get_loss_fn(loss_fn)
 
         self.project_gt = project_gt
+
+        # See the note in SMDenseNet: spconv is only required by the sparse backbones.
+        from verpex.models.subm_densenet import HeatmapSubmDenseNet
 
         self.feature_extractor = HeatmapSubmDenseNet(
             in_channels=in_channels,

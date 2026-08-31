@@ -32,7 +32,7 @@ class SurfaceDistanceLoss(nn.Module):
         Args:
             pred: Predicted coordinates, ``(batch, n_landmarks, 3)``.
             target: Unused; present so every loss shares one signature.
-            mask: Unused by this loss.
+            mask: Boolean ``(batch, n_landmarks)`` selecting the landmarks to score.
             surface: Surface point cloud to project onto. When ``None`` the loss is
                 zero, so a config can enable this term only where surfaces exist.
 
@@ -42,10 +42,12 @@ class SurfaceDistanceLoss(nn.Module):
         if surface is None:
             return torch.tensor(0.0, device=pred.device)
 
-        dist_to_surface = surface_project_coords(pred, surface)[1]
+        dist_to_surface = surface_project_coords(pred, surface)[1]  # (batch, n_landmarks)
+        if mask is not None:
+            dist_to_surface = dist_to_surface[mask]
         # Scaled down by 10 to keep this term commensurate with the coordinate
         # losses it is usually compounded with.
-        return torch.norm(dist_to_surface.mean(dim=0), dim=0) / 10
+        return dist_to_surface.mean() / 10
 
 
 class WingLoss3D(nn.Module):
@@ -147,19 +149,22 @@ class CompoundLoss(nn.Module):
 
     Args:
         loss_fns: The losses to combine.
-        weights: One weight per loss, summing to 1. Defaults to equal weights.
+        weights: One weight per loss, summing to 1 (within 1e-6). Defaults to equal
+            weights.
 
     Raises:
-        AssertionError: If explicit weights do not sum to 1.
+        ValueError: If explicit weights do not sum to 1.
     """
 
     def __init__(self, loss_fns, weights=None):
         super().__init__()
         self.loss_fns = loss_fns
         if weights is None:
-            weights = [1.0] * len(loss_fns)
-        else:
-            assert sum(weights) == 1.0, "Weights should sum to 1.0"
+            weights = [1.0 / len(loss_fns)] * len(loss_fns)
+        elif abs(sum(weights) - 1.0) > 1e-6:
+            # An exact `== 1.0` rejected ordinary inputs: sum([0.7, 0.2, 0.1]) is
+            # 0.9999999999999999 in binary floating point.
+            raise ValueError(f"CompoundLoss weights must sum to 1.0, got {sum(weights)}.")
         self.weights = weights
 
     def forward(self, pred, target, mask=None, surface=None) -> torch.Tensor:

@@ -109,3 +109,29 @@ def test_variants_still_accept_ordinary_parameters(model_dims):
     """The conflict check must not block parameters the variant does not fix."""
     module = REFINEMENT_MODULES["NoPoiPatchTransformer"](**{**model_dims, "dropout": 0.5})
     assert module is not None
+
+
+def test_warmup_does_not_need_lightning_to_supply_an_epoch(model_dims, refinement_batch):
+    """`warmup_epochs > 0` must work.
+
+    PatchTransformer is a plain nn.Module, so Lightning gives it no `current_epoch`;
+    the warmup branch used to raise AttributeError on the first training step. The
+    parent module now propagates the epoch, and the default keeps a standalone
+    module usable.
+    """
+    module = REFINEMENT_MODULES["PatchTransformer"](**model_dims, warmup_epochs=5)
+    module.train()
+    out = module(refinement_batch)
+    assert torch.isfinite(out["refined_preds"]).all()
+
+
+def test_current_epoch_stays_out_of_the_state_dict(model_dims):
+    """It is bookkeeping, not a parameter - it must not change checkpoint contents."""
+    module = REFINEMENT_MODULES["PatchTransformer"](**model_dims, warmup_epochs=5)
+    assert not any("current_epoch" in key for key in module.state_dict())
+
+
+def test_no_coarse_pred_requires_coarse_features(model_dims):
+    """Without a coarse stage the coarse features are the only feature source."""
+    with pytest.raises(ValueError, match="no other feature source"):
+        REFINEMENT_MODULES["PatchTransformer"](**model_dims, use_coarse_pred=False, use_patches=False, use_coarse_features=False)

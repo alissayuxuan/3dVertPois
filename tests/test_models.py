@@ -93,3 +93,23 @@ def test_patch_extractor_returns_one_feature_vector_per_landmark():
     with torch.no_grad():
         features = extractor(volume, coords)
     assert features.shape == (2, 4, 8)
+
+
+def test_patch_centres_are_rounded_not_truncated():
+    """A .long() cast biased every patch up to a voxel toward the origin."""
+    from monai.networks.nets.regressor import Regressor
+
+    extractor = PatchExtractor(
+        patch_size=16,
+        feature_extraction_model=Regressor(
+            in_shape=(1, 16, 16, 16), out_shape=(8,), channels=(8, 16, 32), strides=(2, 2, 2), kernel_size=3
+        ),
+    ).eval()
+    volume = torch.zeros(1, 1, 48, 48, 48)
+    volume[0, 0, 25, 25, 25] = 1.0  # a single hot voxel at 25
+
+    # 24.6 rounds to 25, so the hot voxel sits at the patch centre; truncation would
+    # have put the centre at 24 and shifted it off-centre.
+    patches = extractor.extract_patches(volume, torch.tensor([[[24.6, 24.6, 24.6]]]))
+    centre = patches.shape[-1] // 2
+    assert patches[0, 0, 0, centre, centre, centre] == 1.0

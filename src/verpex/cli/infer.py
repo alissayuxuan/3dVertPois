@@ -7,9 +7,11 @@ Given vertebra and subregion segmentation masks plus a trained model, this pipel
 3. reorients and rescales the cutouts to 1 mm isotropic;
 4. pads them to a fixed size and arranges them into a batch;
 5. runs the model and extracts the predicted landmarks;
-6. reverts the landmarks to the original space (un-pad, rescale, reorient, add the
-   cutout offset - in that order, see
-   :func:`verpex.geometry.spaces.revert_poi_to_original_space`);
+6. reverts the landmarks to the original space - un-pad, then **add the cutout
+   offset, then rescale**, then reorient. The offset counts voxels in the
+   preprocessed grid, so it must be applied before the rescale; see
+   :func:`verpex.geometry.spaces.revert_poi_to_original_space`, which explains why
+   getting this order wrong is invisible at 1 mm isotropic spacing;
 7. saves them as a BIDS POI file and removes the temporary directory.
 """
 

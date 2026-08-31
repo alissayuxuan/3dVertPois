@@ -24,3 +24,15 @@ def test_relative_entry_is_resolved_against_the_cutout_root(_cutout_root):
 def test_absolute_entry_is_left_alone():
     """Older master_df.csv files stored absolute paths; those must keep working."""
     assert resolve_cutout_dir("/data/cutouts/sub-01/20") == "/data/cutouts/sub-01/20"  # noqa: private-data
+
+
+def test_legacy_relative_entries_resolve_under_the_configured_root(_cutout_root):
+    """A master_df.csv from before the relative-path change still works.
+
+    Older files stored `file_dir` as `dataset/data_preprocessing/.../<sub>/<vert>`,
+    which the dataset patched by substituting an absolute prefix. Joining such an
+    entry onto `cutout_root` reproduces that exactly, provided `cutout_root` is set
+    to the directory the old substitution produced.
+    """
+    legacy = "dataset/data_preprocessing/cutout-folder/cutouts/sub-01/20"
+    assert resolve_cutout_dir(legacy) == str(_cutout_root / legacy)

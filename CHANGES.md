@@ -96,6 +96,72 @@ time by substituting a hard-coded absolute prefix — which only worked on one m
 paths in existing `master_df.csv` files are still honoured**, so old CSVs keep
 working; regenerate them (or leave them) as you prefer.
 
+### `SurfaceDistanceLoss` returned a norm, not a mean
+
+It computed `torch.norm(dist.mean(dim=0), dim=0)`, which is the Euclidean norm of the
+per-landmark mean vector, not the mean distance its docstring promises. The two agree
+only for a single landmark; for 35 landmarks the term was inflated by roughly
+`sqrt(35)` ≈ 5.9x.
+
+**Now:** a true masked mean, and it honours `mask` like every other loss.
+**If you trained with `"SD"` in a `CompoundLoss`, its weight relative to the other
+terms was effectively ~6x what the config said.**
+
+### `CompoundLoss` rejected ordinary weights, and its default contradicted its own check
+
+`assert sum(weights) == 1.0` used exact float equality, so the perfectly reasonable
+`[0.7, 0.2, 0.1]` raised (`sum` is `0.9999999999999999` in binary floating point).
+Meanwhile the *default* weights were `[1.0] * n`, which sum to `n`, not 1 — the check
+was enforced only on explicit weights.
+
+**Now:** the sum is checked to a 1e-6 tolerance and raises `ValueError` (not
+`AssertionError`, which `python -O` strips), and the default is `1/n` each.
+
+### Patch extraction truncated instead of rounding
+
+`PatchExtractor.extract_patches` cast centres with `.long()`, which truncates toward
+zero, biasing every patch up to a voxel toward the origin relative to the sub-voxel
+coarse prediction it is meant to be centred on — while its docstring said "rounded".
+
+**Now:** `.round().long()`. Patch contents shift by up to one voxel, so this changes
+refinement results slightly.
+
+### `--set_zoom` could not express non-integer voxel spacing
+
+The argument parsed with `int`, so `--set_zoom 0.8,0.8,0.8` failed before preprocessing
+started — on exactly the anisotropic data the coordinate-space handling is written to
+get right.
+
+**Now:** parsed as `float`.
+
+## Fixed (previously broken, no result changes)
+
+### `warmup_epochs` crashed on the first training step
+
+`PatchTransformer` is a plain `nn.Module`, so Lightning never gave it a
+`current_epoch`, but the warmup branch read `self.current_epoch`. Any config with
+`warmup_epochs > 0` raised `AttributeError` immediately. All 98 historical configs set
+`-1`, so no completed run is affected — the feature simply never worked.
+
+**Now:** the parent module propagates its epoch each forward pass. `current_epoch` is a
+plain attribute, so it does not appear in `state_dict` and checkpoints are unchanged.
+
+### The U-Net backbone could not be constructed
+
+`feature_extraction.py` lazily imported `from models.DenseNet import UNetHeatmapDenseNet`
+— a path from before the package move; there is no top-level `models` package.
+`{"backbone": "unet"}` raised `ModuleNotFoundError`. Fixed to `verpex.models.densenet`.
+
+### `spconv` was documented as optional but was mandatory
+
+`modules/feature_extraction.py` imported `models/subm_densenet.py` at module scope, and
+that module subclasses `spconv` types at class-definition time. Since
+`feature_extraction` is reachable from every entry point, a default install (which does
+not include `spconv`) could not import the package at all.
+
+**Now:** the import is deferred into the two sparse backbones that need it, so
+`spconv` is genuinely optional and CI can install without CUDA-specific wheels.
+
 ## Removed
 
 ### `--save-predictions` in `train_cv.py` (self-training pseudo-labels)

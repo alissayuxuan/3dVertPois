@@ -64,6 +64,12 @@ verpex-prepare-data --data_path $DATASET --derivatives_name derivatives --save_p
 
 This writes one directory per vertebra plus a `master_df.csv` listing them. Paths in that
 CSV are **relative to the cutout root**, so the file stays valid if the data moves.
+
+A `master_df.csv` produced before this change stored a longer relative path (e.g.
+`dataset/data_preprocessing/cutout-folder/cutouts/<subject>/<vertebra>`). Such files
+still work — point `cutout_root` at the directory those paths are relative to, rather
+than at the `cutouts/` directory itself. Absolute paths in old files are also honoured
+unchanged.
 It uses 8 worker processes by default (`--n_workers`), takes minutes to hours, and needs
 several GB of disk.
 

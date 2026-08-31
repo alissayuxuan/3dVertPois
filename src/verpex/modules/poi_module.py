@@ -111,6 +111,10 @@ class PoiPredictionModule(pl.LightningModule):
             raise ValueError("Batch input is required for the forward pass.")
 
         batch = self.feature_extraction_module(batch)
+        # The refiner is a plain nn.Module, so Lightning does not give it an epoch
+        # counter; its warmup schedule needs one.
+        if hasattr(self.refinement_module, "current_epoch"):
+            self.refinement_module.current_epoch = self.current_epoch
         batch = self.refinement_module(batch)
         return batch
 

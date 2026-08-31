@@ -61,3 +61,20 @@ def test_masked_losses_work_without_a_mask(name):
     loss_fn = get_loss_fn(name)
     value = loss_fn(torch.zeros(1, 2, 3), torch.ones(1, 2, 3))
     assert value == pytest.approx(1.0)
+
+
+def test_compound_weights_that_sum_to_one_in_decimal_are_accepted():
+    """`sum([0.7, 0.2, 0.1])` is 0.9999999999999999, which an exact check rejected."""
+    loss = CompoundLoss([L1LossMasked()] * 3, weights=[0.7, 0.2, 0.1])
+    assert loss.weights == [0.7, 0.2, 0.1]
+
+
+def test_compound_weights_that_really_do_not_sum_to_one_are_rejected():
+    with pytest.raises(ValueError, match=r"must sum to 1\.0"):
+        CompoundLoss([L1LossMasked()] * 2, weights=[0.5, 0.9])
+
+
+def test_default_compound_weights_sum_to_one():
+    """They previously defaulted to 1.0 each, contradicting the check on explicit weights."""
+    loss = CompoundLoss([L1LossMasked()] * 4)
+    assert sum(loss.weights) == pytest.approx(1.0)

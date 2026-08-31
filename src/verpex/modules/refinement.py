@@ -208,6 +208,11 @@ class PatchTransformer(nn.Module):
             raise ValueError(
                 "The transformer would receive no per-landmark features: set use_coarse_features or use_patches (or use_coarse_pred=False)."
             )
+        if not self.use_coarse_pred and not self.use_coarse_features:
+            # Without a coarse stage the coarse features are the transformer's only
+            # per-landmark input. Disabling them silently dropped the tensor that
+            # forward() passes anyway, leaving the embeddings as the sole input.
+            raise ValueError("use_coarse_pred=False requires use_coarse_features=True: there is no other feature source.")
 
         if self.use_patches:
             self.patch_feature_extractor = PatchExtractor(
@@ -244,6 +249,10 @@ class PatchTransformer(nn.Module):
         self.project_pred = project_pred
         self.lr = lr
         self.warmup_epochs = warmup_epochs
+        # Plain nn.Module, so there is no Lightning-provided current_epoch. The parent
+        # PoiPredictionModule updates this each forward pass; without it the warmup
+        # branch below raised AttributeError on the first training step.
+        self.current_epoch = 0
 
     def forward(self, batch) -> dict:
         """Refine the coarse predictions in ``batch``, adding ``offsets`` and ``refined_preds``."""
