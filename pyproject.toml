@@ -72,6 +72,10 @@ ignore = [
     "SIM105", "SIM118",
     "UP007", "UP038",
     "PLC0415",
+    # Rebinding a loop variable is this codebase's idiom for staged transforms
+    # (batch = to_device(batch); batch = model(batch)); renaming each stage hurts
+    # readability more than the shadowing costs.
+    "PLW2901",
     "PLW0108",
     "B905",
     "D100",    # module docstring - covered per-package

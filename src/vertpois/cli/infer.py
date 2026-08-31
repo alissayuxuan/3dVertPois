@@ -504,12 +504,12 @@ def create_prediction_poi_files(  # noqa: ANN201
         if batch is None:
             continue
 
-        batch = batch_to_device(batch, model.device)  # noqa: PLW2901
+        batch = batch_to_device(batch, model.device)
         if inference_flipped:
             flip_axis = input_data.get_axis("L") + 2
             batch["input"] = torch.flip(batch["input"], dims=[flip_axis])
 
-        batch = model(batch)  # noqa: PLW2901
+        batch = model(batch)
 
         refined_preds_batch = batch["refined_preds"]
         if inference_flipped:

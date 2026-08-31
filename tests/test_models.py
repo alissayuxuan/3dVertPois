@@ -36,18 +36,18 @@ def test_flexible_transformer_matches_the_original_when_all_embeddings_are_on():
     the two must be numerically identical. This is what makes the single unified
     PatchTransformer a faithful replacement for the old ablation subclasses.
     """
-    kwargs = dict(
-        poi_feature_l=24,
-        coord_embedding_l=8,
-        poi_embedding_l=8,
-        vert_embedding_l=8,
-        mlp_dim=32,
-        num_layers=1,
-        num_heads=2,
-        n_landmarks=4,
-        n_verts=5,
-        dropout_rate=0.0,
-    )
+    kwargs = {
+        "poi_feature_l": 24,
+        "coord_embedding_l": 8,
+        "poi_embedding_l": 8,
+        "vert_embedding_l": 8,
+        "mlp_dim": 32,
+        "num_layers": 1,
+        "num_heads": 2,
+        "n_landmarks": 4,
+        "n_verts": 5,
+        "dropout_rate": 0.0,
+    }
     torch.manual_seed(0)
     original = PoiTransformer(**kwargs).eval()
     flexible = FlexiblePoiTransformer(**kwargs).eval()

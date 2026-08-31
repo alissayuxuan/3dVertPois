@@ -71,6 +71,7 @@ def test_disabling_embeddings_shrinks_the_model(model_dims):
 
     def n(module):
         return sum(p.numel() for p in module.parameters())
+
     assert n(no_poi) < n(full)
     assert n(no_both) < n(no_poi)
 

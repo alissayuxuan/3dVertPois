@@ -1,3 +1,9 @@
+"""Metrics and prediction helpers for evaluating a trained POI model.
+
+All errors are reported in millimetres. ``*_proj`` variants are computed after
+projecting both the prediction and the ground truth onto the vertebra surface.
+"""
+
 import argparse
 import json
 import os
@@ -26,6 +32,7 @@ from vertpois.paths import get_path
 
 
 def _get_dataloader(data_module, split: str):
+    """Return the dataloader for ``split`` ("val" or "test")."""
     if split == "val":
         return data_module.val_dataloader()
     elif split == "test":
@@ -36,6 +43,7 @@ def _get_dataloader(data_module, split: str):
 
 
 def _setup_prediction(dm_path, ckpt_path, split, **dm_kwargs):
+    """Load the data module and checkpoint, and return them with a dataloader."""
     """Load data module, model, and dataloader in one step."""
     data_module = load_data_module_from_config(dm_path, **dm_kwargs)
     data_module.setup()
@@ -45,6 +53,7 @@ def _setup_prediction(dm_path, ckpt_path, split, **dm_kwargs):
 
 
 def _affine_check(batch):
+    """Warn if a sample's subregion and vertebra masks disagree on their affine."""
     subreg = NII.load(batch["subreg_path"][0], seg=True)
     vertseg = NII.load(batch["msk_path"][0], seg=True)
     if not subreg.assert_affine(vertseg, raise_error=False, verbose=True):
@@ -52,6 +61,7 @@ def _affine_check(batch):
 
 
 def _resolve_save_path(poi_path, poi_file_ending, save_in_dir, save_path, sub, vert, data_module):
+    """Work out where one subject's prediction file should be written."""
     if save_in_dir:
         ctd_save_path = poi_path.replace(data_module.poi_file_ending, poi_file_ending)
         if ctd_save_path == poi_path:
@@ -91,12 +101,14 @@ def _write_prediction_files(pois: POI, poi_path: str, ctd_save_path: str, gt_ver
 
 
 def _compute_grouped_metrics(df: pd.DataFrame, group_col: str, error_col: str) -> pd.DataFrame:
+    """Aggregate ``error_col`` per distinct value of ``group_col``."""
     metrics_df = df.groupby(group_col)[error_col].apply(lambda x: calculate_metrics(x)).apply(pd.Series)
     metrics_df.columns = ["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"]
     return metrics_df
 
 
 def _filter_high_error(df: pd.DataFrame, error_col: str, threshold: float) -> pd.DataFrame:
+    """Return the rows whose ``error_col`` exceeds ``threshold``."""
     filtered = df[df[error_col] > threshold]
     return filtered[["subject", "vertebra", "poi_idx", error_col]].reset_index(drop=True)
 
@@ -106,7 +118,8 @@ def _filter_high_error(df: pd.DataFrame, error_col: str, threshold: float) -> pd
 # ---------------------------------------------------------------------------
 
 
-def load_data_module_from_config(config_path, alternative_poi_ending=None, **kwargs):
+def load_data_module_from_config(config_path, alternative_poi_ending=None, **kwargs):  # noqa: ANN201
+    """Rebuild the data module a training run saved alongside its checkpoint."""
     with open(config_path) as f:
         config = json.load(f)
     config["batch_size"] = 1
@@ -117,11 +130,23 @@ def load_data_module_from_config(config_path, alternative_poi_ending=None, **kwa
     return POIDataModule(**config)
 
 
-def load_model_from_checkpoint(checkpoint_path):
+def load_model_from_checkpoint(checkpoint_path):  # noqa: ANN201
+    """Load a trained :class:`PoiPredictionModule` from a checkpoint."""
     return PoiPredictionModule.load_from_checkpoint(checkpoint_path)
 
 
-def combine_centroids(data_list):
+def combine_centroids(data_list):  # noqa: ANN201
+    """Merge per-vertebra prediction entries into one POI for the subject.
+
+    Args:
+        data_list: Per-vertebra entries, all from the same subject.
+
+    Returns:
+        The subject id and the combined POI.
+
+    Raises:
+        ValueError: If the entries disagree on subject, shape, zoom or orientation.
+    """
     first_entry = data_list[0]
     expected_subject = first_entry["subject"]
     expected_shape = first_entry["original_shape"]
@@ -150,7 +175,7 @@ def combine_centroids(data_list):
     )
 
 
-def np_to_ctd(
+def np_to_ctd(  # noqa: ANN201
     t,
     vertebra,
     origin,
@@ -161,6 +186,25 @@ def np_to_ctd(
     offset=(0, 0, 0),
     orientation=None,
 ):
+    """Build a POI from an array of predicted coordinates.
+
+    Args:
+        t: Coordinates, ``(n_landmarks, 3)``.
+        vertebra: Vertebra label these landmarks belong to.
+        origin: World origin of the target frame.
+        rotation: Rotation matrix of the target frame.
+        idx_list: Landmark ids, in the same order as ``t``. Defaults to ``0..n-1``.
+        shape: Shape of the target frame.
+        zoom: Voxel spacing of the target frame.
+        offset: Subtracted from every coordinate, to undo a padding offset.
+        orientation: Axis codes of the target frame. Required.
+
+    Returns:
+        The assembled POI.
+
+    Raises:
+        ValueError: If ``orientation`` is not given.
+    """
     if orientation is None:
         raise ValueError("You must provide the orientation of the input POI.")
     ctd = {}
@@ -174,7 +218,7 @@ def np_to_ctd(
     return POI(centroids=ctd, orientation=orientation, zoom=zoom, shape=shape, origin=origin, rotation=rotation)
 
 
-def create_prediction_poi_files(
+def create_prediction_poi_files(  # noqa: ANN201
     data_module_save_path,
     checkpoint_path,
     poi_file_ending,
@@ -185,6 +229,7 @@ def create_prediction_poi_files(
     project=False,
     save_gt_proj=False,
 ):
+    """Run a model over a split and write one predicted POI file per vertebra."""
     print(f"save_gt_proj: {save_gt_proj}")
 
     if return_paths:
@@ -280,19 +325,18 @@ def create_prediction_poi_files(
             ctd_save_path = _resolve_save_path(poi_path, poi_file_ending, save_in_dir, save_path, sub, vert, data_module)
             print("ctd zoom: ", ctd.zoom)
 
-            if _write_prediction_files(ctd, poi_path, ctd_save_path, [vert]):
-                if return_paths:
-                    poi_paths_dict[sub, vert] = {
-                        "gt": poi_path,
-                        "pred": ctd_save_path,
-                        "seg_vert": poi_path.replace("poi.json", "vertseg.nii.gz"),
-                    }
+            if _write_prediction_files(ctd, poi_path, ctd_save_path, [vert]) and return_paths:
+                poi_paths_dict[sub, vert] = {
+                    "gt": poi_path,
+                    "pred": ctd_save_path,
+                    "seg_vert": poi_path.replace("poi.json", "vertseg.nii.gz"),
+                }
 
     if return_paths:
         return poi_paths_dict
 
 
-def create_neighbor_prediction_poi_files(
+def create_neighbor_prediction_poi_files(  # noqa: ANN201
     data_module_save_path,
     checkpoint_path,
     poi_file_ending,
@@ -302,6 +346,7 @@ def create_neighbor_prediction_poi_files(
     return_paths=False,
     project=False,
 ):
+    """Like :func:`create_prediction_poi_files`, for neighbour-aware models."""
     if return_paths:
         poi_paths_dict = {}
     if not save_in_dir and save_path is None:
@@ -356,8 +401,16 @@ def create_neighbor_prediction_poi_files(
             # The per-subject metadata is bound as default arguments so these
             # closures capture this iteration's values, not the loop variables.
             def _make_ctd(
-                slice_preds, slice_indices, slice_mask, v,
-                origin=origin, rotation=rotation, shape=shape, zoom=zoom, offset=offset, orientation=orientation,
+                slice_preds,
+                slice_indices,
+                slice_mask,
+                v,
+                origin=origin,
+                rotation=rotation,
+                shape=shape,
+                zoom=zoom,
+                offset=offset,
+                orientation=orientation,
             ):
                 valid_preds = slice_preds[slice_mask]
                 valid_indices = slice_indices[slice_mask]
@@ -367,7 +420,12 @@ def create_neighbor_prediction_poi_files(
 
             def _centroid_entry(
                 ctd,
-                sub=sub, shape=shape, zoom=zoom, orientation=orientation, rotation=rotation, origin=origin,
+                sub=sub,
+                shape=shape,
+                zoom=zoom,
+                orientation=orientation,
+                rotation=rotation,
+                origin=origin,
             ):
                 return {
                     "subject": sub,
@@ -393,19 +451,18 @@ def create_neighbor_prediction_poi_files(
             gt_verts = [vert] + ([vert - 1] if vert > 1 else []) + ([vert + 1] if vert < 24 else [])
             ctd_save_path = _resolve_save_path(poi_path, poi_file_ending, save_in_dir, save_path, sub, vert, data_module)
 
-            if _write_prediction_files(pois, poi_path, ctd_save_path, gt_verts):
-                if return_paths:
-                    poi_paths_dict[sub, vert] = {
-                        "gt": poi_path,
-                        "pred": ctd_save_path,
-                        "seg_vert": poi_path.replace("poi.json", "vertseg.nii.gz"),
-                    }
+            if _write_prediction_files(pois, poi_path, ctd_save_path, gt_verts) and return_paths:
+                poi_paths_dict[sub, vert] = {
+                    "gt": poi_path,
+                    "pred": ctd_save_path,
+                    "seg_vert": poi_path.replace("poi.json", "vertseg.nii.gz"),
+                }
 
     if return_paths:
         return poi_paths_dict
 
 
-def run_predictions(
+def run_predictions(  # noqa: ANN201
     data_module_save_path,
     checkpoint_path,
     split="val",
@@ -413,6 +470,7 @@ def run_predictions(
     vert_list=None,
     neighbor=False,
 ):
+    """Run a model over a split and collect per-landmark errors."""
     dm_kwargs = {}
     if alternative_poi_ending is not None:
         dm_kwargs["alternative_poi_ending"] = alternative_poi_ending
@@ -533,7 +591,7 @@ def run_predictions(
                 refined_proj_dist = data_dict["refined_preds_proj_distances"]
                 loss_mask = data_dict["loss_mask"]
 
-            for poi_idx, t, c, r, c_proj, r_proj, c_proj_dist, r_proj_dist, l in zip(
+            for poi_idx, t, c, r, c_proj, r_proj, c_proj_dist, r_proj_dist, mask_entry in zip(
                 indices,
                 targets,
                 coarse,
@@ -554,13 +612,14 @@ def run_predictions(
                 pred_dict["refined_proj"].append(r_proj)
                 pred_dict["coarse_proj_dist"].append(c_proj_dist)
                 pred_dict["refined_proj_dist"].append(r_proj_dist)
-                pred_dict["loss_mask"].append(l)
+                pred_dict["loss_mask"].append(mask_entry)
                 pred_dict["zoom"].append(zoom)
 
     return pred_dict
 
 
-def create_prediction_df(data_module_save_path, checkpoint_path, split="val", alternative_poi_ending=None, neighbor=False, vert_list=None):
+def create_prediction_df(data_module_save_path, checkpoint_path, split="val", alternative_poi_ending=None, neighbor=False, vert_list=None):  # noqa: ANN201
+    """Return a DataFrame of per-landmark predictions and errors for a split."""
     from time import perf_counter
 
     start = perf_counter()
@@ -587,7 +646,11 @@ def create_prediction_df(data_module_save_path, checkpoint_path, split="val", al
     return pd.DataFrame(pred_dict)
 
 
-def calculate_metrics(errors, threshold=2.0):
+def calculate_metrics(errors, threshold=2.0):  # noqa: ANN201
+    """Return (mean, median, MSE, accuracy, max) for an array of errors in mm.
+
+    ``accuracy`` is the fraction of landmarks closer than ``threshold`` mm.
+    """
     mean_error = np.mean(errors)
     median_error = np.median(errors)
     mse = np.mean(errors**2)
@@ -596,7 +659,8 @@ def calculate_metrics(errors, threshold=2.0):
     return mean_error, median_error, mse, accuracy, max_error
 
 
-def calculate_metrics4paper(errors, threshold=2.0, round_digits=2):
+def calculate_metrics4paper(errors, threshold=2.0, round_digits=2):  # noqa: ANN201
+    """Return the same metrics as :func:`calculate_metrics`, rounded for reporting."""
     mean_error = np.mean(errors)
     std = np.std(errors)
     median_error = np.median(errors)
@@ -617,46 +681,56 @@ def calculate_metrics4paper(errors, threshold=2.0, round_digits=2):
     )
 
 
-def compute_overall_metrics(df):
+def compute_overall_metrics(df):  # noqa: ANN201
+    """Return one metric row per error type, over the whole prediction frame."""
     metrics_df = pd.DataFrame(columns=["Mean Error", "Median Error", "MSE", "Accuracy", "Max Error"])
     for error_type in ["coarse_error", "refined_error", "coarse_proj_error", "refined_proj_error"]:
         metrics_df.loc[error_type] = calculate_metrics(df[error_type])
     return metrics_df
 
 
-def compute_poi_wise_metrics(df):
+def compute_poi_wise_metrics(df):  # noqa: ANN201
+    """Return refinement error aggregated per landmark type."""
     return _compute_grouped_metrics(df, "poi_idx", "refined_error")
 
 
-def compute_poi_wise_metrics_proj(df):
+def compute_poi_wise_metrics_proj(df):  # noqa: ANN201
+    """Return surface-projected refinement error aggregated per landmark type."""
     return _compute_grouped_metrics(df, "poi_idx", "refined_proj_error")
 
 
-def compute_vert_wise_metrics(df):
+def compute_vert_wise_metrics(df):  # noqa: ANN201
+    """Return refinement error aggregated per vertebra."""
     return _compute_grouped_metrics(df, "vertebra", "refined_error")
 
 
-def compute_vert_wise_metrics_proj(df):
+def compute_vert_wise_metrics_proj(df):  # noqa: ANN201
+    """Return surface-projected refinement error aggregated per vertebra."""
     return _compute_grouped_metrics(df, "vertebra", "refined_proj_error")
 
 
-def compute_sub_wise_metrics(df):
+def compute_sub_wise_metrics(df):  # noqa: ANN201
+    """Return refinement error aggregated per subject."""
     return _compute_grouped_metrics(df, "subject", "refined_error")
 
 
-def compute_sub_wise_metrics_proj(df):
+def compute_sub_wise_metrics_proj(df):  # noqa: ANN201
+    """Return surface-projected refinement error aggregated per subject."""
     return _compute_grouped_metrics(df, "subject", "refined_proj_error")
 
 
 def filter_high_refined_proj_error_pois(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
+    """Return the landmarks whose projected refinement error exceeds ``threshold`` mm."""
     return _filter_high_error(df, "refined_proj_error", threshold)
 
 
 def filter_high_refined_error_pois(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
+    """Return the landmarks whose refinement error exceeds ``threshold`` mm."""
     return _filter_high_error(df, "refined_error", threshold)
 
 
-def load_and_filter_csv(df):
+def load_and_filter_csv(df):  # noqa: ANN201
+    """Drop the vertebra-body subregion landmarks (41-50) from a prediction frame."""
     excluded_poi_idx = [41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
     df_filtered = df[~df["poi_idx"].isin(excluded_poi_idx)]
     print(f"Original Anzahl Zeilen: {len(df)}")

@@ -13,22 +13,22 @@ import torch
 #: Small model dimensions that keep tests fast while remaining architecturally valid.
 #: `patch_size` must stay >= 16: the patch CNN downsamples by 2**3, and MONAI's
 #: InstanceNorm raises on a 1x1x1 spatial extent even in eval mode.
-MODEL_DIMS = dict(
-    n_landmarks=4,
-    n_verts=5,
-    patch_size=16,
-    poi_feature_l=16,
-    patch_feature_l=8,
-    coord_embedding_l=8,
-    poi_embedding_l=8,
-    vert_embedding_l=8,
-    loss_fn="L1",
-    mlp_dim=32,
-    num_layers=1,
-    num_heads=2,
-    dropout=0.0,
-    lr=1e-4,
-)
+MODEL_DIMS = {
+    "n_landmarks": 4,
+    "n_verts": 5,
+    "patch_size": 16,
+    "poi_feature_l": 16,
+    "patch_feature_l": 8,
+    "coord_embedding_l": 8,
+    "poi_embedding_l": 8,
+    "vert_embedding_l": 8,
+    "loss_fn": "L1",
+    "mlp_dim": 32,
+    "num_layers": 1,
+    "num_heads": 2,
+    "dropout": 0.0,
+    "lr": 1e-4,
+}
 
 
 @pytest.fixture

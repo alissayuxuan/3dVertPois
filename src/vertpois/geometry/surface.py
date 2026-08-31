@@ -29,7 +29,6 @@ def _debug_path(name: str) -> str:
     return str(directory / name)
 
 
-
 def np_to_bids_nii(array: np.ndarray) -> NII:
     """Converts a numpy array to a BIDS NII object."""
     # NiBabel expects the orientation to be RAS+ (right, anterior, superior, plus),
@@ -37,8 +36,6 @@ def np_to_bids_nii(array: np.ndarray) -> NII:
     affine = np.array([[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
     nifty1img = nib.Nifti1Image(array, affine)
     return NII(nifty1img)
-
-
 
 
 def surface_project_poi_vert_wise(poi: POI, surface_nii: NII, requires_filling: bool = True) -> POI:
@@ -142,8 +139,6 @@ def surface_project_coords(
         A tuple of the projected coordinates and the distance each one moved.
     """
     return surface_project_coords_marchingcubes_continuous(coordinates, surface, debug=debug, requires_filling=requires_filling)
-
-
 
 
 def fill_holes_3d_6conn(surface_mask) -> torch.Tensor:
@@ -323,8 +318,6 @@ def surface_project_coords_marchingcubes(  # noqa: ANN201
         surface_projection_dist = surface_projection_dist.squeeze(0)
 
     return projected, surface_projection_dist
-
-
 
 
 def closest_point_on_triangle_batch(p, a, b, c) -> torch.Tensor:
