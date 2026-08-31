@@ -13,6 +13,8 @@ Functions:
     - create_refinement_module: Creates a refinement module based on the given configuration.
 """
 
+import warnings
+
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -344,6 +346,18 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
 
         self.current_weight = current_weight
         self.neighbor_weight = neighbor_weight
+        # Every weighted path in this class is gated on a "n_vertebrae" key that no
+        # dataset in this package ever puts into a batch, so the weighting silently
+        # falls back to a flat loss. Warn rather than let a config believe it is
+        # training with the weights it asked for. See CHANGES.md.
+        if (current_weight, neighbor_weight) != (1.0, 0.2):
+            warnings.warn(
+                "current_weight/neighbor_weight have no effect: the per-vertebra loss "
+                "weighting is gated on a 'n_vertebrae' batch key that no dataset in this "
+                "package produces. Training will use a flat loss over all landmarks.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
         # Update hyperparameters to include new parameters
         self.save_hyperparameters()

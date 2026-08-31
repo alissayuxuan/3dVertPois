@@ -100,14 +100,24 @@ class POIDataModule(pl.LightningDataModule):
         self.neighbor_drop_prob = neighbor_drop_prob
         self.save_hyperparameters()
 
-    def prepare_data(
+    def build_cutouts(
         self,
         bids_surgery_info: BIDS_Global_info,
         save_path: str,
         get_files: callable,
         rescale_zoom: tuple | None = None,
     ) -> None:
-        """Build the per-vertebra cutouts this data module reads."""
+        """Build the per-vertebra cutouts this data module reads.
+
+        Named ``build_cutouts`` rather than ``prepare_data``: the latter overrides
+        PyTorch Lightning's own no-argument ``prepare_data()`` hook, which Lightning
+        calls automatically whenever a data module is passed to ``Trainer.fit`` as
+        ``datamodule=``. With this signature that call would raise TypeError.
+
+        Note this crops to each vertebra's bounding box plus a margin, which is a
+        different strategy from the fixed-size cutouts that ``verpex-prepare-data``
+        writes. Prefer the CLI unless you specifically want this behaviour.
+        """
         master = []
         partial_process_container = partial(
             process_container,
@@ -343,13 +353,23 @@ class GruberDataModule(POIDataModule):
             neighbor_drop_prob=neighbor_drop_prob,
         )
 
-    def prepare_data(
+    def build_cutouts(
         self,
         bids_surgery_info: BIDS_Global_info,
         save_path: str,
         rescale_zoom: tuple | None = None,
     ) -> None:
-        """Build the per-vertebra cutouts this data module reads."""
+        """Build the per-vertebra cutouts this data module reads.
+
+        Named ``build_cutouts`` rather than ``prepare_data``: the latter overrides
+        PyTorch Lightning's own no-argument ``prepare_data()`` hook, which Lightning
+        calls automatically whenever a data module is passed to ``Trainer.fit`` as
+        ``datamodule=``. With this signature that call would raise TypeError.
+
+        Note this crops to each vertebra's bounding box plus a margin, which is a
+        different strategy from the fixed-size cutouts that ``verpex-prepare-data``
+        writes. Prefer the CLI unless you specifically want this behaviour.
+        """
         gruber_get_files = partial(
             get_files,
             get_poi=get_gruber_poi,
@@ -357,7 +377,7 @@ class GruberDataModule(POIDataModule):
             get_subreg=get_subreg,
             get_vertseg=get_vertseg,
         )
-        super().prepare_data(bids_surgery_info, save_path, gruber_get_files, rescale_zoom)
+        super().build_cutouts(bids_surgery_info, save_path, gruber_get_files, rescale_zoom)
 
 
 class GruberNeighborDataModule(POIDataModule):
@@ -372,8 +392,8 @@ class GruberNeighborDataModule(POIDataModule):
         # kwargs['input_shape'] = (120, 121, 149)
         super().__init__(dataset="GruberNeighbor", **kwargs)
 
-    def prepare_data(self, bids_surgery_info, save_path, rescale_zoom=None) -> None:
-        """Build the cutouts this module needs, if they are not on disk yet."""
+    def build_cutouts(self, bids_surgery_info, save_path, rescale_zoom=None) -> None:
+        """Build the per-vertebra cutouts for this dataset layout."""
         gruber_get_files = partial(
             get_files,
             get_poi=get_gruber_poi,
@@ -381,7 +401,7 @@ class GruberNeighborDataModule(POIDataModule):
             get_subreg=get_subreg,
             get_vertseg=get_vertseg,
         )
-        super().prepare_data(bids_surgery_info, save_path, gruber_get_files, rescale_zoom)
+        super().build_cutouts(bids_surgery_info, save_path, gruber_get_files, rescale_zoom)
 
 
 #: Config ``"type"`` string -> data module.

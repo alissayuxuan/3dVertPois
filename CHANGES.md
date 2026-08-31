@@ -162,6 +162,47 @@ not include `spconv`) could not import the package at all.
 **Now:** the import is deferred into the two sparse backbones that need it, so
 `spconv` is genuinely optional and CI can install without CUDA-specific wheels.
 
+## Known-broken, left as-is (flagged, not fixed)
+
+### `PoiNeighborPredictionModule`'s per-vertebra loss weighting does nothing
+
+Every weighted path in that class — `_calculate_multi_vertebrae_loss`,
+`_calculate_feature_loss_component`, `_calculate_refinement_loss_component` and
+`_calculate_multi_vertebrae_metrics` — is gated on `"n_vertebrae" in batch`. That key
+is read ten times in `poi_module.py` and **written by nothing in the package**: no
+dataset, transform or collate function produces it. So every call takes the
+`_calculate_standard_loss` fallback, `_calculate_multi_vertebrae_metrics` always
+returns `{}`, and `current_weight` / `neighbor_weight` have no effect whatsoever.
+
+A second bug is stacked in the same unreachable code: `_extract_vertebra_batch` does
+not copy `"zoom"` into the per-vertebra sub-batch, and both `calculate_loss`
+implementations read it unconditionally, so that path would raise `KeyError: 'zoom'`
+the moment it became reachable.
+
+Making this work means deciding what a per-vertebra batch should contain — a design
+decision, not a mechanical fix, so it is left alone. Constructing the module with
+non-default weights now emits a `RuntimeWarning` rather than silently ignoring them.
+
+### The data modules' cutout builder uses a different cropping strategy
+
+`POIDataModule.build_cutouts` (formerly `prepare_data`) crops each vertebra to its
+bounding box plus a 5-voxel margin, while `verpex-prepare-data` writes fixed
+128x128x144 cutouts. The two are not interchangeable, and only the CLI is reachable
+from any entry point. It was renamed because as `prepare_data` it overrode PyTorch
+Lightning's own no-argument `prepare_data()` hook: passing a data module to
+`Trainer.fit(datamodule=...)` would have made Lightning call it with no arguments.
+
+### Neighbour flip augmentation is not actually disabled
+
+`GruberNeighborDataModule.__init__` warns that `flip_prob` is being reset for the
+neighbour dataset, but the line that would reset it is commented out and the call site
+comment ("explizit deaktiviert") is untrue. `POIDataModule` defaults `flip_prob=0.5`,
+so a neighbour config that does not explicitly set `0.0` gets flipping. The flip
+transform then hardcodes `slice(0, 35)`, `slice(35, 70)`, `slice(70, None)`, assuming
+exactly 35 POIs per vertebra — with `include_com=True` (45 per vertebra) those slices
+misalign. The reference neighbour config sets `flip_prob: 0.0` and
+`include_com: false`, so nothing currently hits it.
+
 ## Removed
 
 ### `--save-predictions` in `train_cv.py` (self-training pseudo-labels)
