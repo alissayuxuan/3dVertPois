@@ -117,6 +117,34 @@ was enforced only on explicit weights.
 **Now:** the sum is checked to a 1e-6 tolerance and raises `ValueError` (not
 `AssertionError`, which `python -O` strips), and the default is `1/n` each.
 
+### Neighbour flip augmentation mixed landmarks between vertebrae
+
+Two separate defects, both now fixed.
+
+`LandMarksRandHorizontalFlipNeighbor` remaps landmarks within each vertebra's block
+after mirroring the volume, and the block boundaries were hardcoded as
+`slice(0, 35)`, `slice(35, 70)`, `slice(70, None)` — i.e. exactly 35 landmarks per
+vertebra. At any other count the blocks misaligned, and it did so **silently**: the
+remapping still produced a list of the right length, so nothing raised. With
+`include_com=True` (45 landmarks per vertebra, 135 total), 20 landmarks were
+duplicated, 20 were dropped, and 20 were attributed to the wrong vertebra.
+
+**Now:** the block size is derived as `len(target_indices) // n_vertebrae`, and a
+landmark count that does not divide evenly raises rather than misaligning.
+
+Separately, `GruberNeighborDataModule.__init__` printed
+`"WARNING: flip_prob set to X for neighbor dataset"` and then did nothing — the line
+that would have disabled flipping was commented out, and the call site carried a
+`# Explizit deaktiviert` comment that was simply untrue. The base class defaults
+`flip_prob=0.5`, so **any neighbour config that did not explicitly set `flip_prob: 0.0`
+was training with the broken flip active.**
+
+**Now:** the neighbour module defaults to `flip_prob = 0.0`, matching what
+`PoiNeighborDataset` itself defaults to and what the reference neighbour configs set
+explicitly; an explicit setting in a config is honoured rather than warned about.
+**A neighbour config that omitted `flip_prob` previously flipped and now does not** —
+if you want flipping, set it explicitly, and it will now be correct.
+
 ### Patch extraction truncated instead of rounding
 
 `PatchExtractor.extract_patches` cast centres with `.long()`, which truncates toward
@@ -191,17 +219,6 @@ bounding box plus a 5-voxel margin, while `verpex-prepare-data` writes fixed
 from any entry point. It was renamed because as `prepare_data` it overrode PyTorch
 Lightning's own no-argument `prepare_data()` hook: passing a data module to
 `Trainer.fit(datamodule=...)` would have made Lightning call it with no arguments.
-
-### Neighbour flip augmentation is not actually disabled
-
-`GruberNeighborDataModule.__init__` warns that `flip_prob` is being reset for the
-neighbour dataset, but the line that would reset it is commented out and the call site
-comment ("explizit deaktiviert") is untrue. `POIDataModule` defaults `flip_prob=0.5`,
-so a neighbour config that does not explicitly set `0.0` gets flipping. The flip
-transform then hardcodes `slice(0, 35)`, `slice(35, 70)`, `slice(70, None)`, assuming
-exactly 35 POIs per vertebra — with `include_com=True` (45 per vertebra) those slices
-misalign. The reference neighbour config sets `flip_prob: 0.0` and
-`include_com: false`, so nothing currently hits it.
 
 ## Removed
 

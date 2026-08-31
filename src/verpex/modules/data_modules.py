@@ -216,7 +216,7 @@ class POIDataModule(pl.LightningDataModule):
                 include_poi_list=self.include_poi_list,
                 include_vert_list=self.include_vert_list,
                 transforms=transform,
-                flip_prob=self.flip_prob,  # Explizit deaktiviert
+                flip_prob=self.flip_prob,
                 poi_file_ending=self.poi_file_ending,
                 iterations=self.surface_erosion_iterations,
                 neighbor_drop_prob=self.neighbor_drop_prob,
@@ -383,13 +383,21 @@ class GruberDataModule(POIDataModule):
 class GruberNeighborDataModule(POIDataModule):
     """Data module that also serves each vertebra's neighbours."""
 
-    def __init__(self, **kwargs):
-        # deactivate horizontal flip
-        if kwargs.get("flip_prob", 0) > 0:
-            print(f"WARNING: flip_prob set to {kwargs.get('flip_prob', 0)} for neighbor dataset")
-            # kwargs["flip_prob"] = 0.0
+    #: Neighbour training defaults to no horizontal flip.
+    #:
+    #: The flip has to remap landmarks within each per-vertebra block, and that
+    #: remapping was previously hardcoded to 35 landmarks per vertebra. It is now
+    #: derived from the data, so flipping is safe to enable - but the default stays
+    #: off, matching what the reference neighbour configs set explicitly and what
+    #: PoiNeighborDataset itself defaults to.
+    DEFAULT_FLIP_PROB = 0.0
 
-        # kwargs['input_shape'] = (120, 121, 149)
+    def __init__(self, **kwargs):
+        # Previously this printed a warning and then did nothing - the line that
+        # would have disabled flipping was commented out, so the base class default
+        # of 0.5 silently applied. An explicit setting is now honoured; only the
+        # default differs from the base class.
+        kwargs.setdefault("flip_prob", self.DEFAULT_FLIP_PROB)
         super().__init__(dataset="GruberNeighbor", **kwargs)
 
     def build_cutouts(self, bids_surgery_info, save_path, rescale_zoom=None) -> None:

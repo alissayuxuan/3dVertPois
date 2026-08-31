@@ -140,43 +140,65 @@ class LandMarksRandHorizontalFlip:
 
 
 class LandMarksRandHorizontalFlipNeighbor:
-    def __init__(self, prob, flip_pairs, device="cpu"):
+    """Random left-right flip for a sample holding several vertebrae's landmarks.
+
+    The neighbour datasets concatenate one block of landmarks per vertebra (current,
+    upper neighbour, lower neighbour). A left-right flip has to remap each block
+    independently, because ``flip_pairs`` is defined within a single vertebra.
+
+    Args:
+        prob: Probability of flipping a given sample.
+        flip_pairs: Maps each landmark id to the id it becomes under a flip.
+        n_vertebrae: Number of concatenated per-vertebra blocks in ``target_indices``.
+        device: Unused; accepted for signature compatibility with the other transforms.
+    """
+
+    def __init__(self, prob, flip_pairs, n_vertebrae=3, device="cpu"):
         self.prob = prob
         self.flip_pairs = flip_pairs
+        self.n_vertebrae = n_vertebrae
 
     def __call__(self, dd):
+        """Flip ``dd`` in place with probability ``prob`` and return it.
+
+        Raises:
+            ValueError: If the landmark count is not divisible into ``n_vertebrae``
+                equal blocks, which would silently misalign the remapping.
+        """
         if torch.rand(1) < self.prob:
             target_indices = dd["target_indices"]
-            # print("target_indices")
-            # print(target_indices.shape)
-            # print(target_indices)
 
-            # print("target")
-            # print(dd["target"].shape)
+            n_total = len(target_indices)
+            if n_total % self.n_vertebrae:
+                raise ValueError(
+                    f"Expected {self.n_vertebrae} equally sized per-vertebra landmark blocks, "
+                    f"but got {n_total} landmarks, which is not divisible by {self.n_vertebrae}."
+                )
+            # Block size is derived, not hardcoded: it was fixed at 35, so any other
+            # landmark count (include_com adds 10 per vertebra) silently misaligned
+            # the per-block remapping below.
+            block = n_total // self.n_vertebrae
 
-            # Flip the volume horizontally, since the orientation is LAS (Left, Anterior, Superior), this means flipping along dim 1 (dim 0 is channel dim)
+            # Orientation is LAS, so left-right is dim 1 of the volume (dim 0 is channels).
             x = torch.flip(dd["input"], dims=[1])
             x_swapped = x.clone()
 
-            # Swap the labels in the seg mask
+            # Swap the left/right subregion labels in the segmentation mask
             for label1, label2 in [(43, 44), (45, 46), (47, 48)]:
                 x_swapped[x == label1] = label2
                 x_swapped[x == label2] = label1
 
             dd["input"] = x_swapped
 
-            # Flip the landmarks horizontally
+            # Flip the landmark coordinates along the same axis
             dd["target"][:, 0] = dd["input"].shape[1] - dd["target"][:, 0]
 
             new_positions = []
-            for slices in [slice(0, 35), slice(35, 70), slice(70, None)]:
-                # Reorder the landmarks according to the swap indices
-                indices_map = {k.item(): v + slices.start for v, k in enumerate(target_indices[slices])}
-                # print("indices_map", indices_map)
-                new_positions += [indices_map[self.flip_pairs[k.item()]] for k in target_indices[slices]]
-
-            # print("new_positions")
-            # print(new_positions)
+            for start in range(0, n_total, block):
+                block_slice = slice(start, start + block)
+                # Reorder the landmarks within this vertebra's block
+                indices_map = {k.item(): v + start for v, k in enumerate(target_indices[block_slice])}
+                new_positions += [indices_map[self.flip_pairs[k.item()]] for k in target_indices[block_slice]]
 
             dd["target"] = dd["target"][new_positions]
 
