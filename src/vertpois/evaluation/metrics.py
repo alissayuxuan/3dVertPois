@@ -595,7 +595,8 @@ def load_and_filter_csv(df):
     return df_filtered
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Evaluate a trained model and write metric CSVs."""
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_module_save_path", type=str, default="",
@@ -704,3 +705,7 @@ if __name__ == "__main__":
                 save_gt_proj=args.save_gt_proj,
             )
         print(f"Saved predictions and ground truths to: {prediction_files_path}")
+
+
+if __name__ == "__main__":
+    main()

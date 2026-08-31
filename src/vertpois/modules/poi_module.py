@@ -131,8 +131,8 @@ class PoiPredictionModule(pl.LightningModule):
         metrics = self.calculate_metrics(batch, "train")
         batch_size = batch["input"].shape[0]
 
-        self.log("train_loss", loss, on_epoch=True, batch_size=batch_size, sync_dist=True) #Alissa: sync_dist=True (due to warning)
-        self.log_dict(metrics, on_epoch=True, on_step=False, batch_size=batch_size, sync_dist=True) #Alissa: sync_dist=True (dur to warning)
+        self.log("train_loss", loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log_dict(metrics, on_epoch=True, on_step=False, batch_size=batch_size, sync_dist=True)
 
         return loss
 
@@ -140,7 +140,7 @@ class PoiPredictionModule(pl.LightningModule):
         batch = args[0] if args else kwargs.get("batch")
         if batch is None:
             raise ValueError("Batch input is required for the forward pass.")
-        batch = self(batch) #added by Alissa
+        batch = self(batch)
 
         # Calculate the feature extraction loss
         feature_loss = self.feature_extraction_module.calculate_loss(batch)
@@ -246,7 +246,7 @@ class PoiPredictionModule(pl.LightningModule):
         Returns:
             None
         """
-        self.log("feature_frozen", True, on_epoch=True, sync_dist=True) # Alissa: added sync_dist=True
+        self.log("feature_frozen", True, on_epoch=True, sync_dist=True)
         for param in self.feature_extraction_module.parameters():
             param.requires_grad = False
 
@@ -604,3 +604,15 @@ class PoiNeighborPredictionModule(PoiPredictionModule):
             batch["loss_mask"] = batch["loss_mask"][:, :n_pois]
         
         return batch
+
+
+#: Config ``"type"`` string -> top-level prediction module.
+#:
+#: ``train.py`` previously hard-coded ``PoiPredictionModule`` and ignored
+#: ``module_config["type"]`` entirely, so a config asking for the neighbour-aware
+#: variant silently trained the single-vertebra one. Dispatching through this
+#: registry makes the config's choice actually take effect.
+PREDICTION_MODULES = {
+    "PoiPredictionModule": PoiPredictionModule,
+    "PoiNeighborPredictionModule": PoiNeighborPredictionModule,
+}

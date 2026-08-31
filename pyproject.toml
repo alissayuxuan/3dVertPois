@@ -42,7 +42,7 @@ spconv-cu120 = "*"
 vertpois-prepare-data = "vertpois.cli.prepare_data:main"
 vertpois-train = "vertpois.cli.train:main"
 vertpois-train-cv = "vertpois.cli.train_cv:main"
-vertpois-eval = "vertpois.cli.evaluate:main"
+vertpois-eval = "vertpois.evaluation.metrics:main"
 vertpois-infer = "vertpois.cli.infer:main"
 
 [build-system]

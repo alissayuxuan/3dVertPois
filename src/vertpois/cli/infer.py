@@ -594,7 +594,8 @@ class InferenceConfig(Class_to_ArgParse):
     project_to_surface: bool = False
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Run POI inference over one or more BIDS datasets."""
     opt = InferenceConfig().get_opt()
     ds_names = opt.datasets
     DER_MSK = opt.der_msk
@@ -682,3 +683,7 @@ if __name__ == "__main__":
                         project_to_surface=project_to_surface,
                         inference_flipped=opt.inference_flipped,
                     )
+
+
+if __name__ == "__main__":
+    main()

@@ -283,6 +283,9 @@ def process_container(
             if not os.path.exists(os.path.join(save_path, subject, str(vert))):
                 os.makedirs(os.path.join(save_path, subject, str(vert)))
 
+            # Bound before the try so the diagnostic below cannot raise
+            # UnboundLocalError and mask the original exception.
+            crop = padding = None
             try:
                 com = np_utils.np_center_of_mass(vertseg.extract_label(vert).get_seg_array())[1]
                 ct_cropped, crop, padding = np_utils.np_calc_crop_around_centerpoint(
@@ -414,7 +417,8 @@ def prepare_data(
     master_df.to_csv(os.path.join(save_path, "master_df.csv"), index=False)
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Build per-vertebra cutouts from a BIDS dataset."""
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -538,3 +542,7 @@ if __name__ == "__main__":
         ignore_outer=args.ignoreouter,
         report_der2dict=report_der2dict,
     )
+
+
+if __name__ == "__main__":
+    main()

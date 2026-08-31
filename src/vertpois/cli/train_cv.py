@@ -7,7 +7,8 @@ import torch
 from sklearn.model_selection import KFold
 
 from vertpois.modules.data_modules import create_data_module
-from vertpois.modules.poi_module import PoiPredictionModule
+from vertpois.modules.poi_module import PREDICTION_MODULES
+from vertpois.registry import build
 from vertpois.training_utils import create_callbacks, save_data_module_config
 
 
@@ -39,7 +40,7 @@ def run_cv(n_folds, experiment_config, save_predictions=False, poi_file_ending=N
 
         data_module = create_data_module(data_module_config)
         data_module.setup()
-        poi_module = PoiPredictionModule(**experiment_config["module_config"]["params"])
+        poi_module = build(PREDICTION_MODULES, "prediction module", experiment_config["module_config"])
 
         # Create callbacks from configuration
         callbacks = create_callbacks(experiment_config.get("callbacks_config", []))
@@ -84,7 +85,8 @@ def run_cv(n_folds, experiment_config, save_predictions=False, poi_file_ending=N
             )
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Train a POI prediction model with k-fold cross-validation."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--n_folds", type=int, help="Number of folds for cross-validation"
@@ -123,3 +125,7 @@ if __name__ == "__main__":
                     save_predictions=args.save_predictions,
                     poi_file_ending=args.poi_file_ending,
                 )
+
+
+if __name__ == "__main__":
+    main()

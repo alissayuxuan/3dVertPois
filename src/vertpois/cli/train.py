@@ -10,7 +10,8 @@ import pytorch_lightning as pl
 import torch
 
 from vertpois.modules.data_modules import create_data_module
-from vertpois.modules.poi_module import PoiPredictionModule
+from vertpois.modules.poi_module import PREDICTION_MODULES
+from vertpois.registry import build
 from vertpois.training_utils import create_callbacks, save_data_module_config
 
 
@@ -29,7 +30,7 @@ def run_experiment(experiment_config):
     data_module = create_data_module(experiment_config["data_module_config"])
     data_module.setup()
 
-    poi_module = PoiPredictionModule(**experiment_config["module_config"]["params"])
+    poi_module = build(PREDICTION_MODULES, "prediction module", experiment_config["module_config"])
 
     logger = pl.loggers.TensorBoardLogger(save_dir=experiment_config["path"], name=experiment_config["name"])
     save_data_module_config(data_module, logger.log_dir)
@@ -54,7 +55,8 @@ def run_experiment(experiment_config):
     print(f"Max epochs allowed: {trainer.max_epochs}")
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Train a POI prediction model from a JSON experiment config."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, help="Experiment config file")
     parser.add_argument("--config-dir", type=str, help="Directory containing experiment config files")
@@ -70,3 +72,7 @@ if __name__ == "__main__":
         for config_file in os.listdir(args.config_dir):
             with open(os.path.join(args.config_dir, config_file), "r") as f:
                 run_experiment(json.load(f))
+
+
+if __name__ == "__main__":
+    main()
