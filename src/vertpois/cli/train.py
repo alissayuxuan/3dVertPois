@@ -1,10 +1,8 @@
-import sys
-from pathlib import Path
-
-
 import argparse
 import json
 import os
+import sys
+from pathlib import Path
 
 import pytorch_lightning as pl
 import torch
@@ -22,6 +20,7 @@ def run_experiment(experiment_config):
     # Setting False raises on the first non-deterministic op — used to identify
     # the exact source of run-to-run variance.
     import os
+
     os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     torch.use_deterministic_algorithms(mode=True, warn_only=False)
     torch.backends.cudnn.deterministic = True
@@ -65,12 +64,12 @@ def main() -> None:
     pl.seed_everything(42)
 
     if args.config:
-        with open(args.config, "r") as f:
+        with open(args.config) as f:
             run_experiment(json.load(f))
 
     if args.config_dir:
         for config_file in os.listdir(args.config_dir):
-            with open(os.path.join(args.config_dir, config_file), "r") as f:
+            with open(os.path.join(args.config_dir, config_file)) as f:
                 run_experiment(json.load(f))
 
 

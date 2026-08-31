@@ -1,11 +1,12 @@
 import torch
-import torch.nn as nn
+from torch import nn
+
 from vertpois.geometry.surface import surface_project_coords
 
 
 class SurfaceDistanceLoss(nn.Module):
     def __init__(self):
-        super(SurfaceDistanceLoss, self).__init__()
+        super().__init__()
 
     def forward(self, pred, target, mask=None, surface=None):
         if surface is None:
@@ -20,13 +21,9 @@ class SurfaceDistanceLoss(nn.Module):
 
 class WingLoss3D(nn.Module):
     def __init__(self, omega=5, epsilon=2):
-        super(WingLoss3D, self).__init__()
-        self.omega = torch.tensor(
-            omega, dtype=torch.float32
-        )  # Convert omega to a tensor
-        self.epsilon = torch.tensor(
-            epsilon, dtype=torch.float32
-        )  # Convert epsilon to a tensor
+        super().__init__()
+        self.omega = torch.tensor(omega, dtype=torch.float32)  # Convert omega to a tensor
+        self.epsilon = torch.tensor(epsilon, dtype=torch.float32)  # Convert epsilon to a tensor
 
     def forward(self, pred, target, mask=None, surface=None):
         # Compute the L1 distance between predicted and target coordinates
@@ -52,31 +49,35 @@ class WingLoss3D(nn.Module):
 
 class L1LossMasked(nn.Module):
     def __init__(self):
-        super(L1LossMasked, self).__init__()
+        super().__init__()
         self.l1_loss = nn.L1Loss(reduction="none")
 
     def forward(self, pred, target, mask=None, surface=None):
         loss = self.l1_loss(pred, target)
+        # `mask` is optional, but the masked value used to be the only one returned,
+        # so an unmasked call raised UnboundLocalError.
         if mask is not None:
-            masked_loss = loss[mask]
-        return masked_loss.mean()
+            loss = loss[mask]
+        return loss.mean()
 
 
 class L2LossMasked(nn.Module):
     def __init__(self):
-        super(L2LossMasked, self).__init__()
+        super().__init__()
         self.mse_loss = nn.MSELoss(reduction="none")
 
     def forward(self, pred, target, mask=None, surface=None):
         loss = self.mse_loss(pred, target)
+        # `mask` is optional, but the masked value used to be the only one returned,
+        # so an unmasked call raised UnboundLocalError.
         if mask is not None:
-            masked_loss = loss[mask]
-        return masked_loss.mean()
+            loss = loss[mask]
+        return loss.mean()
 
 
 class CompoundLoss(nn.Module):
     def __init__(self, loss_fns, weights=None):
-        super(CompoundLoss, self).__init__()
+        super().__init__()
         self.loss_fns = loss_fns
         if weights is None:
             weights = [1.0] * len(loss_fns)

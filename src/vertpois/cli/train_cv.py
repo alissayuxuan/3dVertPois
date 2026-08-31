@@ -52,9 +52,7 @@ def run_cv(n_folds, experiment_config, save_predictions=False, poi_file_ending=N
 
         # Add fold to path
         path = experiment_config["path"] + f"/fold_{fold}"
-        trainer_config["logger"] = pl.loggers.TensorBoardLogger(
-            path, name=experiment_config["name"]
-        )
+        trainer_config["logger"] = pl.loggers.TensorBoardLogger(path, name=experiment_config["name"])
 
         trainer = pl.Trainer(**trainer_config)
 
@@ -69,9 +67,6 @@ def run_cv(n_folds, experiment_config, save_predictions=False, poi_file_ending=N
         )
 
         if save_predictions:
-            # Get path of best model
-            best_model_path = trainer.checkpoint_callback.best_model_path
-
             # `create_self_training_pois` was removed from eval.py in commit 4632148
             # ("added zoom consideration to model and eval.py") without updating this
             # call site, which left train_cv.py raising ImportError on every run. The
@@ -88,25 +83,19 @@ def run_cv(n_folds, experiment_config, save_predictions=False, poi_file_ending=N
 def main() -> None:
     """Train a POI prediction model with k-fold cross-validation."""
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--n_folds", type=int, help="Number of folds for cross-validation"
-    )
-    parser.add_argument(
-        "--save-predictions", action="store_true", help="Save predictions for each fold"
-    )
+    parser.add_argument("--n_folds", type=int, help="Number of folds for cross-validation")
+    parser.add_argument("--save-predictions", action="store_true", help="Save predictions for each fold")
     parser.add_argument(
         "--poi-file-ending",
         type=str,
         help="Ending of the poi file to save predictions to",
     )
     parser.add_argument("--config", type=str, help="Experiment config file")
-    parser.add_argument(
-        "--config-dir", type=str, help="Directory containing experiment config files"
-    )
+    parser.add_argument("--config-dir", type=str, help="Directory containing experiment config files")
     args = parser.parse_args()
 
     if args.config:
-        with open(args.config, "r") as f:
+        with open(args.config) as f:
             experiment_config = json.load(f)
             run_cv(
                 args.n_folds,
@@ -117,7 +106,7 @@ def main() -> None:
 
     if args.config_dir:
         for config_file in os.listdir(args.config_dir):
-            with open(os.path.join(args.config_dir, config_file), "r") as f:
+            with open(os.path.join(args.config_dir, config_file)) as f:
                 experiment_config = json.load(f)
                 run_cv(
                     args.n_folds,

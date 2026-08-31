@@ -15,24 +15,23 @@ Given a path to a vert and subreg segmentation mask, model and data module, this
 import json
 import os
 import shutil
-from pathlib import Path
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
-
-from TPTBox import NII, BIDS_Global_info, BIDS_FILE, np_utils, v_idx_order
+from torch.utils.data import Dataset
+from torch.utils.data.dataloader import default_collate
+from TPTBox import BIDS_FILE, NII, BIDS_Global_info, np_utils, v_idx_order
 from TPTBox.core.poi import POI
 from TypeSaveArgParse import Class_to_ArgParse
-from torch.utils.data import Dataset
 
 import vertpois.evaluation.metrics as ev
-from vertpois.data.dataloading import compute_surface, pad_array_to_shape, get_ct, get_subreg, get_vertseg, get_vertseg_bfile
+from vertpois.data.dataloading import compute_surface, get_ct, get_subreg, get_vertseg, get_vertseg_bfile, pad_array_to_shape
+from vertpois.evaluation.metrics import combine_centroids
 from vertpois.geometry.spaces import batch_to_device, extract_space_meta, revert_poi_to_original_space
 from vertpois.geometry.surface import surface_project_coords
-from torch.utils.data.dataloader import default_collate
-from vertpois.evaluation.metrics import combine_centroids
 from vertpois.model_registry import TrainedModelInfo
 from vertpois.paths import get_path
 
@@ -78,11 +77,41 @@ poi_flip_pairs = {
 }
 
 DEFAULT_POI_INDICES = [
-    81, 82, 83, 84, 85, 86, 87, 88, 89,
-    101, 102, 103, 104, 105, 106, 107, 108,
-    109, 110, 111, 112, 113, 114, 115, 116,
-    117, 118, 119, 120, 121, 122, 123, 124,
-    125, 127,
+    81,
+    82,
+    83,
+    84,
+    85,
+    86,
+    87,
+    88,
+    89,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    123,
+    124,
+    125,
+    127,
 ]
 
 
@@ -153,7 +182,9 @@ class GruberInferenceDataset(Dataset):
         surface.extract_label_(surface.unique())
 
         assert input_data.shape == vertseg.shape, f"shape mismatch input={input_data.shape} vert={vertseg.shape}"
-        assert input_data.orientation == vertseg.orientation, f"orientation mismatch input={input_data.orientation} vert={vertseg.orientation}"
+        assert input_data.orientation == vertseg.orientation, (
+            f"orientation mismatch input={input_data.orientation} vert={vertseg.orientation}"
+        )
         assert input_data.orientation == ("L", "A", "S")
         assert all(abs(a - b) < 1e-3 for a, b in zip(input_data.zoom, vertseg.zoom)), (
             f"zoom mismatch input={input_data.zoom} vert={vertseg.zoom}"
@@ -189,7 +220,6 @@ class GruberInferenceDataset(Dataset):
         surface_arr, _ = pad_array_to_shape(surface_arr, self.input_shape)
 
         input_data_t = torch.from_numpy(input_data_arr.astype(np.float32)).unsqueeze(0)
-        vertseg_t = torch.from_numpy(vertseg_arr.astype(np.float32)).unsqueeze(0)
         surface_t = torch.from_numpy(surface_arr.astype(np.float32)).unsqueeze(0)
 
         if self.input_data_type == "surface_msk+ct":
@@ -390,13 +420,12 @@ def create_prediction_poi_files(
     vert_msk_override: NII | None = None,
     input_data_override: NII | None = None,
 ):
-    """
-    The *_override arguments let a caller supply masks that are not on disk, for datasets
+    """The *_override arguments let a caller supply masks that are not on disk, for datasets
     whose masks have to be built at read time (see src/myelom/run_inference.py). When they
     are None this behaves exactly as before and everything is read via vert_msk_ref and
     the BIDS container.
     """
-    dm_params = json.load(open(dm_path, "r"))
+    dm_params = json.load(open(dm_path))
     print(dm_params)
     input_shape = dm_params["input_shape"]
     input_data_type = dm_params["input_data_type"]
@@ -474,9 +503,7 @@ def create_prediction_poi_files(
         refined_preds_batch = batch["refined_preds"]
         if inference_flipped:
             backflip_axis = flip_axis - 2
-            refined_preds_batch[:, :, backflip_axis] = (
-                batch["input"].shape[flip_axis] - refined_preds_batch[:, :, backflip_axis]
-            )
+            refined_preds_batch[:, :, backflip_axis] = batch["input"].shape[flip_axis] - refined_preds_batch[:, :, backflip_axis]
 
         if project_to_surface:
             refined_preds_projected_batch, _ = surface_project_coords(refined_preds_batch, batch["surface"], requires_filling=True)
@@ -497,23 +524,27 @@ def create_prediction_poi_files(
 
         n_poi = len(DEFAULT_POI_INDICES)
 
-        def _make_ctd(coords, v, idx):
+        def _make_ctd(coords, v, idx, meta=pre_meta, offset=padding_offset):
+            # meta/offset are bound as defaults so the closure captures this
+            # iteration's values rather than the loop variable.
             return ev.np_to_ctd(
-                coords, vertebra=v,
-                origin=pre_meta.origin, rotation=pre_meta.rotation,
-                idx_list=idx, shape=pre_meta.shape,
-                zoom=pre_meta.zoom, offset=padding_offset,
-                orientation=pre_meta.orientation,
+                coords,
+                vertebra=v,
+                origin=meta.origin,
+                rotation=meta.rotation,
+                idx_list=idx,
+                shape=meta.shape,
+                zoom=meta.zoom,
+                offset=offset,
+                orientation=meta.orientation,
             )
 
         print("np_to_ctd input-zoom: ", pre_meta.zoom)
-        unpadded_refined_preds_ctd: POI = _make_ctd(
-            pred_coords[:n_poi], vertebra.item(), poi_indices_batch[:n_poi]
-        )
+        unpadded_refined_preds_ctd: POI = _make_ctd(pred_coords[:n_poi], vertebra.item(), poi_indices_batch[:n_poi])
         if use_neighbor:
-            unpadded_cutout_poi = unpadded_refined_preds_ctd \
-                .join_left(_make_ctd(pred_coords[n_poi:2*n_poi], vertebra.item() - 1, poi_indices_batch[n_poi:2*n_poi])) \
-                .join_left(_make_ctd(pred_coords[2*n_poi:],      vertebra.item() + 1, poi_indices_batch[2*n_poi:]))
+            unpadded_cutout_poi = unpadded_refined_preds_ctd.join_left(
+                _make_ctd(pred_coords[n_poi : 2 * n_poi], vertebra.item() - 1, poi_indices_batch[n_poi : 2 * n_poi])
+            ).join_left(_make_ctd(pred_coords[2 * n_poi :], vertebra.item() + 1, poi_indices_batch[2 * n_poi :]))
         else:
             unpadded_cutout_poi = unpadded_refined_preds_ctd
         print("unpadded_refined_preds_ctd: ", unpadded_refined_preds_ctd) if first else None
@@ -549,15 +580,17 @@ def create_prediction_poi_files(
         revert_poi_to_original_space(unpadded_refined_preds_ctd, cutout_offset, orig_meta)
         first = False
 
-        partial_centroids.append({
-            "subject": subject,
-            "original_shape": unpadded_refined_preds_ctd.shape,
-            "original_zoom": unpadded_refined_preds_ctd.zoom,
-            "original_orientation": unpadded_refined_preds_ctd.orientation,
-            "original_rotation": orig_meta.rotation,
-            "original_origin": orig_meta.origin,
-            "centroids": unpadded_refined_preds_ctd.extract_region(vertebra).centroids,
-        })
+        partial_centroids.append(
+            {
+                "subject": subject,
+                "original_shape": unpadded_refined_preds_ctd.shape,
+                "original_zoom": unpadded_refined_preds_ctd.zoom,
+                "original_orientation": unpadded_refined_preds_ctd.orientation,
+                "original_rotation": orig_meta.rotation,
+                "original_origin": orig_meta.origin,
+                "centroids": unpadded_refined_preds_ctd.extract_region(vertebra).centroids,
+            }
+        )
 
     sub, pois = combine_centroids(partial_centroids)
 
@@ -662,7 +695,7 @@ def main() -> None:
                         vert_msk = vert_msk_ref.open_nii()
                         subreg_msk = NII.load(subreg_msk_p, seg=True)
                     except Exception as e:
-                        print(f"Error opening vertseg: {str(e)}")
+                        print(f"Error opening vertseg: {e!s}")
                         vert_msk = None
 
                     if vert_msk is None:

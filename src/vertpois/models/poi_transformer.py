@@ -1,7 +1,8 @@
-import torch
-import torch.nn as nn
-from monai.networks.blocks.transformerblock import TransformerBlock
 from typing import Optional
+
+import torch
+from monai.networks.blocks.transformerblock import TransformerBlock
+from torch import nn
 
 
 class PoiTransformer(nn.Module):
@@ -22,9 +23,7 @@ class PoiTransformer(nn.Module):
     ) -> None:
         super().__init__()
 
-        hidden_size = (
-            poi_feature_l + coord_embedding_l + poi_embedding_l + vert_embedding_l
-        )
+        hidden_size = poi_feature_l + coord_embedding_l + poi_embedding_l + vert_embedding_l
 
         self.dropout = nn.Dropout(dropout_rate)
 
@@ -42,7 +41,7 @@ class PoiTransformer(nn.Module):
             ]
         )
 
-        self.n_landmarks = n_landmarks 
+        self.n_landmarks = n_landmarks
         self.coord_embedding_l = coord_embedding_l
         self.poi_embedding_l = poi_embedding_l
         self.vert_embedding_l = vert_embedding_l
@@ -57,28 +56,21 @@ class PoiTransformer(nn.Module):
         self.fine_pred = nn.Linear(hidden_size, 3)
 
     def forward(self, coarse_preds, poi_indices, vertebra, poi_features):
-        """
-        coarse_preds: (B, N_landmarks, 3)
+        """coarse_preds: (B, N_landmarks, 3)
         poi_indices: (B, N_landmarks)
         vertebra: (B)
         poi_features: (B, N_landmarks, poi_feature_l)
         """
         # Create the embeddings
-        coords_embedded = self.coordinate_embedding(
-            coarse_preds.float()
-        )  # size (B, N_landmarks, coord_embedding_l)
-        pois_embedded = self.poi_embedding(
-            poi_indices
-        )  # size (B, N_landmarks, poi_embedding_l)
+        coords_embedded = self.coordinate_embedding(coarse_preds.float())  # size (B, N_landmarks, coord_embedding_l)
+        pois_embedded = self.poi_embedding(poi_indices)  # size (B, N_landmarks, poi_embedding_l)
         vert_embedded = self.vert_embedding(vertebra)  # size (B, 1, vert_embedding_l)
 
         # Bring vert_embedded to the same shape as the other embeddings
         vert_embedded = vert_embedded.expand(-1, self.n_landmarks, -1)
 
         # Concatenate the embeddings
-        x = torch.cat(
-            [poi_features, coords_embedded, pois_embedded, vert_embedded], dim=-1
-        )  # size (B, N_landmarks, hidden_size)
+        x = torch.cat([poi_features, coords_embedded, pois_embedded, vert_embedded], dim=-1)  # size (B, N_landmarks, hidden_size)
 
         x = self.dropout(x)
 
@@ -88,16 +80,16 @@ class PoiTransformer(nn.Module):
         x = self.fine_pred(x)  # size (B, N, 3)
 
         return x
-    
+
 
 # POI Transformer that can take optional arguments for ablation study
 class FlexiblePoiTransformer(nn.Module):
     def __init__(
         self,
-        poi_feature_l: Optional[int],
-        coord_embedding_l: Optional[int], 
-        poi_embedding_l: Optional[int],
-        vert_embedding_l: Optional[int],
+        poi_feature_l: int | None,
+        coord_embedding_l: int | None,
+        poi_embedding_l: int | None,
+        vert_embedding_l: int | None,
         mlp_dim: int,
         num_layers: int,
         num_heads: int,
@@ -122,13 +114,8 @@ class FlexiblePoiTransformer(nn.Module):
         self.vert_embedding_l = vert_embedding_l if self.use_vert_embedding else 0
 
         # Calculate hidden size based on used components
-        hidden_size = (
-            self.poi_feature_l + 
-            self.coord_embedding_l + 
-            self.poi_embedding_l + 
-            self.vert_embedding_l
-        )
-        
+        hidden_size = self.poi_feature_l + self.coord_embedding_l + self.poi_embedding_l + self.vert_embedding_l
+
         if hidden_size == 0:
             raise ValueError("At least one component must be enabled (poi_features, coord_embedding, poi_embedding, or vert_embedding)")
 
@@ -141,7 +128,7 @@ class FlexiblePoiTransformer(nn.Module):
 
         if self.use_poi_embedding:
             self.poi_embedding = nn.Embedding(n_landmarks, poi_embedding_l)
-            
+
         if self.use_vert_embedding:
             self.vert_embedding = nn.Embedding(n_verts, vert_embedding_l)
 
@@ -167,30 +154,29 @@ class FlexiblePoiTransformer(nn.Module):
 
     def forward(self, coarse_preds=None, poi_indices=None, vertebra=None, poi_features=None):
         """Flexible forward pass - only processes provided inputs"""
-        
         # Collect feature components
         features_list = []
-        
+
         # 1. POI Features (from coarse model)
         if self.use_poi_features:
             if poi_features is None:
                 raise ValueError("poi_features is required when use_poi_features=True")
             features_list.append(poi_features)
-        
+
         # 2. Coordinate Embeddings
         if self.use_coord_embedding:
             if coarse_preds is None:
                 raise ValueError("coarse_preds is required when use_coord_embedding=True")
             coords_embedded = self.coordinate_embedding(coarse_preds.float())
             features_list.append(coords_embedded)
-        
+
         # 3. POI Type Embeddings
         if self.use_poi_embedding:
             if poi_indices is None:
                 raise ValueError("poi_indices is required when use_poi_embedding=True")
             pois_embedded = self.poi_embedding(poi_indices)
             features_list.append(pois_embedded)
-        
+
         # 4. Vertebra Embeddings
         if self.use_vert_embedding:
             if vertebra is None:
@@ -199,21 +185,20 @@ class FlexiblePoiTransformer(nn.Module):
             # Expand to match landmark dimension
             vert_embedded = vert_embedded.expand(-1, self.n_landmarks, -1)
             features_list.append(vert_embedded)
-        
+
         # Concatenate all available features
         if not features_list:
             raise ValueError("No features available - check your input arguments and enabled components")
-            
+
         x = torch.cat(features_list, dim=-1)  # (B, N_landmarks, hidden_size)
-        
+
         # Transformer processing
         x = self.dropout(x)
-        
+
         for block in self.transformer_blocks:
             x = block(x)
-        
+
         x = self.norm(x)
         x = self.fine_pred(x)  # (B, N_landmarks, 3)
-        
-        return x
 
+        return x

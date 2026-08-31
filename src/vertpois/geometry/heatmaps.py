@@ -1,5 +1,5 @@
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 def coords_to_heatmaps(coords, target_shape, lambda_decay=1):
@@ -61,18 +61,14 @@ def heatmaps_to_coords(pred_heatmaps):
     batch_size, n_pois, _, _, _ = pred_heatmaps.shape
 
     # Reshape pred_heatmaps and heatmap_coords for element-wise multiplication
-    pred_heatmaps_reshaped = pred_heatmaps.view(
-        batch_size, n_pois, -1
-    )  # Shape: (batch_size, n_pois, H*W*D)
+    pred_heatmaps_reshaped = pred_heatmaps.view(batch_size, n_pois, -1)  # Shape: (batch_size, n_pois, H*W*D)
     heatmap_coords = create_coordinate_tensor(pred_heatmaps.shape[2:]).to(device)
     heatmap_coords_reshaped = heatmap_coords.view(3, -1)  # Shape: (3, H*W*D)
 
     heatmap_coords_reshaped = heatmap_coords_reshaped.to(device)
 
     # Element-wise multiplication and sum along the last dimension
-    weighted_coords = torch.sum(
-        pred_heatmaps_reshaped.unsqueeze(-1) * heatmap_coords_reshaped.t(), dim=2
-    )  # Shape: (batch_size, n_pois, 3)
+    weighted_coords = torch.sum(pred_heatmaps_reshaped.unsqueeze(-1) * heatmap_coords_reshaped.t(), dim=2)  # Shape: (batch_size, n_pois, 3)
 
     # Reshape the result to (batch_size, n_pois, 3)
     coords = weighted_coords.view(batch_size, n_pois, 3)
@@ -96,7 +92,7 @@ def create_coordinate_tensor(shape):
 
 class SoftArgmax3D(nn.Module):
     def __init__(self):
-        super(SoftArgmax3D, self).__init__()
+        super().__init__()
 
     def forward(self, heatmap):
         """Apply the soft-argmax operation on a 3D heatmap. The heatmap is expected to
@@ -117,15 +113,9 @@ class SoftArgmax3D(nn.Module):
         lin_d = torch.linspace(0, depth - 1, steps=depth, device=heatmap.device)
 
         # Expand grids to match batch size and number of maps
-        grid_h = lin_h.view(1, 1, height, 1, 1).expand(
-            batch_size, num_maps, -1, width, depth
-        )
-        grid_w = lin_w.view(1, 1, 1, width, 1).expand(
-            batch_size, num_maps, height, -1, depth
-        )
-        grid_d = lin_d.view(1, 1, 1, 1, depth).expand(
-            batch_size, num_maps, height, width, -1
-        )
+        grid_h = lin_h.view(1, 1, height, 1, 1).expand(batch_size, num_maps, -1, width, depth)
+        grid_w = lin_w.view(1, 1, 1, width, 1).expand(batch_size, num_maps, height, -1, depth)
+        grid_d = lin_d.view(1, 1, 1, 1, depth).expand(batch_size, num_maps, height, width, -1)
 
         # Compute the soft-argmax coordinates
         soft_argmax_h = torch.sum(heatmap * grid_h, dim=[2, 3, 4])

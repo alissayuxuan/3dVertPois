@@ -1,5 +1,4 @@
-"""
-Adapted from MonAI https://docs.monai.io/en/stable/_modules/monai/networks/nets/densenet.html
+"""Adapted from MonAI https://docs.monai.io/en/stable/_modules/monai/networks/nets/densenet.html
 Key changes: The final flattening and out layers are removed, as the model is used to generate a (downsized) feature map.
 """
 
@@ -9,9 +8,9 @@ from collections import OrderedDict
 from collections.abc import Callable, Sequence
 
 import torch
-import torch.nn as nn
 from monai.networks.layers.factories import Conv, Dropout, Pool
 from monai.networks.layers.utils import get_act_layer, get_norm_layer
+from torch import nn
 
 
 class _DenseLayer(nn.Module):
@@ -25,16 +24,15 @@ class _DenseLayer(nn.Module):
         act: str | tuple = ("relu", {"inplace": True}),
         norm: str | tuple = "batch",
     ) -> None:
-        """
-        Args:
-            spatial_dims: number of spatial dimensions of the input image.
-            in_channels: number of the input channel.
-            growth_rate: how many filters to add each layer (k in paper).
-            bn_size: multiplicative factor for number of bottle neck layers.
-                (i.e. bn_size * k features in the bottleneck layer)
-            dropout_prob: dropout rate after each dense layer.
-            act: activation type and arguments. Defaults to relu.
-            norm: feature normalization type and arguments. Defaults to batch norm.
+        """Args:
+        spatial_dims: number of spatial dimensions of the input image.
+        in_channels: number of the input channel.
+        growth_rate: how many filters to add each layer (k in paper).
+        bn_size: multiplicative factor for number of bottle neck layers.
+            (i.e. bn_size * k features in the bottleneck layer)
+        dropout_prob: dropout rate after each dense layer.
+        act: activation type and arguments. Defaults to relu.
+        norm: feature normalization type and arguments. Defaults to batch norm.
         """
         super().__init__()
 
@@ -49,9 +47,7 @@ class _DenseLayer(nn.Module):
             get_norm_layer(name=norm, spatial_dims=spatial_dims, channels=in_channels),
         )
         self.layers.add_module("relu1", get_act_layer(name=act))
-        self.layers.add_module(
-            "conv1", conv_type(in_channels, out_channels, kernel_size=1, bias=False)
-        )
+        self.layers.add_module("conv1", conv_type(in_channels, out_channels, kernel_size=1, bias=False))
 
         self.layers.add_module(
             "norm2",
@@ -83,17 +79,16 @@ class _DenseBlock(nn.Sequential):
         act: str | tuple = ("relu", {"inplace": True}),
         norm: str | tuple = "batch",
     ) -> None:
-        """
-        Args:
-            spatial_dims: number of spatial dimensions of the input image.
-            layers: number of layers in the block.
-            in_channels: number of the input channel.
-            bn_size: multiplicative factor for number of bottle neck layers.
-                (i.e. bn_size * k features in the bottleneck layer)
-            growth_rate: how many filters to add each layer (k in paper).
-            dropout_prob: dropout rate after each dense layer.
-            act: activation type and arguments. Defaults to relu.
-            norm: feature normalization type and arguments. Defaults to batch norm.
+        """Args:
+        spatial_dims: number of spatial dimensions of the input image.
+        layers: number of layers in the block.
+        in_channels: number of the input channel.
+        bn_size: multiplicative factor for number of bottle neck layers.
+            (i.e. bn_size * k features in the bottleneck layer)
+        growth_rate: how many filters to add each layer (k in paper).
+        dropout_prob: dropout rate after each dense layer.
+        act: activation type and arguments. Defaults to relu.
+        norm: feature normalization type and arguments. Defaults to batch norm.
         """
         super().__init__()
         for i in range(layers):
@@ -119,13 +114,12 @@ class _Transition(nn.Sequential):
         act: str | tuple = ("relu", {"inplace": True}),
         norm: str | tuple = "batch",
     ) -> None:
-        """
-        Args:
-            spatial_dims: number of spatial dimensions of the input image.
-            in_channels: number of the input channel.
-            out_channels: number of the output classes.
-            act: activation type and arguments. Defaults to relu.
-            norm: feature normalization type and arguments. Defaults to batch norm.
+        """Args:
+        spatial_dims: number of spatial dimensions of the input image.
+        in_channels: number of the input channel.
+        out_channels: number of the output classes.
+        act: activation type and arguments. Defaults to relu.
+        norm: feature normalization type and arguments. Defaults to batch norm.
         """
         super().__init__()
 
@@ -137,16 +131,15 @@ class _Transition(nn.Sequential):
             get_norm_layer(name=norm, spatial_dims=spatial_dims, channels=in_channels),
         )
         self.add_module("relu", get_act_layer(name=act))
-        self.add_module(
-            "conv", conv_type(in_channels, out_channels, kernel_size=1, bias=False)
-        )
+        self.add_module("conv", conv_type(in_channels, out_channels, kernel_size=1, bias=False))
         self.add_module("pool", pool_type(kernel_size=2, stride=2))
 
 
 class _TransitionNoPool(nn.Sequential):
     """Same as `_Transition` but omits the 2× spatial pool — used when we want
     to halve channels between dense blocks without further downsampling, so the
-    final heatmap comes out at higher resolution."""
+    final heatmap comes out at higher resolution.
+    """
 
     def __init__(
         self,
@@ -165,14 +158,11 @@ class _TransitionNoPool(nn.Sequential):
             get_norm_layer(name=norm, spatial_dims=spatial_dims, channels=in_channels),
         )
         self.add_module("relu", get_act_layer(name=act))
-        self.add_module(
-            "conv", conv_type(in_channels, out_channels, kernel_size=1, bias=False)
-        )
+        self.add_module("conv", conv_type(in_channels, out_channels, kernel_size=1, bias=False))
 
 
 class HeatmapDenseNet(nn.Module):
-    """
-    Densenet based on: `Densely Connected Convolutional Networks <https://arxiv.org/pdf/1608.06993.pdf>`_.
+    """Densenet based on: `Densely Connected Convolutional Networks <https://arxiv.org/pdf/1608.06993.pdf>`_.
     Adapted from PyTorch Hub 2D version: https://pytorch.org/vision/stable/models.html#id16.
     This network is non-deterministic When `spatial_dims` is 3 and CUDA is enabled. Please check the link below
     for more details:
@@ -214,12 +204,8 @@ class HeatmapDenseNet(nn.Module):
         self.feature_l = feature_l
         self.skip_last_transition_pool = skip_last_transition_pool
 
-        conv_type: type[nn.Conv1d | nn.Conv2d | nn.Conv3d] = Conv[
-            Conv.CONV, spatial_dims
-        ]
-        pool_type: type[nn.MaxPool1d | nn.MaxPool2d | nn.MaxPool3d] = Pool[
-            Pool.MAX, spatial_dims
-        ]
+        conv_type: type[nn.Conv1d | nn.Conv2d | nn.Conv3d] = Conv[Conv.CONV, spatial_dims]
+        pool_type: type[nn.MaxPool1d | nn.MaxPool2d | nn.MaxPool3d] = Pool[Pool.MAX, spatial_dims]
 
         self.features = nn.Sequential(
             OrderedDict(
@@ -237,9 +223,7 @@ class HeatmapDenseNet(nn.Module):
                     ),
                     (
                         "norm0",
-                        get_norm_layer(
-                            name=norm, spatial_dims=spatial_dims, channels=init_features
-                        ),
+                        get_norm_layer(name=norm, spatial_dims=spatial_dims, channels=init_features),
                     ),
                     ("relu0", get_act_layer(name=act)),
                     ("pool0", pool_type(kernel_size=3, stride=2, padding=1)),
@@ -264,20 +248,14 @@ class HeatmapDenseNet(nn.Module):
             if i == len(block_config) - 1:
                 self.features.add_module(
                     "norm5",
-                    get_norm_layer(
-                        name=norm, spatial_dims=spatial_dims, channels=in_channels
-                    ),
+                    get_norm_layer(name=norm, spatial_dims=spatial_dims, channels=in_channels),
                 )
             else:
                 _out_channels = in_channels // 2
                 # For the transition right before the final dense block, optionally
                 # skip the 2× spatial pool so the heatmap ends up at 2× resolution.
                 is_last_transition = i == len(block_config) - 2
-                trans_cls = (
-                    _TransitionNoPool
-                    if (is_last_transition and self.skip_last_transition_pool)
-                    else _Transition
-                )
+                trans_cls = _TransitionNoPool if (is_last_transition and self.skip_last_transition_pool) else _Transition
                 trans = trans_cls(
                     spatial_dims,
                     in_channels=in_channels,
@@ -302,14 +280,12 @@ class HeatmapDenseNet(nn.Module):
                 nn.init.constant_(torch.as_tensor(m.bias), 0)
             elif isinstance(m, nn.Linear):
                 nn.init.constant_(torch.as_tensor(m.bias), 0)
-        
+
         self.weight_features = weight_features
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x.float()  # Ensure input is float
-        x = self.features(
-            x
-        )  # (batch_size, n_landmarks + feature_l, *spatial_shape // (len(block_config)**2))
+        x = self.features(x)  # (batch_size, n_landmarks + feature_l, *spatial_shape // (len(block_config)**2))
         # Split the output into landmark heatmaps and feature maps
         heatmaps, feature_map = x.split([self.n_landmarks, self.feature_l], dim=1)
 
@@ -329,9 +305,7 @@ class HeatmapDenseNet(nn.Module):
         # We want the output to be (B, N, F), summing over the spatial dimensions (H, W, D)
         if self.weight_features:
             # weight the feature maps with the heatmaps
-            landmark_features = (
-                normalized_heatmaps.unsqueeze(2).detach() * feature_map_expanded
-            ).sum(dim=(3, 4, 5))
+            landmark_features = (normalized_heatmaps.unsqueeze(2).detach() * feature_map_expanded).sum(dim=(3, 4, 5))
 
         else:
             # global average pooling of feature maps (no heatmap weighting)
@@ -390,7 +364,7 @@ class UNetHeatmapDenseNet(nn.Module):
         # ----- Encoder blocks -----
         c = init_features
         self.denseblock1 = _DenseBlock(spatial_dims, block_config[0], c, bn_size, growth_rate, dropout_prob, act, norm)
-        c1 = c + block_config[0] * growth_rate                        # skip1 channels (32x32x36)
+        c1 = c + block_config[0] * growth_rate  # skip1 channels (32x32x36)
         self.transition1 = _Transition(spatial_dims, c1, c1 // 2, act, norm)  # downsample to 16x16x18
         c = c1 // 2
 
@@ -401,7 +375,7 @@ class UNetHeatmapDenseNet(nn.Module):
         c = c2 // 2
 
         self.denseblock3 = _DenseBlock(spatial_dims, block_config[2], c, bn_size, growth_rate, dropout_prob, act, norm)
-        c3 = c + block_config[2] * growth_rate                         # deep channels (16x16x18)
+        c3 = c + block_config[2] * growth_rate  # deep channels (16x16x18)
 
         # ----- Decoder: one 2x upsample fused with skip1 → 32x32x36 -----
         self.decoder_up = tconv_type(c3, decoder_channels, kernel_size=2, stride=2)
@@ -427,18 +401,18 @@ class UNetHeatmapDenseNet(nn.Module):
 
     def forward(self, x: torch.Tensor):
         x = x.float()
-        s0 = self.stem(x)                       # (B, 64, 32, 32, 36)
-        b1 = self.denseblock1(s0)               # (B, c1, 32, 32, 36)   ← skip
-        t1 = self.transition1(b1)               # (B, c1/2, 16, 16, 18)
-        b2 = self.denseblock2(t1)               # (B, c2, 16, 16, 18)
-        t2 = self.transition2(b2)               # (B, c2/2, 16, 16, 18) — no pool
-        b3 = self.denseblock3(t2)               # (B, c3, 16, 16, 18)
+        s0 = self.stem(x)  # (B, 64, 32, 32, 36)
+        b1 = self.denseblock1(s0)  # (B, c1, 32, 32, 36)   ← skip
+        t1 = self.transition1(b1)  # (B, c1/2, 16, 16, 18)
+        b2 = self.denseblock2(t1)  # (B, c2, 16, 16, 18)
+        t2 = self.transition2(b2)  # (B, c2/2, 16, 16, 18) — no pool
+        b3 = self.denseblock3(t2)  # (B, c3, 16, 16, 18)
 
-        up = self.decoder_up(b3)                # (B, decoder_channels, 32, 32, 36)
-        fused = torch.cat([up, b1], dim=1)      # skip concat
-        dec = self.decoder_refine(fused)        # (B, decoder_channels, 32, 32, 36)
+        up = self.decoder_up(b3)  # (B, decoder_channels, 32, 32, 36)
+        fused = torch.cat([up, b1], dim=1)  # skip concat
+        dec = self.decoder_refine(fused)  # (B, decoder_channels, 32, 32, 36)
 
-        out = self.conv_final(dec)              # (B, N+F, 32, 32, 36)
+        out = self.conv_final(dec)  # (B, N+F, 32, 32, 36)
         heatmaps, feature_map = out.split([self.n_landmarks, self.feature_l], dim=1)
 
         B, N, *spatial = heatmaps.shape
@@ -446,9 +420,7 @@ class UNetHeatmapDenseNet(nn.Module):
 
         feature_map_expanded = feature_map.unsqueeze(1)
         if self.weight_features:
-            landmark_features = (
-                normalized_heatmaps.unsqueeze(2).detach() * feature_map_expanded
-            ).sum(dim=(3, 4, 5))
+            landmark_features = (normalized_heatmaps.unsqueeze(2).detach() * feature_map_expanded).sum(dim=(3, 4, 5))
         else:
             global_features = feature_map.mean(dim=(2, 3, 4))
             landmark_features = global_features.unsqueeze(1).expand(-1, N, -1)

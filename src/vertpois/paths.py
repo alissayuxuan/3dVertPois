@@ -30,7 +30,7 @@ KNOWN_KEYS: dict[str, str] = {
 }
 
 #: Only this key has a sensible machine-independent default.
-_DEFAULTS: dict[str, str] = {"tmp_root": "/tmp/vertpois"}  # noqa: S108, private-data
+_DEFAULTS: dict[str, str] = {"tmp_root": "/tmp/vertpois"}
 
 _ENV_PREFIX = "VERTPOIS_"
 

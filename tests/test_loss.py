@@ -48,3 +48,16 @@ def test_perfect_prediction_has_zero_loss():
         coords = torch.rand(2, 4, 3)
         mask = torch.ones(2, 4, dtype=torch.bool)
         assert loss_fn(coords, coords.clone(), mask) == pytest.approx(0.0, abs=1e-6)
+
+
+@pytest.mark.parametrize("name", ["L1", "L2"])
+def test_masked_losses_work_without_a_mask(name):
+    """`mask` is optional, so omitting it must not raise.
+
+    Both masked losses previously assigned the reduced value only inside
+    `if mask is not None`, then returned it unconditionally - an UnboundLocalError
+    on any unmasked call.
+    """
+    loss_fn = get_loss_fn(name)
+    value = loss_fn(torch.zeros(1, 2, 3), torch.ones(1, 2, 3))
+    assert value == pytest.approx(1.0)

@@ -110,7 +110,6 @@ class TrainedModelInfo(Enum):
         0,
         "sad-pt-epoch=58-fine_mean_distance_val=1.60",
     )  # Needs inference code adaption
-    #
     GRUBER_N_SURFACE_NEIGHAUG = (
         "ForVerse/surface-neighbor-neighaug-project_gt_cc3-exclude6",
         0,

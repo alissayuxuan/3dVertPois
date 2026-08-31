@@ -2,15 +2,23 @@ import nibabel as nib
 import numpy as np
 import torch
 
-# from BIDS import NII, POI
-from TPTBox import NII
-from TPTBox.core.poi import POI
-
 # from scipy.ndimage import distance_transform_edt
 import torch.nn.functional as F
 from skimage import measure
 
+# from BIDS import NII, POI
+from TPTBox import NII
+from TPTBox.core.poi import POI
+
 from vertpois.paths import get_path
+
+
+from nibabel.nifti1 import Nifti1Image
+from scipy.ndimage import distance_transform_edt
+from TPTBox.core.np_utils import np_fill_holes
+from TPTBox.core.poi_fun.ray_casting import max_distance_ray_cast_convex_np, max_distance_ray_cast_convex_npfast, trilinear_interpolate
+
+# from utils.raycast_torch import max_distance_ray_cast_convex_torch
 
 
 def _debug_path(name: str) -> str:
@@ -22,12 +30,6 @@ def _debug_path(name: str) -> str:
     directory.mkdir(parents=True, exist_ok=True)
     return str(directory / name)
 
-from TPTBox.core.np_utils import np_fill_holes
-from TPTBox.core.poi_fun.ray_casting import max_distance_ray_cast_convex_npfast, trilinear_interpolate, max_distance_ray_cast_convex_np
-from nibabel.nifti1 import Nifti1Image
-from scipy.ndimage import distance_transform_edt
-
-# from utils.raycast_torch import max_distance_ray_cast_convex_torch
 
 
 def np_to_bids_nii(array: np.ndarray) -> NII:
@@ -109,8 +111,7 @@ def surface_project_coords(
 
 
 def fill_holes_3d(surface_mask):
-    """
-    Proper hole filling: flood-fill outside -> invert -> keep only internal cavities.
+    """Proper hole filling: flood-fill outside -> invert -> keep only internal cavities.
     Does NOT dilate or overfill the object.
 
     surface_mask: (B,1,D,H,W) boolean tensor:
@@ -120,7 +121,6 @@ def fill_holes_3d(surface_mask):
         filled: same shape, boolean:
             object + internal cavities filled
     """
-
     surf = surface_mask.bool()
     B, _, D, H, W = surf.shape
     device = surf.device
@@ -145,7 +145,6 @@ def fill_holes_3d(surface_mask):
     # --- Step 4: flood fill outside
     kernel = torch.ones((1, 1, 3, 3, 3), device=device)
 
-    prev = torch.zeros_like(seeds)
     cur = seeds.clone()
 
     # Iterate until stable
@@ -173,8 +172,7 @@ def fill_holes_3d(surface_mask):
 
 
 def fill_holes_3d_6conn(surface_mask):
-    """
-    Fill holes using STRICT 6-connectivity (no diagonal connectivity).
+    """Fill holes using STRICT 6-connectivity (no diagonal connectivity).
     Works on GPU. Does not overfill thin structures.
 
     surface_mask: (B,1,D,H,W) boolean or int tensor
@@ -184,7 +182,6 @@ def fill_holes_3d_6conn(surface_mask):
         filled: (B,1,D,H,W) boolean tensor
             original object + filled 6-connected cavities
     """
-
     surf = surface_mask.bool()
     B, _, D, H, W = surf.shape
     device = surf.device
@@ -241,8 +238,6 @@ def fill_holes_3d_6conn(surface_mask):
     return filled
 
 
-
-
 def extract_surface_vertices(mask, level=0.5):
     # mask: (Z,Y,X) numpy array
     # mask = fill_holes_3d_6conn(mask)
@@ -260,11 +255,10 @@ def surface_project_coords_marchingcubes(
     debug=False,
     requires_filling: bool = False,
 ):
-    """
-    coordinates: (B, N, 3) or (N, 3)
+    """coordinates: (B, N, 3) or (N, 3)
     surface_mask: (B, Z, Y, X) or (Z, Y, X)
 
-    returns:
+    Returns:
         surface_projected_targets: (B, N, 3) int64
         surface_projection_dist:   (B, N)   float
     """
@@ -344,8 +338,7 @@ def surface_project_coords_marchingcubes(
 
 
 def closest_point_on_triangle(p, a, b, c):
-    """
-    Exact closest point on triangle ABC to point P.
+    """Exact closest point on triangle ABC to point P.
     All inputs: (3,)
     """
     ab = b - a
@@ -394,8 +387,7 @@ def closest_point_on_triangle(p, a, b, c):
 
 
 def closest_point_on_triangle_batch(p, a, b, c):
-    """
-    Batched closest point on triangles.
+    """Batched closest point on triangles.
 
     p : (N,3)
     a,b,c : (K,3)
@@ -403,7 +395,6 @@ def closest_point_on_triangle_batch(p, a, b, c):
     Returns:
         proj : (N,K,3)
     """
-
     # expand for broadcasting
     p = p[:, None, :]  # (N,1,3)
     a = a[None, :, :]  # (1,K,3)
@@ -452,15 +443,13 @@ def surface_project_coords_marchingcubes_continuous(
     debug=False,
     requires_filling: bool = False,
 ):
-    """
-    coordinates: (B, N, 3) or (N, 3)
+    """coordinates: (B, N, 3) or (N, 3)
     surface_mask: (B, Z, Y, X) or (Z, Y, X)
 
-    returns:
+    Returns:
         projected: (B, N, 3) float  -- TRUE continuous surface points
         surface_projection_dist: (B, N) float
     """
-
     # ---------------- batching ----------------
     unbatched_coords = coordinates.ndim == 2
     unbatched_surface = surface_mask.ndim == 3
@@ -524,7 +513,6 @@ def surface_project_coords_marchingcubes_continuous(
     surface_projection_dist = torch.zeros((B, N), device=device)
 
     for b in range(B):
-
         V = verts_pad[b]  # (M,3)
         F = faces_pad[b]
         Fmask = faces_valid[b]
@@ -557,12 +545,6 @@ def surface_project_coords_marchingcubes_continuous(
         surface_projection_dist = surface_projection_dist.squeeze(0)
 
     return projected, surface_projection_dist
-
-
-
-
-
-
 
 
 # POI Visualization

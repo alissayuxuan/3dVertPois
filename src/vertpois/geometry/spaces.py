@@ -12,6 +12,7 @@ def batch_to_device(batch: dict, device) -> dict:
 
 class SpaceMeta(NamedTuple):
     """Spatial metadata for one coordinate space (preprocessed cutout or original patient)."""
+
     zoom: tuple
     origin: tuple
     shape: tuple

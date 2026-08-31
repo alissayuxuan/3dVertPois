@@ -1,3 +1,4 @@
+import json
 import os
 import random
 from functools import partial
@@ -8,17 +9,14 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+from monai.data.utils import worker_init_fn as _monai_worker_init_fn
+from pqdm.processes import pqdm
+from torch.utils.data import DataLoader
 
 # from BIDS import BIDS_Global_info
 from TPTBox import BIDS_Global_info
-import json
-
-
-from monai.data.utils import worker_init_fn as _monai_worker_init_fn
-from pqdm.processes import pqdm
 
 from vertpois.registry import build
-from torch.utils.data import DataLoader
 
 
 def _seed_worker(worker_id):
@@ -34,8 +32,7 @@ def _seed_worker(worker_id):
     if torch.utils.data.get_worker_info() is not None:
         _monai_worker_init_fn(worker_id)
 
-from vertpois.data.dataset import GruberDataset, PoiDataset, GruberNeighborDataset
-from vertpois.data.transforms import create_transform
+
 from vertpois.data.dataloading import (
     get_ct,
     get_files,
@@ -44,12 +41,13 @@ from vertpois.data.dataloading import (
     get_vertseg,
     process_container,
 )
+from vertpois.data.dataset import GruberDataset, GruberNeighborDataset, PoiDataset
+from vertpois.data.transforms import create_transform
 
 PoiType = TypeVar("PoiType", bound=PoiDataset)
 
 
 class POIDataModule(pl.LightningDataModule):
-
     def __init__(
         self,
         dataset: str,
@@ -286,7 +284,6 @@ class POIDataModule(pl.LightningDataModule):
 
 
 class GruberDataModule(POIDataModule):
-
     def __init__(
         self,
         master_df: PathLike,
@@ -391,7 +388,7 @@ def create_data_module(config):
 
 if __name__ == "__main__":
     config_path = "neighbors-test/datamodule_config.json"
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         config = json.load(f)
 
     data_module = create_data_module(config)

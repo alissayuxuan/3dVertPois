@@ -24,7 +24,7 @@ def main() -> int:
     for name in sorted(names):
         try:
             importlib.import_module(name)
-        except Exception:  # noqa: BLE001 - we want to report every failure, not the first
+        except Exception:
             failures.append((name, traceback.format_exc()))
         else:
             print(f"  ok   {name}")

@@ -1,10 +1,11 @@
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 class PatchExtractor(nn.Module):
     """Extracts patch features from a batch of feature maps given the patch
-    centroids."""
+    centroids.
+    """
 
     def __init__(self, patch_size, feature_extraction_model):
         super().__init__()
@@ -14,14 +15,11 @@ class PatchExtractor(nn.Module):
         self.feature_extraction_model = feature_extraction_model
 
     def forward(self, x, centroids):
-        """
-        x: (B, C, H, W, D)
+        """x: (B, C, H, W, D)
         centroids: (B, N, 3)
         """
         # Extract the patches
-        patches = self.extract_patches(
-            x, centroids
-        )  # (B, N, C, patch_size, patch_size, patch_size)
+        patches = self.extract_patches(x, centroids)  # (B, N, C, patch_size, patch_size, patch_size)
 
         # Pass the patches through 3 conv layers
         B, N, C, P, _, _ = patches.shape
@@ -65,22 +63,14 @@ class PatchExtractor(nn.Module):
         cz_f = cz.unsqueeze(-2).unsqueeze(-2).expand(B, N, patch_size, patch_size, patch_size)
 
         # Validity mask: True where the coord is inside the volume
-        valid = (
-            (cx_f >= 0) & (cx_f < H) &
-            (cy_f >= 0) & (cy_f < W) &
-            (cz_f >= 0) & (cz_f < D)
-        )  # (B, N, P, P, P)
+        valid = (cx_f >= 0) & (cx_f < H) & (cy_f >= 0) & (cy_f < W) & (cz_f >= 0) & (cz_f < D)  # (B, N, P, P, P)
 
         # Clamp coords so gather is safe; masked-out positions are zeroed later
         cx_c = cx_f.clamp(0, H - 1)
         cy_c = cy_f.clamp(0, W - 1)
         cz_c = cz_f.clamp(0, D - 1)
 
-        b_idx = (
-            torch.arange(B, device=device)
-            .view(B, 1, 1, 1, 1)
-            .expand(B, N, patch_size, patch_size, patch_size)
-        )
+        b_idx = torch.arange(B, device=device).view(B, 1, 1, 1, 1).expand(B, N, patch_size, patch_size, patch_size)
 
         # Advanced indexing across the batch and 3 spatial dims, keeping C as a slice.
         # Because the slice (:) sits between fancy indices, the fancy dims are moved to

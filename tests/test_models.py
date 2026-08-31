@@ -34,10 +34,19 @@ def test_soft_argmax_averages_over_a_spread_distribution():
 def test_flexible_transformer_matches_the_original_when_all_embeddings_are_on():
     """FlexiblePoiTransformer generalises PoiTransformer; with everything enabled
     the two must be numerically identical. This is what makes the single unified
-    PatchTransformer a faithful replacement for the old ablation subclasses."""
+    PatchTransformer a faithful replacement for the old ablation subclasses.
+    """
     kwargs = dict(
-        poi_feature_l=24, coord_embedding_l=8, poi_embedding_l=8, vert_embedding_l=8,
-        mlp_dim=32, num_layers=1, num_heads=2, n_landmarks=4, n_verts=5, dropout_rate=0.0,
+        poi_feature_l=24,
+        coord_embedding_l=8,
+        poi_embedding_l=8,
+        vert_embedding_l=8,
+        mlp_dim=32,
+        num_layers=1,
+        num_heads=2,
+        n_landmarks=4,
+        n_verts=5,
+        dropout_rate=0.0,
     )
     torch.manual_seed(0)
     original = PoiTransformer(**kwargs).eval()
@@ -59,8 +68,14 @@ def test_flexible_transformer_matches_the_original_when_all_embeddings_are_on():
 def test_flexible_transformer_requires_at_least_one_input():
     with pytest.raises(ValueError, match="At least one component"):
         FlexiblePoiTransformer(
-            poi_feature_l=0, coord_embedding_l=None, poi_embedding_l=None, vert_embedding_l=None,
-            mlp_dim=8, num_layers=1, num_heads=1, n_landmarks=2,
+            poi_feature_l=0,
+            coord_embedding_l=None,
+            poi_embedding_l=None,
+            vert_embedding_l=None,
+            mlp_dim=8,
+            num_layers=1,
+            num_heads=1,
+            n_landmarks=2,
         )
 
 

@@ -1,12 +1,12 @@
 import pytorch_lightning as pl
 import torch
-import torch.nn as nn
 from monai.networks.nets.regressor import Regressor
+from torch import nn
 
+from vertpois.geometry.surface import surface_project_coords
 from vertpois.loss.loss_modules import get_loss_fn
 from vertpois.models.patch_extraction import PatchExtractor
-from vertpois.models.poi_transformer import PoiTransformer, FlexiblePoiTransformer
-from vertpois.geometry.surface import surface_project_coords
+from vertpois.models.poi_transformer import FlexiblePoiTransformer, PoiTransformer
 
 
 class RefinementModule(pl.LightningModule):
@@ -58,7 +58,10 @@ class Identity(RefinementModule):
     This is useful for testing the feature extraction module in isolation.
     """
 
-    def __init__(self, project_gt: bool = False,):
+    def __init__(
+        self,
+        project_gt: bool = False,
+    ):
         super().__init__()
         self.project_gt = project_gt
 
@@ -112,9 +115,7 @@ class Identity(RefinementModule):
             landmark_mask = landmark_mask * loss_mask
             distances_landmark = distances[landmark_mask]
             distances_landmark_mean = distances_landmark.mean()
-            metrics[f"fine_mean_distance_{landmark_type.item()}_{mode}"] = (
-                distances_landmark_mean
-            )
+            metrics[f"fine_mean_distance_{landmark_type.item()}_{mode}"] = distances_landmark_mean
 
         return metrics
 
@@ -356,9 +357,7 @@ class PatchTransformer(nn.Module):
             landmark_mask = landmark_mask * loss_mask
             distances_landmark = distances[landmark_mask]
             distances_landmark_mean = distances_landmark.mean()
-            metrics[f"fine_mean_distance_{landmark_type.item()}_{mode}"] = (
-                distances_landmark_mean
-            )
+            metrics[f"fine_mean_distance_{landmark_type.item()}_{mode}"] = distances_landmark_mean
 
         return metrics
 
@@ -392,9 +391,7 @@ REFINEMENT_MODULES = {
     "NoVertPatchTransformer": _variant(use_vert_embedding=False),
     "NoPoiVertPatchTransformer": _variant(use_poi_embedding=False, use_vert_embedding=False),
     "NoPoiFeaturePatchTransformer": _variant(use_coarse_features=False),
-    "NoPoiVertFeaturePatchTransformer": _variant(
-        use_poi_embedding=False, use_vert_embedding=False, use_coarse_features=False
-    ),
+    "NoPoiVertFeaturePatchTransformer": _variant(use_poi_embedding=False, use_vert_embedding=False, use_coarse_features=False),
     "NoCoarsePredTransformer": _variant(use_coarse_pred=False, use_patches=False),
     "FeatureTransformer": _variant(use_patches=False),
 }

@@ -3,26 +3,26 @@
 import argparse
 import json
 import os
+from collections.abc import Callable
 from functools import partial
 from os import PathLike
-from typing import Callable
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
-from TPTBox import NII, BIDS_Global_info, np_utils, No_Logger, Log_Type, BIDS_FILE
-from TPTBox.core.poi import POI
-from TPTBox import Subject_Container
 from pqdm.processes import pqdm
-from vertpois.paths import get_path
+from TPTBox import BIDS_FILE, NII, BIDS_Global_info, Log_Type, No_Logger, Subject_Container, np_utils
+from TPTBox.core.poi import POI
+
 from vertpois.data.quality_reports import (
     convert_agg_report_to_reported_bool_dict,
     is_vert_reported,
     load_agg_report_df,
 )
+from vertpois.paths import get_path
 
 logger = No_Logger(prefix="prepare_data")
+
 
 def load_exclusion_dict(excel_path):
     """Load Excel file and create lookup dictionary for exclusions"""
@@ -53,8 +53,7 @@ def load_exclusion_dict(excel_path):
 
 
 def get_bad_poi_list(subject_id: str, vert: int, exclude_dict: dict[str, list[tuple[int, int]]]) -> list[int]:
-    """
-    Args:
+    """Args:
         subject_id: Subject ID, e.g., 'WS-13'
         vert_id: Vertebra ID, e.g.,
         exclude_dict: Dict mapping subject_id -> list of (vert_id, poi_id)
@@ -89,7 +88,7 @@ def get_gruber_poi(container, extra_filter: dict[str, str] | None = None) -> tup
         poi = POI.load(poi_p)
         return poi, poi_candidate
     except Exception as e:
-        logger.print(f"Error loading POI: {str(e)}", Log_Type.FAIL)
+        logger.print(f"Error loading POI: {e!s}", Log_Type.FAIL)
         return None, poi_candidate
 
 
@@ -108,7 +107,7 @@ def get_ct(container, extra_filter: dict[str, str] | None = None) -> tuple[NII, 
         ct = ct_candidate.open_nii()
         return ct, ct_candidate.file["nii.gz"]
     except Exception as e:
-        logger.print(f"Error opening CT: {str(e)}", Log_Type.FAIL)
+        logger.print(f"Error opening CT: {e!s}", Log_Type.FAIL)
         return None, None
 
 
@@ -128,7 +127,7 @@ def get_subreg(container, extra_filter: dict[str, str] | None = None) -> NII:
         subreg = subreg_candidate.open_nii()
         return subreg
     except Exception as e:
-        logger.print(f"Error opening subreg: {str(e)}", Log_Type.FAIL)
+        logger.print(f"Error opening subreg: {e!s}", Log_Type.FAIL)
         return None
 
 
@@ -148,7 +147,7 @@ def get_vertseg(container, extra_filter: dict[str, str] | None = None) -> NII:
         vertseg = vertseg_candidate.open_nii()
         return vertseg
     except Exception as e:
-        logger.print(f"Error opening vertseg: {str(e)}", Log_Type.FAIL)
+        logger.print(f"Error opening vertseg: {e!s}", Log_Type.FAIL)
         return None
 
 
@@ -230,7 +229,6 @@ def process_container(
     for index in range(len(vertebrae)):  # loops through each vertebra ID (extracted from POI keys)
         vert = vertebrae[index]
         if vert in vertseg_arr:  # vertebra found in segmentation mask
-
             subject_ct_id = ct_p.name.split(".")[0]
             if report_der2dict is not None and is_vert_reported(report_der2dict, subject_ct_id, vert):
                 logger.print(f"Skipping {subject}, vert={vert} because it is reported in the report dict.", Log_Type.STRANGE)
@@ -310,7 +308,7 @@ def process_container(
                 #    )
 
             except Exception as e:
-                print(f"Error processing {subject}, vert={vert}: {str(e)}")
+                print(f"Error processing {subject}, vert={vert}: {e!s}")
                 print(f"Crop dimensions: crop={crop}, padding={padding}")
                 # print(f"Crop dimensions: x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}, z_min={z_min}, z_max={z_max}")
                 # print(f"ex_slice: {(slice(x_min, x_max), slice(y_min, y_max), slice(z_min, z_max))}")
@@ -330,7 +328,7 @@ def process_container(
                 try:
                     surface_mask = vertseg_cropped.compute_surface_mask(connectivity=3, dilated_surface=False)
                     surface_subreg = subreg_cropped.compute_surface_mask(connectivity=3, dilated_surface=False)
-                except Exception as e:
+                except Exception:
                     pass
 
                 if compute_surface_mask and surface_mask is not None and surface_subreg is not None:
