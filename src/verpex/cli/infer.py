@@ -36,6 +36,7 @@ from verpex.evaluation.metrics import combine_centroids
 from verpex.geometry.spaces import batch_to_device, extract_space_meta, revert_poi_to_original_space
 from verpex.geometry.surface import surface_project_coords
 from verpex.model_registry import TrainedModelInfo
+from verpex.modules.data_modules import NEIGHBOR_DATASETS
 from verpex.paths import get_path
 
 poi_flip_pairs = {
@@ -118,12 +119,12 @@ DEFAULT_POI_INDICES = [
 ]
 
 
-class GruberInferenceDataset(Dataset):
+class SpineInferenceDataset(Dataset):
     """Inference dataset for vertebra-wise POI prediction.
 
     When include_neighbors=True, the mask also covers adjacent vertebrae and
     poi_indices/poi_list_idx are tripled (current, top, bottom), matching
-    the GruberNeighbor training setup.
+    the neighbour training setup.
     """
 
     def __init__(
@@ -490,8 +491,8 @@ def predict_subject_pois(  # noqa: ANN201
     )
 
     print(f"inferencing subject: {subject}")
-    use_neighbor = dm_params["dataset"] == "GruberNeighbor"
-    ds = GruberInferenceDataset(
+    use_neighbor = dm_params["dataset"] in NEIGHBOR_DATASETS
+    ds = SpineInferenceDataset(
         master_df,
         input_shape=input_shape,
         input_data_type=input_data_type,

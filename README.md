@@ -90,7 +90,9 @@ config names a model rather than importing one:
 ```
 
 Registered names live in `verpex.registry` and the `*_MODULES` dicts beside each family
-of components. An unknown name raises an error listing the valid ones.
+of components. An unknown name raises an error listing the valid ones. Some components
+carry a second, older name as an alias so that configs written against earlier versions
+keep working; `CHANGES.md` lists them.
 
 Pass `--config-dir` instead to run every config in a directory in sequence, or use
 `verpex-train-cv --n_folds 5` for cross-validation.

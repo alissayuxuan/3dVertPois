@@ -30,7 +30,7 @@ HISTORICAL_TYPES = {
             "FeatureTransformer",
         ],
     ),
-    "data module": (DATA_MODULES, ["GruberDataModule", "GruberNeighborDataModule"]),
+    "data module": (DATA_MODULES, ["SpineDataModule", "SpineNeighborDataModule"]),
     "callback": (CALLBACKS, ["ModelCheckpoint", "EarlyStopping"]),
 }
 
@@ -71,3 +71,12 @@ def test_params_may_be_omitted_or_null(config):
 def test_non_mapping_params_are_rejected_clearly():
     with pytest.raises(TypeError, match="must be a mapping"):
         build(REFINEMENT_MODULES, "refinement module", {"type": "Identity", "params": [1, 2]})
+
+
+def test_legacy_model_names_alias_the_renamed_members():
+    """`GRUBER_*` were renamed to `SPINE_*`; the old names must still resolve."""
+    from verpex.model_registry import TrainedModelInfo
+
+    assert TrainedModelInfo["GRUBER_S_SURFACE"] is TrainedModelInfo.SPINE_S_SURFACE
+    # Aliases must not show up when listing the enum, so `--help` stays clean.
+    assert not any("GRUBER" in member.name for member in TrainedModelInfo)

@@ -19,6 +19,13 @@ from skimage.morphology import binary_erosion
 from TPTBox import NII, Subject_Container
 from TPTBox.core.poi import POI
 
+#: BIDS ``source-`` entity naming the POI annotation set to read.
+#:
+#: This is data, not code: it has to match the filenames on disk, which for the
+#: original cohort are ``sub-..._seg-poi_source-gruber_poi.json``. Override it for a
+#: dataset annotated under a different source name.
+DEFAULT_POI_SOURCE = "gruber"
+
 #: Subregion labels of the vertebral body, used as the default one-hot channels.
 VERTEBRA_BODY_SUBREGIONS = (41, 42, 43, 44, 45, 46, 47, 48, 49, 50)
 
@@ -136,11 +143,20 @@ def pad_array_to_shape(arr, target_shape):  # noqa: ANN201
     return padded_arr, offset
 
 
-def get_gruber_poi(container) -> POI:
-    """Find and load a subject's POI annotation file."""
+def get_spine_poi(container, source: str = DEFAULT_POI_SOURCE) -> POI:
+    """Find and load a subject's POI annotation file.
+
+    Args:
+        container: The subject's BIDS container.
+        source: Value of the BIDS ``source-`` entity identifying which annotation set
+            to read. See :data:`DEFAULT_POI_SOURCE`.
+
+    Returns:
+        The loaded POI.
+    """
     poi_query = container.new_query(flatten=True)
     poi_query.filter_format("poi")
-    poi_query.filter("source", "gruber")
+    poi_query.filter("source", source)
     poi_candidate = poi_query.candidates[0]
 
     # poi = poi_candidate.open_ctd()

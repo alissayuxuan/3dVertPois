@@ -46,7 +46,7 @@ def make_module(current_weight=1.0, neighbor_weight=0.2):
 
 @pytest.fixture
 def neighbor_batch():
-    """A batch shaped like what GruberNeighborDataset produces."""
+    """A batch shaped like what SpineNeighborDataset produces."""
     generator = torch.Generator().manual_seed(0)
     return {
         "target": torch.rand(2, N_LANDMARKS, 3, generator=generator) * 8 + 16,

@@ -88,7 +88,7 @@
         "accumulate_grad_batches": 2
     },
     "data_module_config": {
-        "type": "GruberDataModule",
+        "type": "SpineDataModule",
         "params": {
             "master_df": "master_df.csv",
             "train_subjects": [],

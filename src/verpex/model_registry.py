@@ -111,32 +111,32 @@ class TrainedModelInfo(Enum):
 
     ####################################################
     # Single best training MAE
-    GRUBER_S_SURFACE = (
+    SPINE_S_SURFACE = (
         "ForVerse/surface_project-gt_cc3-exclude6",
         0,
         "sad-pt-epoch=131-fine_mean_distance_val=1.50",
     )
-    GRUBER_S_SURFACE_NEIGHSHOW = (
+    SPINE_S_SURFACE_NEIGHSHOW = (
         "ForVerse/surface_project-gt_cc3-exclude6_neighborshow",
         0,
         "sad-pt-epoch=58-fine_mean_distance_val=1.60",
     )  # Needs inference code adaption
-    GRUBER_N_SURFACE_NEIGHAUG = (
+    SPINE_N_SURFACE_NEIGHAUG = (
         "ForVerse/surface-neighbor-neighaug-project_gt_cc3-exclude6",
         0,
         "sad-pt-epoch=46-fine_mean_distance_val=3.70",
     )
-    GRUBER_N_SURFACE_NEIGHAUG2 = (
+    SPINE_N_SURFACE_NEIGHAUG2 = (
         "ForVerse/surface-neighbor-neighaug-project_gt_cc3-exclude6",
         2,
         "sad-pt-epoch=70-fine_mean_distance_val=2.81",
     )
-    GRUBER_N_SURFACE_NOVERT = (
+    SPINE_N_SURFACE_NOVERT = (
         "ForVerse/surface-neighbor-no_vert-project_gt_cc3-exclude6",
         0,
         "sad-pt-epoch=109-fine_mean_distance_val=2.60",
     )
-    GRUBER_N_SURFACE_NOVERT_NEIGHAUG = (
+    SPINE_N_SURFACE_NOVERT_NEIGHAUG = (
         "ForVerse/surface-neighbor-no_vert-project_gt_cc3-exclude6",
         1,
         "sad-pt-epoch=111-fine_mean_distance_val=3.52",
@@ -145,8 +145,22 @@ class TrainedModelInfo(Enum):
     ######################
     # OLD
     ######################
-    GRUBER_N_BOUNDARYBROKEN = (
+    SPINE_N_BOUNDARYBROKEN = (
         "ForVerse/surface-neighbor-project_gt_cc3-exclude6",
         1,
         "sad-pt-epoch=88-fine_mean_distance_val=2.34",
     )
+
+    # ------------------------------------------------------------------
+    # Legacy names, kept so existing commands and notes keep resolving.
+    # Assigning an earlier member's name makes these Enum aliases: they resolve to
+    # the same member, and iterating the enum still yields only the canonical names,
+    # so `--help` stays clean.
+    # ------------------------------------------------------------------
+    GRUBER_S_SURFACE = SPINE_S_SURFACE
+    GRUBER_S_SURFACE_NEIGHSHOW = SPINE_S_SURFACE_NEIGHSHOW
+    GRUBER_N_SURFACE_NEIGHAUG = SPINE_N_SURFACE_NEIGHAUG
+    GRUBER_N_SURFACE_NEIGHAUG2 = SPINE_N_SURFACE_NEIGHAUG2
+    GRUBER_N_SURFACE_NOVERT = SPINE_N_SURFACE_NOVERT
+    GRUBER_N_SURFACE_NOVERT_NEIGHAUG = SPINE_N_SURFACE_NOVERT_NEIGHAUG
+    GRUBER_N_BOUNDARYBROKEN = SPINE_N_BOUNDARYBROKEN

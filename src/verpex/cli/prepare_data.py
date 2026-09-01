@@ -79,7 +79,7 @@ def get_bad_poi_list(subject_id: str, vert: int, exclude_dict: dict[str, list[tu
     return filtered_pois
 
 
-def get_gruber_poi(container, extra_filter: dict[str, str] | None = None) -> tuple[POI, BIDS_FILE]:
+def get_spine_poi(container, extra_filter: dict[str, str] | None = None) -> tuple[POI, BIDS_FILE]:
     """Find a subject's POI annotation file.
 
     Args:
@@ -604,7 +604,7 @@ def main() -> None:
 
     get_data_files = partial(
         get_files_withfilter,
-        get_poi=get_gruber_poi,
+        get_poi=get_spine_poi,
         get_ct_fn=get_ct,
         get_subreg_fn=get_subreg,
         get_vertseg_fn=get_vertseg,

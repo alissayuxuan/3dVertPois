@@ -315,7 +315,7 @@ class PoiDataset(Dataset):
         return data_dict
 
 
-class GruberDataset(PoiDataset):
+class SpineDataset(PoiDataset):
     """Single-vertebra cutout dataset."""
 
     def __init__(
@@ -820,7 +820,7 @@ class PoiNeighborDataset(Dataset):
         return data_dict
 
 
-class GruberNeighborDataset(PoiNeighborDataset):
+class SpineNeighborDataset(PoiNeighborDataset):
     """Cutout dataset serving each vertebra with its neighbours."""
 
     def __init__(

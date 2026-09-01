@@ -264,6 +264,46 @@ from any entry point. It was renamed because as `prepare_data` it overrode PyTor
 Lightning's own no-argument `prepare_data()` hook: passing a data module to
 `Trainer.fit(datamodule=...)` would have made Lightning call it with no arguments.
 
+## Renamed
+
+### Cohort-named identifiers are now neutral
+
+The datasets, data modules and trained-model entries were named after the cohort they
+were built from. All are renamed, with the old names kept as aliases:
+
+| Was | Now |
+| --- | --- |
+| `GruberDataset`, `GruberNeighborDataset` | `SpineDataset`, `SpineNeighborDataset` |
+| `GruberDataModule`, `GruberNeighborDataModule` | `SpineDataModule`, `SpineNeighborDataModule` |
+| `GruberInferenceDataset` | `SpineInferenceDataset` |
+| `get_gruber_poi` | `get_spine_poi` |
+| `TrainedModelInfo.GRUBER_*` | `TrainedModelInfo.SPINE_*` |
+| `dataset="Gruber"` / `"GruberNeighbor"` | `"Spine"` / `"SpineNeighbor"` |
+
+Nothing breaks:
+
+- `"GruberDataModule"` and `"GruberNeighborDataModule"` remain valid config `type`
+  strings — all 98 historical configs still resolve.
+- `TrainedModelInfo["GRUBER_S_SURFACE"]` still resolves, as an Enum alias of
+  `SPINE_S_SURFACE`. Aliases do not appear when the enum is listed, so `--help`
+  shows only the new names.
+- A `data_module_params.json` written by an earlier run stores `"dataset": "Gruber"`.
+  That value is read back at inference time, so both spellings are accepted.
+
+**Two places still contain the name, deliberately:**
+
+1. `DEFAULT_POI_SOURCE = "gruber"` in `data/dataloading.py`. This is *data, not code* —
+   it is the BIDS `source-` entity in the actual filenames on disk
+   (`sub-..._seg-poi_source-gruber_poi.json`), so renaming it would stop the loader
+   finding the annotations. It is now a module-level constant and a `get_spine_poi`
+   parameter, so a dataset annotated under another source name can override it.
+2. The legacy aliases themselves, in `DATA_MODULES` and `TrainedModelInfo`.
+
+If the goal is that the name does not appear in the published repository at all, both
+have to go: delete the four `Gruber*` alias entries and the legacy tuples, and set
+`DEFAULT_POI_SOURCE` to whatever the published data uses. Existing configs and saved
+data-module params would then need updating.
+
 ## Removed
 
 ### `--save-predictions` in `train_cv.py` (self-training pseudo-labels)

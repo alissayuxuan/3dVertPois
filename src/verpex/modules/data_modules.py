@@ -21,12 +21,12 @@ from TPTBox import BIDS_Global_info
 from verpex.data.dataloading import (
     get_ct,
     get_files,
-    get_gruber_poi,
+    get_spine_poi,
     get_subreg,
     get_vertseg,
     process_container,
 )
-from verpex.data.dataset import GruberDataset, GruberNeighborDataset, PoiDataset
+from verpex.data.dataset import PoiDataset, SpineDataset, SpineNeighborDataset
 from verpex.data.transforms import create_transform
 from verpex.registry import build
 
@@ -47,6 +47,16 @@ def _seed_worker(worker_id):
 
 
 PoiType = TypeVar("PoiType", bound=PoiDataset)
+
+#: Value stored in a data module's saved hyperparameters to identify its dataset layout.
+#:
+#: ``"Gruber"``/``"GruberNeighbor"`` were the original values, named after the cohort.
+#: They are still accepted when reading a ``data_module_params.json`` written by an
+#: earlier run, so existing checkpoints stay usable.
+SPINE_DATASET = "Spine"
+SPINE_NEIGHBOR_DATASET = "SpineNeighbor"
+SINGLE_VERTEBRA_DATASETS = (SPINE_DATASET, "Gruber")
+NEIGHBOR_DATASETS = (SPINE_NEIGHBOR_DATASET, "GruberNeighbor")
 
 
 class POIDataModule(pl.LightningDataModule):
@@ -159,8 +169,8 @@ class POIDataModule(pl.LightningDataModule):
         if self.transform_config is not None:
             transform = [create_transform(self.transform_config)]
 
-        if self.dataset == "Gruber":
-            self.train_dataset = GruberDataset(
+        if self.dataset in SINGLE_VERTEBRA_DATASETS:
+            self.train_dataset = SpineDataset(
                 self.train_df,
                 input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
@@ -175,7 +185,7 @@ class POIDataModule(pl.LightningDataModule):
                 show_neighbors=self.show_neighbors,
                 neighbor_drop_prob=self.neighbor_drop_prob,
             )
-            self.val_dataset = GruberDataset(
+            self.val_dataset = SpineDataset(
                 self.val_df,
                 input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
@@ -190,7 +200,7 @@ class POIDataModule(pl.LightningDataModule):
                 show_neighbors=self.show_neighbors,
                 neighbor_drop_prob=self.neighbor_drop_prob,
             )
-            self.test_dataset = GruberDataset(
+            self.test_dataset = SpineDataset(
                 self.test_df,
                 input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
@@ -206,8 +216,8 @@ class POIDataModule(pl.LightningDataModule):
                 neighbor_drop_prob=self.neighbor_drop_prob,
             )
 
-        elif self.dataset == "GruberNeighbor":  # NEU
-            self.train_dataset = GruberNeighborDataset(
+        elif self.dataset in NEIGHBOR_DATASETS:
+            self.train_dataset = SpineNeighborDataset(
                 self.train_df,
                 input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
@@ -221,7 +231,7 @@ class POIDataModule(pl.LightningDataModule):
                 iterations=self.surface_erosion_iterations,
                 neighbor_drop_prob=self.neighbor_drop_prob,
             )
-            self.val_dataset = GruberNeighborDataset(
+            self.val_dataset = SpineNeighborDataset(
                 self.val_df,
                 input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
@@ -235,7 +245,7 @@ class POIDataModule(pl.LightningDataModule):
                 iterations=self.surface_erosion_iterations,
                 neighbor_drop_prob=self.neighbor_drop_prob,
             )
-            self.test_dataset = GruberNeighborDataset(
+            self.test_dataset = SpineNeighborDataset(
                 self.test_df,
                 input_data_type=self.input_data_type,
                 input_shape=self.input_shape,
@@ -307,7 +317,7 @@ class POIDataModule(pl.LightningDataModule):
         )
 
 
-class GruberDataModule(POIDataModule):
+class SpineDataModule(POIDataModule):
     """Data module for the single-vertebra cutout dataset."""
 
     def __init__(
@@ -332,7 +342,7 @@ class GruberDataModule(POIDataModule):
         neighbor_drop_prob: float = 0.05,
     ):
         super().__init__(
-            dataset="Gruber",
+            dataset=SPINE_DATASET,
             master_df=master_df,
             train_subjects=train_subjects,
             val_subjects=val_subjects,
@@ -370,17 +380,17 @@ class GruberDataModule(POIDataModule):
         different strategy from the fixed-size cutouts that ``verpex-prepare-data``
         writes. Prefer the CLI unless you specifically want this behaviour.
         """
-        gruber_get_files = partial(
+        spine_get_files = partial(
             get_files,
-            get_poi=get_gruber_poi,
+            get_poi=get_spine_poi,
             get_ct=get_ct,
             get_subreg=get_subreg,
             get_vertseg=get_vertseg,
         )
-        super().build_cutouts(bids_surgery_info, save_path, gruber_get_files, rescale_zoom)
+        super().build_cutouts(bids_surgery_info, save_path, spine_get_files, rescale_zoom)
 
 
-class GruberNeighborDataModule(POIDataModule):
+class SpineNeighborDataModule(POIDataModule):
     """Data module that also serves each vertebra's neighbours."""
 
     #: Neighbour training defaults to no horizontal flip.
@@ -398,24 +408,30 @@ class GruberNeighborDataModule(POIDataModule):
         # of 0.5 silently applied. An explicit setting is now honoured; only the
         # default differs from the base class.
         kwargs.setdefault("flip_prob", self.DEFAULT_FLIP_PROB)
-        super().__init__(dataset="GruberNeighbor", **kwargs)
+        super().__init__(dataset=SPINE_NEIGHBOR_DATASET, **kwargs)
 
     def build_cutouts(self, bids_surgery_info, save_path, rescale_zoom=None) -> None:
         """Build the per-vertebra cutouts for this dataset layout."""
-        gruber_get_files = partial(
+        spine_get_files = partial(
             get_files,
-            get_poi=get_gruber_poi,
+            get_poi=get_spine_poi,
             get_ct=get_ct,
             get_subreg=get_subreg,
             get_vertseg=get_vertseg,
         )
-        super().build_cutouts(bids_surgery_info, save_path, gruber_get_files, rescale_zoom)
+        super().build_cutouts(bids_surgery_info, save_path, spine_get_files, rescale_zoom)
 
 
 #: Config ``"type"`` string -> data module.
+#:
+#: The ``Gruber*`` names are the originals, named after the cohort the datasets were
+#: built from. They remain valid config values so existing experiment configs keep
+#: resolving; new configs should use the ``Spine*`` names.
 DATA_MODULES = {
-    "GruberDataModule": GruberDataModule,
-    "GruberNeighborDataModule": GruberNeighborDataModule,
+    "SpineDataModule": SpineDataModule,
+    "SpineNeighborDataModule": SpineNeighborDataModule,
+    "GruberDataModule": SpineDataModule,
+    "GruberNeighborDataModule": SpineNeighborDataModule,
 }
 
 
